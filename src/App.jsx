@@ -412,35 +412,155 @@ function AIPanel({ project, onAdd }) {
   );
 }
 
-// ── Screening Tab ────────────────────────────────────────────────────
-function ScreeningTab({ project, onAddAspect }) {
+// ── Opportunities guide words by EPCIC stage ──────────────────────────────
+const GW_OPP = {
+  E: [
+    { cat:"Design for circularity", color:"teal", items:[
+      { kw:"Modular / demountable design",  q:"Can structural elements, modules or equipment be designed for disassembly and reuse at end of project life?",                        opp:"Circular economy — design for disassembly and reuse",          area:"Engineering design" },
+      { kw:"Material efficiency at FEED",   q:"Can material volumes be reduced through optimised structural design, shared infrastructure, or prefabrication?",                    opp:"Resource efficiency — material reduction at source",            area:"Engineering design" },
+      { kw:"Renewable energy integration",  q:"Is there scope to integrate solar, wind or waste-heat recovery into the facility design at FEED stage?",                            opp:"Low-carbon technology — on-site renewable energy generation",   area:"Process design" },
+      { kw:"Heat recovery / WHR",           q:"Are there process streams with significant waste heat that could be captured for power generation or heating?",                     opp:"Resource efficiency — waste heat recovery",                    area:"Process design" },
+      { kw:"Green hydrogen / e-fuels",      q:"Could low-carbon fuels replace diesel or gas for power generation or process heating in the design?",                               opp:"Low-carbon technology — green hydrogen or e-fuel integration",  area:"Process design" },
+    ]},
+    { cat:"Nature & biodiversity by design", color:"green", items:[
+      { kw:"Biodiversity net gain target",  q:"Can the facility be designed to deliver measurable biodiversity net gain — green roofs, habitat corridors, artificial reefs?",       opp:"Biodiversity net gain — habitat creation or enhancement",       area:"Site design" },
+      { kw:"Nature-based drainage",         q:"Can sustainable drainage systems (SuDS), wetlands or bioswales replace hard engineered drainage?",                                  opp:"Nature-based solutions — SuDS and natural flood management",    area:"Drainage design" },
+      { kw:"TNFD / biodiversity disclosure","Could biodiversity improvements be documented and reported under TNFD or EU CSRD ESRS E4?",                                           opp:"Reputational / SLO — biodiversity reporting and disclosure",    area:"Engineering design" },
+    ]},
+    { cat:"Green finance & taxonomy", color:"purple", items:[
+      { kw:"EU Taxonomy alignment at FEED", q:"Which activities in the design qualify as substantially contributing to climate change mitigation or adaptation under EU Taxonomy?", opp:"Green Finance & Taxonomy — EU Taxonomy-aligned project elements", area:"Engineering design" },
+      { kw:"Green bond / sustainability loan","Could the facility or specific assets be financed through green bonds, sustainability-linked loans or green export finance?",        opp:"Green Finance & Taxonomy — green bond or SLL eligibility",     area:"Project finance" },
+    ]},
+  ],
+  P: [
+    { cat:"Sustainable procurement", color:"teal", items:[
+      { kw:"Low-carbon steel / concrete",   q:"Can procurement specifications require Environmental Product Declarations (EPDs) and low-carbon steel or cement alternatives?",      opp:"Low-carbon technology — low-embodied-carbon materials",         area:"Procurement" },
+      { kw:"Recycled content requirements", q:"Can minimum recycled content be specified for steel, aggregates, plastics or packaging in procurement documents?",                  opp:"Circular economy — recycled content in procured materials",     area:"Procurement" },
+      { kw:"Local sourcing",                q:"Can materials or services be sourced locally to reduce transport emissions and support the local economy?",                          opp:"Resource efficiency — reduced transport emissions from local supply", area:"Logistics" },
+    ]},
+    { cat:"Supplier sustainability", color:"purple", items:[
+      { kw:"Supplier ESG criteria",         q:"Can suppliers be required to demonstrate ISO 14001 or equivalent EMS, or submit environmental performance data?",                   opp:"Reputational / SLO — ESG supply chain standards",              area:"Procurement" },
+      { kw:"Circular packaging agreements", q:"Can packaging take-back or zero single-use plastic requirements be included in procurement contracts?",                             opp:"Circular economy — packaging take-back scheme",                area:"Procurement" },
+    ]},
+  ],
+  C: [
+    { cat:"Construction resource efficiency", color:"teal", items:[
+      { kw:"Cut/fill balance",              q:"Can earthworks be designed to achieve a balanced cut/fill ratio, eliminating off-site spoil disposal costs?",                        opp:"Resource efficiency — zero net spoil / earthworks balance",     area:"Earthworks" },
+      { kw:"On-site concrete recycling",    q:"Can demolished or surplus concrete be crushed and reused as recycled aggregate on-site?",                                            opp:"Circular economy — on-site concrete aggregate recycling",       area:"Demolition / civil works" },
+      { kw:"Construction waste exchange",   q:"Can surplus materials (timber, steel offcuts, cabling) be offered to a materials exchange or social enterprise?",                   opp:"Circular economy — materials exchange / reuse of surplus",      area:"Construction compound" },
+    ]},
+    { cat:"Ecology enhancement", color:"green", items:[
+      { kw:"Habitat creation during construction","Can topsoil be stored and reused, and green/brown roofs or habitat features be created as part of the construction scope?",    opp:"Biodiversity net gain — habitat creation during construction",  area:"Site preparation" },
+      { kw:"Invasive species eradication",  q:"Can clearance works provide an opportunity to permanently remove invasive plant species from the site?",                            opp:"Biodiversity net gain — invasive species eradication",         area:"Site preparation" },
+    ]},
+    { cat:"Low-carbon construction", color:"amber", items:[
+      { kw:"Stage V / zero-emission plant", q:"Can the construction plant fleet be specified as Stage V diesel or battery/hydrogen electric to reduce site emissions?",             opp:"Low-carbon technology — zero-emission construction plant",      area:"Construction plant" },
+      { kw:"Renewable site power",          q:"Can solar panels, battery storage or grid connections replace diesel generators for site power during construction?",               opp:"Low-carbon technology — renewable site power during construction", area:"Construction compound" },
+    ]},
+  ],
+  I: [
+    { cat:"Marine ecology enhancement", color:"teal", items:[
+      { kw:"Artificial reef / habitat",     q:"Could jacket legs, scour protection or cable burial create habitat for fish, corals or invertebrates — contributing to BNG?",       opp:"Biodiversity net gain — artificial reef / marine habitat creation", area:"Structure installation" },
+      { kw:"Marine protected area benefit", q:"Could decommissioning or exclusion zones create de facto marine protected areas, benefiting fish stocks and biodiversity?",         opp:"Nature-based solutions — de facto MPA / marine reserve benefit", area:"Marine operations" },
+    ]},
+    { cat:"Low-carbon vessel operations", color:"green", items:[
+      { kw:"Shore power / hybrid vessels",  q:"Can installation vessels use shore power at port, hybrid propulsion or LNG / methanol fuel to reduce emissions?",                   opp:"Low-carbon technology — low-emission installation vessels",     area:"Vessel operations" },
+      { kw:"Voyage optimisation",           q:"Can route planning, weather routing and slow steaming be deployed to minimise fuel consumption across the installation campaign?",  opp:"Resource efficiency — fuel savings from voyage optimisation",   area:"Marine logistics" },
+    ]},
+    { cat:"Regulatory incentives", color:"purple", items:[
+      { kw:"Norwegian O&G environmental incentives","Are there Norwegian government or Enova grant schemes available for low-carbon offshore installation techniques?",             opp:"Regulatory incentive — Norwegian Enova / state grant for low-carbon ops", area:"Project finance" },
+    ]},
+  ],
+  C2: [
+    { cat:"Chemical & water efficiency", color:"teal", items:[
+      { kw:"Hydrotest water reuse",         q:"Can hydrotest water be reused across multiple systems or treated and re-injected, rather than disposed of as waste?",                opp:"Resource efficiency — hydrotest water recycling",              area:"Commissioning — hydrotest" },
+      { kw:"Chemical substitution",         q:"Can less hazardous alternatives replace standard commissioning chemicals (corrosion inhibitors, biocides, scale inhibitors)?",      opp:"Resource efficiency — hazardous chemical substitution",        area:"Chemical management" },
+    ]},
+    { cat:"Flaring minimisation", color:"amber", items:[
+      { kw:"Gas capture during start-up",   q:"Can commissioning gas be captured and used for on-site power generation rather than flared?",                                       opp:"Low-carbon technology — gas capture instead of flaring",       area:"Commissioning — flaring" },
+      { kw:"Cold commissioning priority",   q:"Can the commissioning sequence be optimised to maximise cold commissioning and minimise hot commissioning flaring volumes?",        opp:"Resource efficiency — reduced commissioning flare volumes",     area:"Commissioning sequence" },
+    ]},
+  ],
+  OM: [
+    { cat:"Operational efficiency & carbon", color:"teal", items:[
+      { kw:"Electrification of offshore",   q:"Can gas turbines be replaced or supplemented by grid power or renewable energy to reduce operational emissions?",                   opp:"Low-carbon technology — offshore electrification / power from shore", area:"Power systems" },
+      { kw:"CCUS opportunity",              q:"Is there scope to capture and utilise or store CO₂ from process operations, contributing to Norwegian CCS targets?",               opp:"Low-carbon technology — carbon capture, utilisation and storage", area:"Process design" },
+      { kw:"Methane monetisation",          q:"Can vented or flared methane be recovered and sold, generating revenue while reducing GHG emissions?",                             opp:"Resource efficiency — methane recovery and monetisation",       area:"Production operations" },
+      { kw:"Produced water as a resource",  q:"Can treated produced water be beneficially reused for injection, dust suppression or other uses rather than discharged?",          opp:"Circular economy — produced water beneficial reuse",           area:"Water treatment" },
+    ]},
+    { cat:"O&M sustainability reporting", color:"purple", items:[
+      { kw:"CSRD / ESRS reporting",         q:"Can environmental KPI data be structured to directly support CSRD ESRS E1–E5 mandatory disclosures from the operational phase?",   opp:"Reputational / SLO — CSRD / ESRS reporting-ready KPI framework", area:"Sustainability reporting" },
+      { kw:"SBTi / net zero alignment",     q:"Can operational emission reduction measures be aligned with Science Based Targets (SBTi) to support net-zero commitments?",        opp:"Reputational / SLO — SBTi / net-zero target alignment",        area:"GHG management" },
+    ]},
+    { cat:"Climate resilience", color:"amber", items:[
+      { kw:"Climate risk assessment",       q:"Has a TCFD-aligned physical climate risk assessment been carried out? Are adaptations designed into operations for 2050+ scenarios?", opp:"Climate resilience — physical climate risk adaptation measures", area:"Asset integrity" },
+    ]},
+  ],
+  D: [
+    { cat:"Materials recovery & circular economy", color:"teal", items:[
+      { kw:"Steel recycling maximisation",  q:"Can all removed steel be sent to high-grade recycling (EAF steelmaking) rather than lower-grade recovery routes?",                  opp:"Circular economy — high-grade steel recycling from decommissioning", area:"Decommissioning" },
+      { kw:"Equipment refurbishment / reuse","Can equipment, instruments, valves or piping be refurbished and resold rather than scrapped?",                                      opp:"Circular economy — equipment reuse and refurbishment",         area:"Decommissioning" },
+      { kw:"Concrete aggregate recovery",   q:"Can demolition concrete be processed for recycled aggregate rather than going to landfill?",                                        opp:"Circular economy — recycled aggregate from demolition concrete", area:"Demolition" },
+    ]},
+    { cat:"Habitat & legacy benefits", color:"green", items:[
+      { kw:"Seabed recovery as positive legacy","Can post-decommissioning seabed surveys document improved benthic communities as a net positive environmental legacy?",           opp:"Biodiversity net gain — documented seabed recovery as project legacy", area:"Offshore decommissioning" },
+      { kw:"Land restoration to higher standard","Can land reinstatement go beyond pre-disturbance baseline — e.g., creating wetlands, meadows or community green space?",       opp:"Biodiversity net gain — land restored to higher ecological standard", area:"Site reinstatement" },
+    ]},
+    { cat:"Decommissioning finance", color:"purple", items:[
+      { kw:"Green decommissioning certification","Are there emerging certification schemes or green bond frameworks for responsible decommissioning that could attract lower-cost finance?", opp:"Green Finance & Taxonomy — green decommissioning certification / finance", area:"Project finance" },
+    ]},
+  ],
+};
+
+// ── Screening Tab: Risks + Opportunities sub-tabs ─────────────────────────
+function ScreeningTab({ project, onAddAspect, onAddOpp }) {
+  const [screenType, setScreenType]   = useState("risks");    // "risks" | "opps"
   const [activeStage, setActiveStage] = useState("E");
   const [expanded, setExpanded]       = useState({});
-  const [form, setForm]               = useState(emptyAspect());
-  const [screenMode, setScreenMode]   = useState("guide"); // "guide" | "form"
+  const [form,  setFormState]         = useState(emptyAspect());
+  const [oppForm, setOppFormState]    = useState(emptyOpp());
+  const [screenMode, setScreenMode]   = useState("guide");    // "guide" | "form"
   const [saved, setSaved]             = useState(false);
+  const [savedMsg, setSavedMsg]       = useState("");
 
   const toggleCat = (key) => setExpanded(p=>({...p,[key]:!p[key]}));
 
-  const prefill = (stageCode, item) => {
-    setForm({...emptyAspect(), phase:PHASE_MAP[stageCode]||"", area:item.area||"", aspect:item.aspect||"", condition:COND_MAP[stageCode]||"Normal"});
-    setSaved(false);
-    setScreenMode("form");
+  const prefillRisk = (stageCode, item) => {
+    setFormState({...emptyAspect(), phase:PHASE_MAP[stageCode]||"", area:item.area||"", aspect:item.aspect||"", condition:COND_MAP[stageCode]||"Normal"});
+    setSaved(false); setScreenMode("form");
+  };
+  const prefillOpp = (stageCode, item) => {
+    setOppFormState({...emptyOpp(), type:item.type||"", description:item.opp||""});
+    setSaved(false); setScreenMode("form");
   };
 
-  const setF = (k,v) => setForm(p=>({...p,[k]:v}));
+  const setF  = (k,v) => setFormState(p=>({...p,[k]:v}));
+  const setOF = (k,v) => setOppFormState(p=>({...p,[k]:v}));
 
-  const saveToRegister = () => {
+  const saveRisk = () => {
     if (!form.aspect.trim()) return;
-    onAddAspect(form);
-    setForm(emptyAspect());
-    setSaved(true);
-    setScreenMode("guide");
+    onAddAspect(form); setFormState(emptyAspect());
+    setSavedMsg("Aspect saved to register ✓"); setSaved(true); setScreenMode("guide");
+    setTimeout(()=>setSaved(false), 2500);
+  };
+  const saveOpp = () => {
+    if (!oppForm.description.trim()) return;
+    onAddOpp(oppForm); setOppFormState(emptyOpp());
+    setSavedMsg("Opportunity saved to register ✓"); setSaved(true); setScreenMode("guide");
     setTimeout(()=>setSaved(false), 2500);
   };
 
   const score = calcScore(form); const sig = calcSig(form);
-  const stageData = GW[activeStage]||[];
+  const oppScore = calcOppScore(oppForm);
+  const oppSc = oppScore>=18?{bg:"#e0f2f1",c:"#00695c"}:oppScore>=9?{bg:CL.gBg,c:CL.green}:{bg:"#f5f5f5",c:"#999"};
+  const stageData    = GW[activeStage]||[];
+  const stageOppData = GW_OPP[activeStage]||[];
+
+  const isRisks = screenType==="risks";
+  const accentBg    = isRisks?"#fff5f5":"#f3effd";
+  const accentBd    = isRisks?CL.rBd:CL.pBd;
+  const accentColor = isRisks?CL.red:CL.purple;
+  const accentBtnBg = isRisks?CL.red:CL.purple;
 
   return (
     <div style={{display:"flex",height:"calc(100vh - 120px)",minHeight:500}}>
@@ -457,24 +577,43 @@ function ScreeningTab({ project, onAddAspect }) {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",padding:"1.25rem"}}>
+        {/* Risks / Opportunities toggle */}
+        <div style={{display:"flex",gap:0,marginBottom:"1.25rem",borderRadius:8,overflow:"hidden",border:"1px solid #e0e0e0",width:"fit-content"}}>
+          {[["risks","Risks & aspects","#c62828","#ffebee"],["opps","Opportunities","#6a1b9a","#ede7f6"]].map(([id,label,col,bg])=>(
+            <button key={id} onClick={()=>{setScreenType(id);setScreenMode("guide");}} style={{padding:"8px 20px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:screenType===id?600:400,border:"none",background:screenType===id?bg:"#fff",color:screenType===id?col:"#777",borderRight:id==="risks"?"1px solid #e0e0e0":"none"}}>
+              {id==="risks" ? "⚠ " : "✦ "}{label}
+            </button>
+          ))}
+        </div>
+
         {saved && (
-          <div style={{padding:"8px 14px",background:CL.gBg,border:`1px solid ${CL.gBd}`,borderRadius:8,marginBottom:"1rem",fontSize:13,color:CL.green,fontWeight:500}}>
-            Aspect saved to register ✓
+          <div style={{padding:"8px 14px",background:isRisks?CL.gBg:CL.pBg,border:`1px solid ${isRisks?CL.gBd:CL.pBd}`,borderRadius:8,marginBottom:"1rem",fontSize:13,color:isRisks?CL.green:CL.purple,fontWeight:500}}>
+            {savedMsg}
           </div>
         )}
 
-        {screenMode === "guide" && (
+        {/* ── GUIDE VIEW ── */}
+        {screenMode==="guide" && (
           <>
             <div style={{marginBottom:"1rem",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
               <div>
-                <h3 style={{fontSize:15,fontWeight:600,margin:"0 0 2px"}}>{EPCIC_STAGES.find(s=>s.code===activeStage)?.label} — guide words</h3>
-                <p style={{fontSize:12,color:"#888",margin:0}}>Click "→ Use" on any prompt to pre-fill the screening form</p>
+                <h3 style={{fontSize:15,fontWeight:600,margin:"0 0 2px",color:accentColor}}>
+                  {EPCIC_STAGES.find(s=>s.code===activeStage)?.label} — {isRisks?"risk guide words":"opportunity guide words"}
+                </h3>
+                <p style={{fontSize:12,color:"#888",margin:0}}>
+                  {isRisks
+                    ? "Ask these questions to identify environmental aspects and risks"
+                    : "Ask these questions to identify positive environmental opportunities"}
+                </p>
               </div>
-              <Btn variant="primary" size="sm" onClick={()=>{setForm(emptyAspect());setScreenMode("form");}}>+ Blank form</Btn>
+              <button onClick={()=>setScreenMode("form")} style={{padding:"6px 14px",fontSize:12,borderRadius:7,border:"none",background:accentBtnBg,color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+                + Blank form
+              </button>
             </div>
-            {stageData.map((section)=>{
+
+            {(isRisks?stageData:stageOppData).map((section)=>{
               const col = COLOR_MAP[section.color]||COLOR_MAP.gray;
-              const key = activeStage+section.cat;
+              const key = (isRisks?"R":"O")+activeStage+section.cat;
               const open = expanded[key]!==false;
               return (
                 <div key={key} style={{marginBottom:8,borderRadius:10,border:`1px solid ${col.border}`,overflow:"hidden"}}>
@@ -489,9 +628,15 @@ function ScreeningTab({ project, onAddAspect }) {
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:12,fontWeight:600,color:col.head,marginBottom:4}}>{item.kw}</div>
                             <p style={{fontSize:12,color:"#555",margin:"0 0 5px",lineHeight:1.5}}>{item.q}</p>
-                            <span style={{fontSize:11,padding:"1px 7px",borderRadius:3,background:col.bg,color:col.text,fontStyle:"italic"}}>Likely aspect: {item.aspect}</span>
+                            <span style={{fontSize:11,padding:"1px 7px",borderRadius:3,background:col.bg,color:col.text,fontStyle:"italic"}}>
+                              {isRisks?`Likely aspect: ${item.aspect}`:`Likely opportunity: ${item.opp}`}
+                            </span>
                           </div>
-                          <button onClick={()=>prefill(activeStage,item)} style={{padding:"5px 12px",fontSize:12,borderRadius:7,border:"none",background:col.head,color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500,whiteSpace:"nowrap",flexShrink:0}}>→ Use</button>
+                          <button
+                            onClick={()=>isRisks?prefillRisk(activeStage,item):prefillOpp(activeStage,item)}
+                            style={{padding:"5px 12px",fontSize:12,borderRadius:7,border:"none",background:col.head,color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:500,whiteSpace:"nowrap",flexShrink:0}}>
+                            → Use
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -502,13 +647,14 @@ function ScreeningTab({ project, onAddAspect }) {
           </>
         )}
 
-        {screenMode === "form" && (
+        {/* ── RISK FORM ── */}
+        {screenMode==="form" && isRisks && (
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem"}}>
-              <button onClick={()=>setScreenMode("guide")} style={{padding:"5px 12px",fontSize:12,borderRadius:7,border:"1px solid #ddd",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>← Back to guide words</button>
-              <h3 style={{margin:0,fontSize:15,fontWeight:600}}>Screening form — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}</h3>
+              <button onClick={()=>setScreenMode("guide")} style={{padding:"5px 12px",fontSize:12,borderRadius:7,border:"1px solid #ddd",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>← Back</button>
+              <h3 style={{margin:0,fontSize:15,fontWeight:600,color:CL.red}}>⚠ Risk screening — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}</h3>
             </div>
-            <Card style={{marginBottom:"1rem"}}>
+            <Card style={{marginBottom:"1rem",borderLeft:`3px solid ${CL.red}`}}>
               <p style={{fontSize:11,fontWeight:600,color:"#aaa",letterSpacing:"0.05em",margin:"0 0 12px",textTransform:"uppercase"}}>Activity details</p>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
                 <Fld label="Phase"><select value={form.phase} onChange={e=>setF("phase",e.target.value)} style={iw}><option value="">Select</option>{PHASES.map(p=><option key={p}>{p}</option>)}</select></Fld>
@@ -552,9 +698,56 @@ function ScreeningTab({ project, onAddAspect }) {
               </div>
             </Card>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-              <Btn onClick={()=>{setForm(emptyAspect());setSaved(false);}}>Clear</Btn>
-              <button onClick={saveToRegister} disabled={!form.aspect.trim()} style={{padding:"7px 16px",borderRadius:8,border:"none",background:CL.green,color:"#fff",cursor:form.aspect.trim()?"pointer":"not-allowed",fontSize:13,fontFamily:"inherit",fontWeight:500,opacity:form.aspect.trim()?1:0.5}}>
+              <Btn onClick={()=>{setFormState(emptyAspect());setSaved(false);}}>Clear</Btn>
+              <button onClick={saveRisk} disabled={!form.aspect.trim()} style={{padding:"7px 16px",borderRadius:8,border:"none",background:CL.red,color:"#fff",cursor:form.aspect.trim()?"pointer":"not-allowed",fontSize:13,fontFamily:"inherit",fontWeight:500,opacity:form.aspect.trim()?1:0.5}}>
                 Save to aspects register →
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── OPPORTUNITY FORM ── */}
+        {screenMode==="form" && !isRisks && (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem"}}>
+              <button onClick={()=>setScreenMode("guide")} style={{padding:"5px 12px",fontSize:12,borderRadius:7,border:"1px solid #ddd",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>← Back</button>
+              <h3 style={{margin:0,fontSize:15,fontWeight:600,color:CL.purple}}>✦ Opportunity screening — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}</h3>
+            </div>
+            <Card style={{marginBottom:"1rem",borderLeft:`3px solid ${CL.purple}`}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
+                <Fld label="Opportunity type"><select value={oppForm.type} onChange={e=>setOF("type",e.target.value)} style={iw}><option value="">Select type</option>{OPP_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fld>
+                <Fld label="Linked aspect (optional)"><input value={oppForm.aspectRef} onChange={e=>setOF("aspectRef",e.target.value)} placeholder="e.g. ASP-001" style={iw}/></Fld>
+                <Fld label="Materiality (CSRD)" wide><select value={oppForm.materiality} onChange={e=>setOF("materiality",e.target.value)} style={iw}><option>Inside-out (positive impact on environment)</option><option>Outside-in (financial / business benefit)</option><option>Both</option></select></Fld>
+                <Fld label="Opportunity description" wide><textarea value={oppForm.description} onChange={e=>setOF("description",e.target.value)} rows={3} placeholder="What positive outcome is possible?" style={{...iw,resize:"vertical"}}/></Fld>
+                <Fld label="Environmental benefit"><textarea value={oppForm.envBenefit} onChange={e=>setOF("envBenefit",e.target.value)} rows={2} style={{...iw,resize:"vertical"}}/></Fld>
+                <Fld label="Business / strategic benefit"><textarea value={oppForm.bizBenefit} onChange={e=>setOF("bizBenefit",e.target.value)} rows={2} style={{...iw,resize:"vertical"}}/></Fld>
+              </div>
+            </Card>
+            <Card style={{marginBottom:"1rem",background:"#f9f7ff",border:`1px solid ${CL.pBd}`}}>
+              <p style={{fontSize:11,fontWeight:600,color:"#aaa",letterSpacing:"0.05em",margin:"0 0 12px",textTransform:"uppercase"}}>Priority score = env value × business value × feasibility (max 27)</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px 14px"}}>
+                {[{k:"envValue",l:"Env value (1–3)"},{k:"bizValue",l:"Business value (1–3)"},{k:"feasibility",l:"Feasibility (1–3)"}].map(({k,l})=>(
+                  <Fld key={k} label={l}><input type="number" min={1} max={3} value={oppForm[k]} onChange={e=>setOF(k,Math.min(3,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+                ))}
+              </div>
+              <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${CL.pBd}`,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:13,color:"#555"}}>Score:</span>
+                <span style={{fontSize:20,fontWeight:700,padding:"2px 14px",borderRadius:6,...oppSc}}>{oppScore}</span>
+                <span style={{fontSize:12,color:"#666"}}>{oppScore>=18?"High priority — act now":oppScore>=9?"Medium priority":"Low priority"}</span>
+              </div>
+            </Card>
+            <Card style={{marginBottom:"1rem"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
+                <Fld label="Key action / implementation route" wide><textarea value={oppForm.action} onChange={e=>setOF("action",e.target.value)} rows={2} style={{...iw,resize:"vertical"}}/></Fld>
+                <Fld label="ESRS / framework alignment"><input value={oppForm.alignment} onChange={e=>setOF("alignment",e.target.value)} placeholder="e.g. ESRS E1 · EU Taxonomy · SBTi" style={iw}/></Fld>
+                <Fld label="Owner"><input value={oppForm.owner} onChange={e=>setOF("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
+                <Fld label="Status"><select value={oppForm.status} onChange={e=>setOF("status",e.target.value)} style={iw}>{OPP_STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+              </div>
+            </Card>
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+              <Btn onClick={()=>{setOppFormState(emptyOpp());setSaved(false);}}>Clear</Btn>
+              <button onClick={saveOpp} disabled={!oppForm.description.trim()} style={{padding:"7px 16px",borderRadius:8,border:"none",background:CL.purple,color:"#fff",cursor:oppForm.description.trim()?"pointer":"not-allowed",fontSize:13,fontFamily:"inherit",fontWeight:500,opacity:oppForm.description.trim()?1:0.5}}>
+                Save to opportunities register →
               </button>
             </div>
           </>
@@ -636,9 +829,9 @@ function ProjectView({ project, onChange, onDelete }) {
           {aspects.length===0 && (
             <div style={{textAlign:"center",padding:"2.5rem",background:"#f8f8f8",borderRadius:10,color:"#aaa"}}>
               <p style={{margin:"0 0 6px",fontSize:14}}>No aspects identified yet.</p>
-              <p style={{margin:"0 0 16px",fontSize:12}}>Use the Screening tab to identify aspects with guide words, or add one manually.</p>
+              <p style={{margin:"0 0 16px",fontSize:12}}>Use the EPCIC Screening tab to identify aspects with guide words, or add one manually.</p>
               <div style={{display:"flex",gap:8,justifyContent:"center"}}>
-                <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
+                <Btn variant="primary" onClick={()=>setTab("screening")}>Open EPCIC Screening</Btn>
                 <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
               </div>
             </div>
@@ -646,10 +839,10 @@ function ProjectView({ project, onChange, onDelete }) {
         </div>
       )}
 
-      {/* Screening */}
+      {/* EPCIC SCREENING */}
       {tab==="screening" && (
         <div style={{margin:"-1.25rem"}}>
-          <ScreeningTab project={project} onAddAspect={(a)=>{saveAspect(a);}}/>
+          <ScreeningTab project={project} onAddAspect={(a)=>{saveAspect(a);}} onAddOpp={(o)=>{saveOpp(o);}}/>
         </div>
       )}
 
@@ -667,7 +860,7 @@ function ProjectView({ project, onChange, onDelete }) {
           </div>
           {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
           {filtered.length===0
-            ? <div style={{textAlign:"center",padding:"3rem",background:"#f8f8f8",borderRadius:10,color:"#aaa"}}>{aspects.length===0?"No aspects yet — use the Screening tab or add one manually.":`No aspects match "${sigFilter}".`}</div>
+            ? <div style={{textAlign:"center",padding:"3rem",background:"#f8f8f8",borderRadius:10,color:"#aaa"}}>{aspects.length===0?"No aspects yet — use the EPCIC Screening tab or add one manually.":`No aspects match "${sigFilter}".`}</div>
             : (
               <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #e8e8e8"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -774,8 +967,8 @@ function Sidebar({ projects, activeId, onSelect, onNew }) {
   return (
     <div style={{width:220,flexShrink:0,background:"#f9f9f9",borderRight:"1px solid #e8e8e8",display:"flex",flexDirection:"column",minHeight:"100vh"}}>
       <div style={{padding:"1.25rem 1rem 0.75rem",borderBottom:"1px solid #e8e8e8"}}>
-        <p style={{fontSize:13,fontWeight:700,color:"#1a1a1a",margin:"0 0 2px"}}>Env Aspects Toolkit</p>
-       </div>
+        <p style={{fontSize:13,fontWeight:700,color:"#1a1a1a",margin:0}}>Env Aspects Toolkit</p>
+      </div>
       <div style={{padding:"0.75rem 0.5rem",flex:1,overflowY:"auto"}}>
         <p style={{fontSize:10,fontWeight:600,color:"#bbb",letterSpacing:"0.07em",textTransform:"uppercase",margin:"0 0.5rem 6px"}}>Projects ({projects.length})</p>
         {projects.length===0 && <p style={{fontSize:12,color:"#ccc",padding:"0 0.5rem",fontStyle:"italic"}}>No projects yet</p>}
