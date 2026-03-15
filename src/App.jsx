@@ -775,8 +775,7 @@ function Sidebar({ projects, activeId, onSelect, onNew }) {
     <div style={{width:220,flexShrink:0,background:"#f9f9f9",borderRight:"1px solid #e8e8e8",display:"flex",flexDirection:"column",minHeight:"100vh"}}>
       <div style={{padding:"1.25rem 1rem 0.75rem",borderBottom:"1px solid #e8e8e8"}}>
         <p style={{fontSize:13,fontWeight:700,color:"#1a1a1a",margin:"0 0 2px"}}>Env Aspects Toolkit</p>
-        <p style={{fontSize:11,color:"#aaa",margin:0}}>EPCIC · Norwegian engineering</p>
-      </div>
+       </div>
       <div style={{padding:"0.75rem 0.5rem",flex:1,overflowY:"auto"}}>
         <p style={{fontSize:10,fontWeight:600,color:"#bbb",letterSpacing:"0.07em",textTransform:"uppercase",margin:"0 0.5rem 6px"}}>Projects ({projects.length})</p>
         {projects.length===0 && <p style={{fontSize:12,color:"#ccc",padding:"0 0.5rem",fontStyle:"italic"}}>No projects yet</p>}
