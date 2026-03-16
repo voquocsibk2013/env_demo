@@ -829,9 +829,9 @@ function ProjectView({ project, onChange, onDelete }) {
           {aspects.length===0 && (
             <div style={{textAlign:"center",padding:"2.5rem",background:"#f8f8f8",borderRadius:10,color:"#aaa"}}>
               <p style={{margin:"0 0 6px",fontSize:14}}>No aspects identified yet.</p>
-              <p style={{margin:"0 0 16px",fontSize:12}}>Use the EPCIC Screening tab to identify aspects with guide words, or add one manually.</p>
+              <p style={{margin:"0 0 16px",fontSize:12}}>Use the Screening tab to identify aspects with guide words, or add one manually.</p>
               <div style={{display:"flex",gap:8,justifyContent:"center"}}>
-                <Btn variant="primary" onClick={()=>setTab("screening")}>Open EPCIC Screening</Btn>
+                <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
                 <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
               </div>
             </div>
@@ -860,7 +860,7 @@ function ProjectView({ project, onChange, onDelete }) {
           </div>
           {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
           {filtered.length===0
-            ? <div style={{textAlign:"center",padding:"3rem",background:"#f8f8f8",borderRadius:10,color:"#aaa"}}>{aspects.length===0?"No aspects yet — use the EPCIC Screening tab or add one manually.":`No aspects match "${sigFilter}".`}</div>
+            ? <div style={{textAlign:"center",padding:"3rem",background:"#f8f8f8",borderRadius:10,color:"#aaa"}}>{aspects.length===0?"No aspects yet — use the Screening tab or add one manually.":`No aspects match "${sigFilter}".`}</div>
             : (
               <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #e8e8e8"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
