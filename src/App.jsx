@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import * as XLSX from "xlsx";
 
 // ── Supabase client ──────────────────────────────────────────────────────────
 const SUPA_URL = process.env.REACT_APP_SUPABASE_URL  || "";
@@ -595,6 +596,98 @@ function AIPanel({ project, onAdd }) {
   );
 }
 
+// ── Excel export ──────────────────────────────────────────────────────────────
+function exportScreeningToExcel(project) {
+  const wb = XLSX.utils.book_new();
+
+  // ── Shared styles helper (column widths) ──
+  const setWidths = (ws, widths) => {
+    ws["!cols"] = widths.map(w => ({ wch: w }));
+  };
+
+  // ── Header style (applied via cell comments workaround — SheetJS CE) ──
+  // SheetJS Community Edition doesn't support cell styles, so we rely on
+  // frozen rows and AutoFilter to make headers visually clear.
+
+  // ── Sheet 1: Risk guide words ──────────────────────────────────────────
+  const riskRows = [["Stage","Category","Guide word","Brainstorm question","Likely aspect","Triggered? (Y/N)","Notes"]];
+  EPCIC_STAGES.forEach(stage => {
+    const cats = GW_RISK[stage.code] || [];
+    cats.forEach(cat => {
+      cat.items.forEach(item => {
+        riskRows.push([stage.label, cat.cat, item.kw, item.q, item.aspect, "", ""]);
+      });
+    });
+  });
+  const wsRisk = XLSX.utils.aoa_to_sheet(riskRows);
+  wsRisk["!freeze"] = { xSplit: 0, ySplit: 1 };
+  wsRisk["!autofilter"] = { ref: "A1:G1" };
+  setWidths(wsRisk, [22, 30, 28, 60, 45, 14, 30]);
+  XLSX.utils.book_append_sheet(wb, wsRisk, "Risk guide words");
+
+  // ── Sheet 2: Opportunity guide words ──────────────────────────────────
+  const oppRows = [["Stage","Category","Guide word","Brainstorm question","Likely opportunity","Triggered? (Y/N)","Notes"]];
+  EPCIC_STAGES.forEach(stage => {
+    const cats = GW_OPP[stage.code] || [];
+    cats.forEach(cat => {
+      cat.items.forEach(item => {
+        oppRows.push([stage.label, cat.cat, item.kw, item.q, item.opp, "", ""]);
+      });
+    });
+  });
+  const wsOpp = XLSX.utils.aoa_to_sheet(oppRows);
+  wsOpp["!freeze"] = { xSplit: 0, ySplit: 1 };
+  wsOpp["!autofilter"] = { ref: "A1:G1" };
+  setWidths(wsOpp, [22, 30, 28, 60, 45, 14, 30]);
+  XLSX.utils.book_append_sheet(wb, wsOpp, "Opportunity guide words");
+
+  // ── Sheet 3: Captured aspects ──────────────────────────────────────────
+  const aspects = project.aspects || [];
+  const aspectRows = [["Ref","Phase","Activity area","Specific activity","Environmental aspect","Condition","Potential impact","Receptor(s)","Rec. sensitivity","Scale","Severity","Probability","Duration","Score","Significance","Legal threshold","Stakeholder concern","Key control","Legal ref","Owner","Status"]];
+  aspects.forEach(a => {
+    const score = calcScore(a);
+    const sig   = calcSig(a);
+    aspectRows.push([
+      a.ref||"", a.phase||"", a.area||"", a.activity||"", a.aspect||"",
+      a.condition||"", a.impact||"", a.receptors||"",
+      a.recSensitivity||"", a.scale||"", a.severity||"", a.probability||"",
+      a.duration||"", score!==null?score:"", sig||"",
+      a.legalThreshold||"", a.stakeholderConcern||"",
+      a.control||"", a.legalRef||"", a.owner||"", a.status||""
+    ]);
+  });
+  const wsAspects = XLSX.utils.aoa_to_sheet(aspectRows);
+  wsAspects["!freeze"] = { xSplit: 0, ySplit: 1 };
+  wsAspects["!autofilter"] = { ref: "A1:U1" };
+  setWidths(wsAspects, [10,20,18,28,32,12,32,22,14,12,10,12,18,8,14,12,14,32,24,16,12]);
+  XLSX.utils.book_append_sheet(wb, wsAspects, "Aspects register");
+
+  // ── Sheet 4: Captured opportunities ───────────────────────────────────
+  const opps = project.opps || [];
+  const oppRegRows = [["Ref","Type","Linked aspect","Materiality","Description","Env benefit","Business benefit","Env value","Biz value","Feasibility","Priority score","Priority rating","Key action","ESRS alignment","Owner","Status"]];
+  opps.forEach(o => {
+    const score = calcOppScore(o);
+    const rating = score>=18?"High priority":score>=9?"Medium":"Low";
+    oppRegRows.push([
+      o.ref||"", o.type||"", o.aspectRef||"", o.materiality||"",
+      o.description||"", o.envBenefit||"", o.bizBenefit||"",
+      o.envValue||"", o.bizValue||"", o.feasibility||"",
+      score||"", rating,
+      o.action||"", o.alignment||"", o.owner||"", o.status||""
+    ]);
+  });
+  const wsOpps = XLSX.utils.aoa_to_sheet(oppRegRows);
+  wsOpps["!freeze"] = { xSplit: 0, ySplit: 1 };
+  wsOpps["!autofilter"] = { ref: "A1:P1" };
+  setWidths(wsOpps, [10,24,14,22,36,30,30,10,10,10,12,14,36,26,16,14]);
+  XLSX.utils.book_append_sheet(wb, wsOpps, "Opportunities register");
+
+  // ── Download ───────────────────────────────────────────────────────────
+  const projectName = (project.name||"project").replace(/[^a-z0-9]/gi,"_").toLowerCase();
+  const date = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `env_screening_${projectName}_${date}.xlsx`);
+}
+
 // ── Screening tab ─────────────────────────────────────────────────────────────
 function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const [mode, setMode]               = useState("risks");
@@ -653,16 +746,23 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
       </div>
 
       <div style={{ flex:1, overflowY:"auto", padding:"1.25rem" }}>
-        <div style={{ display:"inline-flex", borderRadius:8, overflow:"hidden", border:"1px solid #e0e0e0", marginBottom:"1.25rem" }}>
-          <button onClick={() => { setMode("risks"); setView("guide"); }}
-            style={{ padding:"8px 22px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:isRisks?600:400, border:"none",
-              background:isRisks?"#ffebee":"#fff", color:isRisks?CL.red:"#777", borderRight:"1px solid #e0e0e0" }}>
-            Risks &amp; aspects
-          </button>
-          <button onClick={() => { setMode("opps"); setView("guide"); }}
-            style={{ padding:"8px 22px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:!isRisks?600:400, border:"none",
-              background:!isRisks?"#ede7f6":"#fff", color:!isRisks?CL.purple:"#777" }}>
-            Opportunities
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1.25rem", flexWrap:"wrap" }}>
+          <div style={{ display:"inline-flex", borderRadius:8, overflow:"hidden", border:"1px solid #e0e0e0" }}>
+            <button onClick={() => { setMode("risks"); setView("guide"); }}
+              style={{ padding:"8px 22px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:isRisks?600:400, border:"none",
+                background:isRisks?"#ffebee":"#fff", color:isRisks?CL.red:"#777", borderRight:"1px solid #e0e0e0" }}>
+              Risks &amp; aspects
+            </button>
+            <button onClick={() => { setMode("opps"); setView("guide"); }}
+              style={{ padding:"8px 22px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:!isRisks?600:400, border:"none",
+                background:!isRisks?"#ede7f6":"#fff", color:!isRisks?CL.purple:"#777" }}>
+              Opportunities
+            </button>
+          </div>
+          <button onClick={() => exportScreeningToExcel(project)}
+            style={{ marginLeft:"auto", padding:"7px 14px", fontSize:12, borderRadius:8, border:"1px solid "+CL.gBd, background:CL.gBg, color:CL.green, cursor:"pointer", fontFamily:"inherit", fontWeight:500, display:"flex", alignItems:"center", gap:6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export to Excel
           </button>
         </div>
 
