@@ -1,4 +1,22 @@
 import { useState, useEffect } from "react";
+import { GW_RISK, GW_OPP } from "./data/guideWords";
+import { DOMAIN_COLORS } from "./utils/colorSystem";
+import { ScreeningGuideCard } from "./components/ScreeningGuideCard";
+import { AspectTable } from "./components/AspectTable";
+import { OpportunityTable } from "./components/OpportunityTable";
+import { RiskMatrix } from "./components/RiskMatrix";
+import { OpportunityMatrix } from "./components/OpportunityMatrix";
+import { ContractsDashboard } from "./components/ContractsDashboard";
+import HistoryTab from "./components/HistoryTab";
+import {
+  initializeVersioning,
+  addSnapshot,
+  rollbackToSnapshot,
+  getCurrentState,
+  saveVersioningToStorage,
+  loadVersioningFromStorage
+} from "./utils/versioningSystem";
+import { exportProjectToExcel, exportMultipleProjectsToExcel } from "./utils/exporters/excelExport";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const PHASES = ["Concept / FEED","Construction","Drilling","Operations","Maintenance","Decommissioning","Commissioning"];
@@ -26,258 +44,25 @@ const EPCIC_STAGES = [
 const PHASE_MAP = { E:"Concept / FEED", P:"Construction", C:"Construction", I:"Operations", C2:"Commissioning", OM:"Operations", D:"Decommissioning" };
 const COND_MAP  = { E:"Normal", P:"Normal", C:"Normal", I:"Normal", C2:"Abnormal", OM:"Normal", D:"Normal" };
 
-// ── Guide words — Risks ──────────────────────────────────────────────────────
-const GW_RISK = {
-  E:[
-    { cat:"Site selection & footprint", color:"teal", items:[
-      { kw:"Habitat sensitivity",          q:"Are there designated areas (Natura 2000, RAMSAR, seabed habitats) within or adjacent to the project footprint?",               aspect:"Land use change / habitat loss",                          area:"Site selection" },
-      { kw:"Drainage & hydrology",         q:"How will the site layout affect natural drainage paths, catchments, or groundwater recharge zones?",                          aspect:"Alteration of surface water drainage",                    area:"Site & drainage design" },
-      { kw:"Floodplain encroachment",      q:"Is any part of the facility sited within a 100-year or 200-year floodplain?",                                                  aspect:"Increased flood risk to third parties",                   area:"Site selection" },
-      { kw:"Cultural heritage",            q:"Has a desk-based heritage assessment been completed? Are there known or probable buried assets within the development zone?", aspect:"Disturbance to buried archaeological remains",            area:"Site selection" },
-      { kw:"Visual impact",                q:"Will the installation be visible from a national park, scenic area, or sensitive receptor?",                                  aspect:"Visual intrusion / landscape character change",           area:"Layout design" },
-    ]},
-    { cat:"Material & process design", color:"purple", items:[
-      { kw:"Hazardous substance inventory",q:"What chemical inventory is required? Are there substitution opportunities for CMR or PBT substances?",                         aspect:"Use of hazardous chemicals -- spill / release risk",       area:"Process design" },
-      { kw:"Energy efficiency",            q:"What is the estimated energy intensity (kWh/tonne product)? Have low-energy alternatives been assessed at FEED?",             aspect:"GHG emissions from facility energy use",                  area:"Process design" },
-      { kw:"Fugitive emissions",           q:"Which process streams have the highest fugitive VOC / methane potential? Is LDAR designed in from the start?",                aspect:"Fugitive VOC / methane emissions to atmosphere",          area:"Process design" },
-      { kw:"Produced water design",        q:"What is the estimated produced water volume, composition and treatment route? Is zero liquid discharge achievable?",          aspect:"Produced water discharge to sea / ground",                area:"Process design" },
-      { kw:"Noise at boundaries",          q:"Have boundary noise limits (Forurensningsloven, NORSOK S-002) been mapped at FEED stage?",                                    aspect:"Noise exceeding boundary / community limits",             area:"Engineering design" },
-      { kw:"Waste hierarchy",              q:"Has a waste minimisation assessment been carried out? Are waste streams designed for recyclability (EU WFD)?",                aspect:"Waste generation -- construction and operational",         area:"Engineering design" },
-    ]},
-    { cat:"Emissions & discharge design", color:"amber", items:[
-      { kw:"Stack emissions",              q:"What combustion stacks are included? Have dispersion modelling inputs been set against IED / Forurensningsloven limits?",     aspect:"Air emissions -- NOx, SO2, PM, CO from combustion",       area:"Engineering design" },
-      { kw:"Thermal discharge",            q:"If cooling water is used, what is the delta-T at discharge? Has a thermal plume model been run?",                             aspect:"Thermal pollution of receiving waterbody",                area:"Process design" },
-      { kw:"Stormwater quality",           q:"What contaminants could be in stormwater runoff from process areas, laydown yards, or access roads?",                        aspect:"Contaminated stormwater runoff to watercourse / sea",     area:"Drainage design" },
-    ]},
-  ],
-  P:[
-    { cat:"Chemical & substance procurement", color:"red", items:[
-      { kw:"REACH compliance",             q:"Are all procured chemicals registered under REACH? Have SVHCs been screened out of the vendor list?",                         aspect:"Introduction of SVHC chemicals to site",                  area:"Procurement" },
-      { kw:"Biocide use",                  q:"Are biocides specified? Are they approved under EU BPR and OSPAR PLONOR lists?",                                              aspect:"Biocide discharge -- toxicity to marine organisms",        area:"Chemical procurement" },
-      { kw:"Refrigerants & blowing agents",q:"What refrigerants are in HVAC / process equipment? Are high-GWP F-gases being used?",                                        aspect:"Release of high-GWP refrigerants / F-gases",              area:"Equipment procurement" },
-      { kw:"Asbestos-containing materials",q:"Has a blanket prohibition on ACM been specified in procurement documents? Is the supply chain verified?",                    aspect:"Asbestos introduction to site via procured goods",         area:"Procurement" },
-      { kw:"Invasive species via equipment",q:"Could imported plant, aggregate or equipment introduce invasive species or aquatic organisms?",                             aspect:"Introduction of non-native / invasive species",           area:"Procurement" },
-    ]},
-    { cat:"Transport & logistics", color:"teal", items:[
-      { kw:"Abnormal loads",               q:"What abnormal loads are required? What route restrictions and community notifications are needed?",                           aspect:"Road traffic impacts -- noise, dust, community disruption",area:"Logistics" },
-      { kw:"Marine transport emissions",   q:"Are vessels / barges used for procurement? Are IMO Tier III engines / scrubbers specified?",                                 aspect:"Vessel exhaust -- NOx, SOx, PM (MARPOL Annex VI)",        area:"Marine logistics" },
-      { kw:"Port operations",              q:"What environmental controls are specified at port laydown areas? Spill kits, waste reception, stormwater controls?",         aspect:"Spills and waste from port / marshalling operations",     area:"Logistics" },
-    ]},
-    { cat:"Packaging & material waste", color:"gray", items:[
-      { kw:"Packaging waste volumes",      q:"What is the estimated packaging volume from deliveries? Is a take-back or minimisation requirement in the contract?",         aspect:"Waste -- packaging (plastics, timber, metal)",             area:"Procurement" },
-      { kw:"Offcuts & material surplus",   q:"What is the estimated surplus / scrap from fabricated items? Is there a contract requirement for reuse or recycling?",       aspect:"Solid waste -- fabrication offcuts and surplus",           area:"Procurement" },
-    ]},
-  ],
-  C:[
-    { cat:"Ground disturbance & earthworks", color:"amber", items:[
-      { kw:"Bulk excavation",              q:"What volumes of cut/fill? Is there contaminated land risk? What is the waste classification route for excavated material?",   aspect:"Excavation of contaminated / hazardous ground material",  area:"Earthworks" },
-      { kw:"Dust generation",              q:"What are the nearest dust-sensitive receptors? What PM10 suppression measures and trigger action levels are proposed?",       aspect:"Fugitive dust (PM10/PM2.5) -- nuisance & human health",   area:"Earthworks" },
-      { kw:"Ground vibration",             q:"Are there vibration-sensitive structures or receptors within 100m of piling / blasting operations?",                         aspect:"Ground-borne vibration -- structural damage / amenity",   area:"Piling / foundation works" },
-      { kw:"Soil erosion & sediment",      q:"What is the rainfall erosivity and slope risk? Are silt fences, settlement ponds and topsoil bunds designed in?",            aspect:"Sediment runoff to watercourse during earthworks",        area:"Earthworks" },
-      { kw:"Dewatering",                   q:"What groundwater depths are anticipated? Where will dewatering discharge go? What are the SS / contaminant limits?",          aspect:"Contaminated dewatering discharge to surface water",      area:"Earthworks / foundations" },
-    ]},
-    { cat:"Ecology & habitat", color:"green", items:[
-      { kw:"Vegetation clearance",         q:"Pre-clearance habitat survey status? Are there nesting birds, protected plants, or invertebrate features requiring seasonal constraints?", aspect:"Loss or disturbance of protected / priority habitats", area:"Site preparation" },
-      { kw:"Invasive plant species",       q:"Are Japanese knotweed, Himalayan balsam or other invasive species present? Is a management plan in place?",                  aspect:"Spread of invasive plant species via earthworks",         area:"Site preparation" },
-      { kw:"Ecological connectivity",      q:"Will construction sever wildlife corridors (hedgerows, streams, woodland edges)? Are underpasses specified?",                 aspect:"Severance of wildlife corridors",                         area:"Construction layout" },
-    ]},
-    { cat:"Water & drainage", color:"blue", items:[
-      { kw:"Concrete washout",             q:"Where will concrete washout occur? What containment prevents alkaline washout water (pH 11-13) entering watercourses?",       aspect:"Alkaline concrete washwater discharge to watercourse",    area:"Concrete / civil works" },
-      { kw:"Fuel & chemical storage",      q:"Are bunded storage areas designed to 110% capacity? What secondary containment and inspection regime is in place?",          aspect:"Hydrocarbon / chemical spill from storage to ground/water",area:"Construction compound" },
-      { kw:"Welfare facilities",           q:"What is the sewage / grey water treatment route for construction welfare facilities? Is consent required?",                  aspect:"Untreated sewage discharge from construction welfare",    area:"Construction compound" },
-    ]},
-    { cat:"Air, noise & light", color:"gray", items:[
-      { kw:"Construction noise",           q:"Dominant noise sources (piling, generators, pumps)? Hours of operation and community notification protocols?",                aspect:"Construction noise -- community amenity impact",           area:"Construction activities" },
-      { kw:"Diesel plant emissions",       q:"Fleet composition (Stage V compliant?), operating hours and total NOx/PM load estimate?",                                    aspect:"Diesel plant exhaust -- NOx, PM to air",                  area:"Construction plant" },
-      { kw:"Artificial light at night",    q:"Are there light-sensitive receptors (bat roosts, seabirds, residential)? Is a lighting management plan in place?",           aspect:"Light spill -- disturbance to ecology / community",       area:"Construction compound" },
-    ]},
-  ],
-  I:[
-    { cat:"Marine operations", color:"blue", items:[
-      { kw:"Anchor handling & moorings",   q:"Will anchors be set over cable routes, protected seabed, or sensitive benthic habitats? Pre-lay survey status?",             aspect:"Seabed disturbance from anchor handling / moorings",      area:"Marine operations" },
-      { kw:"Heavy lift & crane vessels",   q:"What are the DP / thruster wash footprints? Could propwash disturb sensitive seabed or resuspend contaminants?",            aspect:"Turbidity plume from vessel thruster wash",               area:"Marine operations" },
-      { kw:"Subsea pipeline / cable lay",  q:"Pre-lay surveys completed? UXO risk assessed? How is trench spoil managed?",                                                 aspect:"Seabed disturbance / habitat loss from trenching",        area:"Pipeline / cable installation" },
-      { kw:"Jacket / structure install",   q:"Is pile driving required? What are underwater noise levels (SEL, peak SPL) and marine mammal mitigation protocols?",        aspect:"Underwater noise from piling -- marine mammal disturbance",area:"Foundation / jacket installation" },
-    ]},
-    { cat:"Marine ecology", color:"teal", items:[
-      { kw:"Marine mammal protection",     q:"Is a Marine Mammal Mitigation Protocol (MMMP) in place? Are PAM operators required?",                                        aspect:"Disturbance / injury to marine mammals",                  area:"All marine operations" },
-      { kw:"Fish spawning & migration",    q:"Are operations scheduled within known spawning or migration windows for cod, herring, or salmon?",                           aspect:"Disturbance to fish spawning / migration routes",         area:"Marine operations scheduling" },
-      { kw:"Coral & reef habitats",        q:"Have cold-water coral or reef habitats been surveyed? Is a 500m exclusion zone in place?",                                   aspect:"Physical damage to cold-water coral / reef habitats",     area:"Seabed operations" },
-      { kw:"Ballast water",                q:"Are all vessels compliant with IMO BWM Convention (D-2 standard)? Are discharge records maintained?",                       aspect:"Introduction of invasive species via ballast water",      area:"Vessel operations" },
-    ]},
-    { cat:"Vessel operations & discharges", color:"amber", items:[
-      { kw:"Vessel fuel & lubricants",     q:"Total fuel volume on vessels? Spill response plan for worst-case diesel spill in the operational area?",                     aspect:"Hydrocarbon spill from vessel -- marine pollution",        area:"Vessel operations" },
-      { kw:"Grey water & sewage at sea",   q:"Are vessels MARPOL Annex IV compliant? What is the 12-nm limit compliance approach for grey water discharge?",              aspect:"Sewage / grey water discharge at sea (MARPOL IV)",        area:"Vessel operations" },
-      { kw:"Garbage & plastics at sea",    q:"Is a Garbage Management Plan in place per MARPOL Annex V? How is plastic waste logged and landed?",                         aspect:"Waste / plastic discharge at sea (MARPOL V)",             area:"Vessel operations" },
-      { kw:"Air emissions at sea",         q:"Combined SOx/NOx profile of fleet? Is the field within a MARPOL Annex VI ECA (0.1% sulphur zone)?",                         aspect:"Vessel air emissions -- SOx, NOx, PM (MARPOL VI)",        area:"Vessel operations" },
-    ]},
-    { cat:"Emergency response", color:"red", items:[
-      { kw:"Dropped objects at sea",       q:"Dropped object risk envelope for lifting over seabed? Are subsea assets, pipelines or cables at risk?",                      aspect:"Dropped object -- subsea infrastructure / pollution",     area:"Lifting operations" },
-      { kw:"Standby vessel emissions",     q:"On-standby fuel consumption of support vessels? Is slow steaming / hybrid propulsion specified?",                            aspect:"Continuous exhaust from standby vessel operations",       area:"Vessel operations" },
-    ]},
-  ],
-  C2:[
-    { cat:"First fill & chemical loading", color:"red", items:[
-      { kw:"Hydrotest water",              q:"Source of hydrotest water? Additives (corrosion inhibitors, biocides, O2 scavengers) used and disposal route?",              aspect:"Discharge of hydrotest water with chemical additives",    area:"Commissioning -- hydrotest" },
-      { kw:"Chemical first fill",          q:"Full inventory for first fill (methanol, MEG, glycol, lube oils)? Volume and containment plan?",                             aspect:"Chemical spill / release during first fill",              area:"Commissioning" },
-      { kw:"Preservation fluids",          q:"Are nitrogen blankets, desiccants or VCI films used? What is the waste disposal route?",                                     aspect:"Waste from preservation materials / packaging",           area:"Pre-commissioning" },
-      { kw:"Catalyst loading",             q:"Are catalysts loaded during commissioning? Are they classified as hazardous waste if recovered?",                            aspect:"Hazardous dust / spill from catalyst loading",            area:"Commissioning" },
-    ]},
-    { cat:"Venting, flaring & purging", color:"amber", items:[
-      { kw:"Vent gas composition",         q:"Composition of vent gas during nitrogen purging / initial pressurisation? Are VOCs, H2S or CO present?",                    aspect:"Fugitive / intentional VOC / H2S release to atmosphere",  area:"Commissioning -- purging" },
-      { kw:"Flaring volumes",              q:"Estimated gas volume to be flared during commissioning? Has a flaring consent been obtained?",                               aspect:"GHG emissions from commissioning flaring",                area:"Commissioning -- flaring" },
-      { kw:"Noise during testing",         q:"Are PSVs or blow-down systems tested? What are peak noise levels and distances to receptors?",                               aspect:"Impulse noise from PSV testing / blowdown",               area:"Commissioning -- functional testing" },
-    ]},
-    { cat:"Drainage & waste streams", color:"blue", items:[
-      { kw:"Flush & drain sequences",      q:"What fluids will be drained during flushing? Are they hazardous waste? What is the tanker / disposal route?",                aspect:"Hazardous waste from flush and drain operations",         area:"Commissioning" },
-      { kw:"Oily water from start-up",     q:"Oily water volume during initial start-up before treatment systems are fully online?",                                       aspect:"Oily water discharge before treatment systems commissioned",area:"Start-up" },
-    ]},
-  ],
-  OM:[
-    { cat:"Routine operations & emissions", color:"teal", items:[
-      { kw:"Produced water",               q:"Continuous produced water rate, OiW concentration and discharge point? OSPAR Decision 2001/1 / Forurensningsloven compliance?", aspect:"Produced water discharge -- hydrocarbons, chemicals, NORM",area:"Production operations" },
-      { kw:"Flare & vent management",      q:"Routine flaring rate (OGMP 2.0 Level 4/5)? Is an LDAR programme in place for fugitive methane?",                             aspect:"Routine flaring and fugitive methane emissions",          area:"Production operations" },
-      { kw:"Cooling water discharge",      q:"Cooling water flow rate, delta-T and biocide loading? What is the receiving water body designation?",                        aspect:"Thermal and biocide loading to receiving waterbody",      area:"Utility systems" },
-      { kw:"Atmospheric emissions",        q:"Point source emissions (turbines, generators, heaters)? Are they within consented limits?",                                  aspect:"NOx, SOx, PM from combustion sources",                    area:"Production operations" },
-    ]},
-    { cat:"Maintenance activities", color:"purple", items:[
-      { kw:"Tank cleaning",                q:"Frequency and method for tank cleaning? Sludge classification and disposal route?",                                           aspect:"Oily sludge waste from tank cleaning",                    area:"Maintenance" },
-      { kw:"Chemical injection",           q:"Full chemical injection matrix (scale inhibitors, corrosion inhibitors, demulsifiers, biocides)? OSPAR PLONOR listed?",     aspect:"Chemical injection -- chronic low-level marine discharge", area:"Chemical injection systems" },
-      { kw:"Painting & surface treatment", q:"Are VOC-containing paints used in maintenance? Annual solvent emissions vs. consented limits?",                              aspect:"VOC emissions from maintenance painting",                 area:"Maintenance" },
-      { kw:"Radioactive sources",          q:"Radioactive sources in process equipment? Inspection, loss prevention and waste management protocol?",                       aspect:"Radioactive source loss / mismanagement",                 area:"Instrumentation maintenance" },
-    ]},
-    { cat:"Spill & emergency scenarios", color:"red", items:[
-      { kw:"Oil spill response",           q:"Worst-case spill volume? Is an OPEP / OSR plan current and exercised?",                                                      aspect:"Major hydrocarbon spill to sea / ground",                 area:"Emergency response" },
-      { kw:"Process upset",                q:"Environmental consequence from loss of containment (LWC, blowout, riser leak)? Has QRA covered environmental receptors?",   aspect:"Large-scale pollution from uncontrolled process release",  area:"Process safety" },
-      { kw:"Groundwater protection",       q:"Is there a groundwater monitoring programme (onshore)? What are the trigger levels for spill / leak response?",             aspect:"Hydrocarbon contamination of groundwater",                area:"Facility integrity" },
-    ]},
-  ],
-  D:[
-    { cat:"Waste & hazardous material removal", color:"gray", items:[
-      { kw:"Asbestos & legacy materials",  q:"Has an asbestos register been completed? Is ACM removal scheduled before structural demolition? Licensed disposal route?",   aspect:"Asbestos fibre release during decommissioning",           area:"Decommissioning" },
-      { kw:"NORM",                         q:"NORM inventory in scale, sludge and equipment? Does it exceed the 1 Bq/g threshold requiring regulated disposal?",          aspect:"NORM contamination of waste streams and site",            area:"Decommissioning" },
-      { kw:"Subsea structure removal",     q:"Jacket removal full or partial (OSPAR 98/3)? Seabed footprint of cut piles, mattresses and scour protection?",              aspect:"Seabed disturbance and waste from structure removal",     area:"Offshore decommissioning" },
-      { kw:"Chemical flushing & pigging",  q:"Chemicals remaining in pipelines / vessels? Flushing fluid composition, volume and disposal route?",                        aspect:"Hazardous flush waste from pipeline decommissioning",     area:"Pipeline decommissioning" },
-    ]},
-    { cat:"Site restoration", color:"green", items:[
-      { kw:"Land contamination survey",    q:"Has a Phase II site investigation been completed? What remediation standard is required?",                                    aspect:"Residual land contamination -- soil and groundwater",     area:"Site remediation" },
-      { kw:"Habitat reinstatement",        q:"Post-decommissioning land use? Does it require ecological restoration to the pre-disturbance baseline or better?",          aspect:"Failure to restore habitats to pre-disturbance condition",area:"Site reinstatement" },
-      { kw:"Concrete demolition waste",    q:"Volume of concrete from demolition? Can it be processed on-site for aggregate reuse (circular economy)?",                   aspect:"Demolition waste -- concrete, steel, mixed waste",        area:"Demolition" },
-    ]},
-    { cat:"Emissions during decommissioning", color:"amber", items:[
-      { kw:"Gas blowdown",                 q:"Gas held in system at cessation? Blowdown volume, composition and GHG equivalent?",                                          aspect:"GHG release from system blowdown at cessation",           area:"Decommissioning" },
-      { kw:"Demolition dust",              q:"Dust-generating demolition activities and nearest receptors? Is wet demolition or misting required?",                        aspect:"Dust from structure demolition -- PM10/PM2.5",            area:"Demolition" },
-      { kw:"Torch cutting / hot work",     q:"Fume types from torch-cutting painted steelwork (lead, zinc, cadmium)? PPE and air monitoring required?",                   aspect:"Toxic fumes from hot work on coated structures",          area:"Demolition" },
-    ]},
-  ],
-};
 
-// ── Guide words — Opportunities ──────────────────────────────────────────────
-const GW_OPP = {
-  E:[
-    { cat:"Design for circularity", color:"teal", items:[
-      { kw:"Modular / demountable design",  q:"Can structural elements, modules or equipment be designed for disassembly and reuse at end of project life?",                opp:"Circular economy -- design for disassembly and reuse",           area:"Engineering design" },
-      { kw:"Material efficiency at FEED",   q:"Can material volumes be reduced through optimised structural design, shared infrastructure, or prefabrication?",             opp:"Resource efficiency -- material reduction at source",            area:"Engineering design" },
-      { kw:"Renewable energy integration",  q:"Is there scope to integrate solar, wind or waste-heat recovery into the facility design at FEED stage?",                     opp:"Low-carbon technology -- on-site renewable energy generation",   area:"Process design" },
-      { kw:"Heat recovery / WHR",           q:"Are there process streams with significant waste heat that could be captured for power generation or heating?",              opp:"Resource efficiency -- waste heat recovery",                     area:"Process design" },
-    ]},
-    { cat:"Nature & biodiversity by design", color:"green", items:[
-      { kw:"Biodiversity net gain target",  q:"Can the facility deliver measurable BNG -- green roofs, habitat corridors, artificial reefs?",                               opp:"Biodiversity net gain -- habitat creation or enhancement",       area:"Site design" },
-      { kw:"Nature-based drainage",         q:"Can SuDS, wetlands or bioswales replace hard engineered drainage?",                                                          opp:"Nature-based solutions -- SuDS and natural flood management",    area:"Drainage design" },
-      { kw:"TNFD / biodiversity disclosure",q:"Could biodiversity improvements be documented and reported under TNFD or EU CSRD ESRS E4?",                                  opp:"Reputational / SLO -- biodiversity reporting and disclosure",    area:"Engineering design" },
-    ]},
-    { cat:"Green finance & taxonomy", color:"purple", items:[
-      { kw:"EU Taxonomy alignment at FEED", q:"Which activities in the design qualify as substantially contributing to climate mitigation under EU Taxonomy?",              opp:"Green Finance & Taxonomy -- EU Taxonomy-aligned project elements",area:"Engineering design" },
-      { kw:"Green bonds / sustainability-linked finance",q:"Can project finance be structured as green bonds or SLLs linked to environmental KPI targets?",                opp:"Green Finance & Taxonomy -- green bond or sustainability-linked loan", area:"Project finance" },
-    ]},
-  ],
-  P:[
-    { cat:"Sustainable procurement", color:"teal", items:[
-      { kw:"Low-carbon materials specification",q:"Can the procurement spec require EPDs and low-embodied-carbon materials (recycled steel, low-carbon concrete)?",         opp:"Low-carbon technology -- low-embodied-carbon materials procurement",area:"Procurement" },
-      { kw:"Circular supplier requirements",q:"Can suppliers be required to take back packaging, surplus or end-of-life equipment?",                                        opp:"Circular economy -- supplier take-back and packaging reduction",  area:"Procurement" },
-    ]},
-    { cat:"Supply chain emissions", color:"amber", items:[
-      { kw:"Low-emission logistics",         q:"Can low-emission transport (rail, LNG vessels, electric HGVs) be specified in logistics contracts?",                        opp:"Low-carbon technology -- low-emission transport in supply chain", area:"Logistics" },
-      { kw:"Local sourcing",                 q:"Can materials and services be sourced locally or regionally to reduce transport emissions and support local economy?",      opp:"Resource efficiency -- local sourcing reduces transport GHG",     area:"Procurement" },
-    ]},
-  ],
-  C:[
-    { cat:"Waste minimisation & circular economy", color:"teal", items:[
-      { kw:"On-site concrete recycling",     q:"Can demolished or surplus concrete be crushed and reused as recycled aggregate on-site?",                                    opp:"Circular economy -- on-site concrete aggregate recycling",       area:"Demolition / civil works" },
-      { kw:"Construction waste exchange",    q:"Can surplus materials (timber, steel offcuts, cabling) be offered to a materials exchange or social enterprise?",          opp:"Circular economy -- materials exchange / reuse of surplus",      area:"Construction compound" },
-    ]},
-    { cat:"Ecology enhancement", color:"green", items:[
-      { kw:"Habitat creation during construction",q:"Can topsoil be stored and reused, and habitat features be created as part of the construction scope?",                opp:"Biodiversity net gain -- habitat creation during construction",  area:"Site preparation" },
-      { kw:"Invasive species eradication",   q:"Can clearance works provide an opportunity to permanently remove invasive plant species from the site?",                    opp:"Biodiversity net gain -- invasive species eradication",          area:"Site preparation" },
-    ]},
-    { cat:"Low-carbon construction", color:"amber", items:[
-      { kw:"Stage V / zero-emission plant",  q:"Can the construction plant fleet be specified as Stage V diesel or battery / hydrogen electric?",                           opp:"Low-carbon technology -- zero-emission construction plant",      area:"Construction plant" },
-      { kw:"Renewable site power",           q:"Can solar panels, battery storage or grid connections replace diesel generators for site power?",                           opp:"Low-carbon technology -- renewable site power during construction",area:"Construction compound" },
-    ]},
-  ],
-  I:[
-    { cat:"Marine ecology enhancement", color:"teal", items:[
-      { kw:"Artificial reef / habitat",      q:"Could jacket legs, scour protection or cable burial create habitat for fish, corals or invertebrates?",                     opp:"Biodiversity net gain -- artificial reef / marine habitat creation",area:"Structure installation" },
-      { kw:"Marine protected area benefit",  q:"Could exclusion zones create de facto MPAs, benefiting fish stocks and biodiversity?",                                      opp:"Nature-based solutions -- de facto MPA / marine reserve benefit",area:"Marine operations" },
-    ]},
-    { cat:"Low-carbon vessel operations", color:"green", items:[
-      { kw:"Shore power / hybrid vessels",   q:"Can installation vessels use shore power at port, hybrid propulsion or LNG / methanol fuel?",                               opp:"Low-carbon technology -- low-emission installation vessels",     area:"Vessel operations" },
-      { kw:"Voyage optimisation",            q:"Can route planning, weather routing and slow steaming minimise fuel consumption across the campaign?",                      opp:"Resource efficiency -- fuel savings from voyage optimisation",   area:"Marine logistics" },
-    ]},
-    { cat:"Regulatory incentives", color:"purple", items:[
-      { kw:"Norwegian O&G environmental incentives",q:"Are there Norwegian government or Enova grant schemes available for low-carbon offshore installation?",             opp:"Regulatory incentive -- Norwegian Enova / state grant for low-carbon ops",area:"Project finance" },
-    ]},
-  ],
-  C2:[
-    { cat:"Chemical & water efficiency", color:"teal", items:[
-      { kw:"Hydrotest water reuse",          q:"Can hydrotest water be reused across multiple systems or treated and re-injected?",                                          opp:"Resource efficiency -- hydrotest water recycling",               area:"Commissioning -- hydrotest" },
-      { kw:"Chemical substitution",          q:"Can less hazardous alternatives replace standard commissioning chemicals?",                                                 opp:"Resource efficiency -- hazardous chemical substitution",         area:"Chemical management" },
-    ]},
-    { cat:"Flaring minimisation", color:"amber", items:[
-      { kw:"Gas capture during start-up",    q:"Can commissioning gas be captured for on-site power generation rather than flared?",                                        opp:"Low-carbon technology -- gas capture instead of flaring",        area:"Commissioning -- flaring" },
-      { kw:"Cold commissioning priority",    q:"Can the commissioning sequence be optimised to maximise cold commissioning and minimise hot flaring volumes?",              opp:"Resource efficiency -- reduced commissioning flare volumes",      area:"Commissioning sequence" },
-    ]},
-  ],
-  OM:[
-    { cat:"Operational efficiency & carbon", color:"teal", items:[
-      { kw:"Electrification of offshore",    q:"Can gas turbines be replaced or supplemented by grid power or renewable energy to reduce operational emissions?",          opp:"Low-carbon technology -- offshore electrification / power from shore",area:"Power systems" },
-      { kw:"CCUS opportunity",               q:"Is there scope to capture and store CO2 from process operations, contributing to Norwegian CCS targets?",                 opp:"Low-carbon technology -- carbon capture, utilisation and storage",area:"Process design" },
-      { kw:"Methane monetisation",           q:"Can vented or flared methane be recovered and sold, generating revenue while reducing GHG emissions?",                     opp:"Resource efficiency -- methane recovery and monetisation",       area:"Production operations" },
-      { kw:"Produced water as a resource",   q:"Can treated produced water be beneficially reused for injection, dust suppression or other uses?",                         opp:"Circular economy -- produced water beneficial reuse",            area:"Water treatment" },
-    ]},
-    { cat:"Sustainability reporting", color:"purple", items:[
-      { kw:"CSRD / ESRS reporting",          q:"Can environmental KPI data be structured to directly support CSRD ESRS E1-E5 mandatory disclosures?",                       opp:"Reputational / SLO -- CSRD / ESRS reporting-ready KPI framework",area:"Sustainability reporting" },
-      { kw:"SBTi / net zero alignment",      q:"Can emission reduction measures be aligned with Science Based Targets (SBTi) to support net-zero commitments?",            opp:"Reputational / SLO -- SBTi / net-zero target alignment",         area:"GHG management" },
-    ]},
-    { cat:"Climate resilience", color:"amber", items:[
-      { kw:"Climate risk assessment",        q:"Has a TCFD-aligned physical climate risk assessment been carried out for 2050+ scenarios?",                                 opp:"Climate resilience -- physical climate risk adaptation measures", area:"Asset integrity" },
-    ]},
-  ],
-  D:[
-    { cat:"Materials recovery & circular economy", color:"teal", items:[
-      { kw:"Steel recycling maximisation",   q:"Can all removed steel be sent to high-grade recycling (EAF steelmaking) rather than lower-grade recovery?",                opp:"Circular economy -- high-grade steel recycling from decommissioning",area:"Decommissioning" },
-      { kw:"Equipment refurbishment / reuse",q:"Can equipment, instruments, valves or piping be refurbished and resold rather than scrapped?",                             opp:"Circular economy -- equipment reuse and refurbishment",          area:"Decommissioning" },
-      { kw:"Concrete aggregate recovery",    q:"Can demolition concrete be processed for recycled aggregate rather than going to landfill?",                               opp:"Circular economy -- recycled aggregate from demolition concrete", area:"Demolition" },
-    ]},
-    { cat:"Habitat & legacy benefits", color:"green", items:[
-      { kw:"Seabed recovery as positive legacy",q:"Can post-decommissioning seabed surveys document improved benthic communities as a net positive environmental legacy?", opp:"Biodiversity net gain -- documented seabed recovery as project legacy",area:"Offshore decommissioning" },
-      { kw:"Land restoration to higher standard",q:"Can land reinstatement go beyond pre-disturbance baseline -- creating wetlands, meadows or community green space?",  opp:"Biodiversity net gain -- land restored to higher ecological standard",area:"Site reinstatement" },
-    ]},
-    { cat:"Decommissioning finance", color:"purple", items:[
-      { kw:"Green decommissioning certification",q:"Are there emerging certification schemes or green bond frameworks for responsible decommissioning?",                   opp:"Green Finance & Taxonomy -- green decommissioning certification / finance",area:"Project finance" },
-    ]},
-  ],
-};
+// ── Color map (using DOMAIN_COLORS from colorSystem.js) ──────────────────────
+// Map domain colors to CSS color objects for UI rendering
+const COLOR_MAP = Object.fromEntries(
+  Object.entries(DOMAIN_COLORS).map(([key, color]) => [
+    key,
+    { bg: color.bg, border: color.border, text: color.text, head: color.hex }
+  ])
+);
 
-// ── Color map ────────────────────────────────────────────────────────────────
-const COLOR_MAP = {
-  teal:  { bg:"#e0f2f1", border:"#80cbc4", text:"#004d40", head:"#00695c" },
-  purple:{ bg:"#ede7f6", border:"#ce93d8", text:"#4527a0", head:"#6a1b9a" },
-  amber: { bg:"#fff8e1", border:"#ffe082", text:"#e65100", head:"#f57f17" },
-  red:   { bg:"#ffebee", border:"#ef9a9a", text:"#b71c1c", head:"#c62828" },
-  green: { bg:"#e8f5e9", border:"#a5d6a7", text:"#1b5e20", head:"#2e7d52" },
-  blue:  { bg:"#e3f2fd", border:"#90caf9", text:"#0d47a1", head:"#1565c0" },
-  gray:  { bg:"#f5f5f5", border:"#cfd8dc", text:"#37474f", head:"#455a64" },
+// Legacy color names mapping to domain colors for backwards compatibility
+const LEGACY_COLOR_MAP = {
+  teal:  "water",
+  purple: "chemicals",
+  amber: "energy",
+  red:   "regulatory",
+  green: "biodiversity",
+  blue:  "water",
+  gray:  "air",
 };
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
@@ -305,13 +90,15 @@ const emptyAspect = () => ({
   impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
   severity:3, probability:3, duration:"Temporary (<1yr)",
   legalThreshold:"N", stakeholderConcern:"N",
-  control:"", legalRef:"", owner:"", status:"Open"
+  control:"", legalRef:"", owner:"", status:"Open",
+  domainColor:"air", emoji:"💨"
 });
 const emptyOpp = () => ({
   type:"", aspectRef:"", materiality:"Both",
   description:"", envBenefit:"", bizBenefit:"",
   envValue:2, bizValue:2, feasibility:2,
-  action:"", alignment:"", owner:"", status:"Open"
+  action:"", alignment:"", owner:"", status:"Open",
+  domainColor:"air", emoji:"💨"
 });
 const newProject = () => ({
   id: Date.now().toString(),
@@ -652,7 +439,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             )}
 
             {guideData.map(section => {
-              const col = COLOR_MAP[section.color] || COLOR_MAP.gray;
+              const col = COLOR_MAP[section.domainColor] || COLOR_MAP.gray;
               const key = (isRisks?"R":"O") + activeStage + section.cat;
               const open = expanded[key] !== false;
               return (
@@ -665,19 +452,22 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                   {open && (
                     <div style={{ background:"#fff" }}>
                       {section.items.map((item, i) => (
-                        <div key={i} style={{ padding:"10px 14px", borderTop:"1px solid "+col.border, display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:12, fontWeight:600, color:col.head, marginBottom:4 }}>{item.kw}</div>
-                            <p style={{ fontSize:12, color:"#555", margin:"0 0 5px", lineHeight:1.5 }}>{item.q}</p>
-                            <span style={{ fontSize:11, padding:"1px 7px", borderRadius:3, background:col.bg, color:col.text, fontStyle:"italic" }}>
-                              {isRisks ? "Likely aspect: "+item.aspect : "Likely opportunity: "+item.opp}
-                            </span>
-                          </div>
-                          <button onClick={() => isRisks ? prefillRisk(activeStage, item) : prefillOpp(activeStage, item)}
-                            style={{ padding:"5px 12px", fontSize:12, borderRadius:7, border:"none", background:col.head, color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:500, whiteSpace:"nowrap", flexShrink:0 }}>
-                            Use
-                          </button>
-                        </div>
+                        <ScreeningGuideCard
+                          key={i}
+                          item={item}
+                          stage={activeStage}
+                          isRisks={isRisks}
+                          onSave={isRisks ? saveRisk : saveOpp}
+                          PHASE_MAP={PHASE_MAP}
+                          COND_MAP={COND_MAP}
+                          CONDITIONS={CONDITIONS}
+                          PHASES={PHASES}
+                          STATUSES={STATUSES}
+                          OPP_TYPES={OPP_TYPES}
+                          OPP_STATUSES={OPP_STATUSES}
+                          emptyAspect={emptyAspect}
+                          emptyOpp={emptyOpp}
+                        />
                       ))}
                     </div>
                   )}
@@ -808,18 +598,55 @@ function ProjectView({ project, onChange, onDelete }) {
   const [sigFilter, setSigFilter]       = useState("All");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // ── Versioning system ─────────────────────────────────────────────────────────
+  const [versioning, setVersioning] = useState(() => {
+    const stored = loadVersioningFromStorage(project.id);
+    if (stored) return stored;
+
+    const projectState = { aspects: project.aspects || [], opportunities: project.opps || [] };
+    return initializeVersioning(projectState);
+  });
+
+  const lastAutoSaveRef = useState(() => Date.now())[0];
+
   const aspects = project.aspects || [];
   const opps    = project.opps    || [];
   const nextRef = (arr, pfx) => pfx + "-" + String(arr.length + 1).padStart(3, "0");
 
   const saveAspect = a => {
     const updated = a.id ? aspects.map(x => x.id===a.id ? a : x) : [...aspects, { ...a, id:Date.now().toString(), ref:nextRef(aspects,"ASP") }];
-    onChange({ ...project, aspects:updated });
+    const updatedProject = { ...project, aspects:updated };
+    onChange(updatedProject);
+
+    // Create snapshot with change description
+    const description = a.id ? `Modified aspect: ${a.aspect}` : `Added aspect: ${a.aspect}`;
+    const newVersioning = addSnapshot(
+      versioning,
+      { aspects: updated, opportunities: opps },
+      'manual',
+      description
+    );
+    setVersioning(newVersioning);
+    saveVersioningToStorage(project.id, newVersioning);
+
     setEditAspect(null);
   };
   const saveOpp = o => {
     const updated = o.id ? opps.map(x => x.id===o.id ? o : x) : [...opps, { ...o, id:Date.now().toString(), ref:nextRef(opps,"OPP") }];
-    onChange({ ...project, opps:updated });
+    const updatedProject = { ...project, opps:updated };
+    onChange(updatedProject);
+
+    // Create snapshot with change description
+    const description = o.id ? `Modified opportunity: ${o.description}` : `Added opportunity: ${o.description}`;
+    const newVersioning = addSnapshot(
+      versioning,
+      { aspects, opportunities: updated },
+      'manual',
+      description
+    );
+    setVersioning(newVersioning);
+    saveVersioningToStorage(project.id, newVersioning);
+
     setEditOpp(null);
   };
 
@@ -831,7 +658,7 @@ function ProjectView({ project, onChange, onDelete }) {
   if (editAspect !== null) return <div style={{ padding:"1.5rem 1.25rem" }}><AspectForm aspect={editAspect} onSave={saveAspect} onCancel={() => setEditAspect(null)}/></div>;
   if (editOpp    !== null) return <div style={{ padding:"1.5rem 1.25rem" }}><OppForm opp={editOpp} aspects={aspects} onSave={saveOpp} onCancel={() => setEditOpp(null)}/></div>;
 
-  const TABS = ["dashboard","screening","aspects","opportunities","settings"];
+  const TABS = ["dashboard","screening","aspects","opportunities","matrices","history","settings"];
 
   return (
     <div style={{ padding:"1.25rem" }}>
@@ -844,13 +671,47 @@ function ProjectView({ project, onChange, onDelete }) {
                 border: tab===t ? "2px solid "+CL.green : "1px solid #ddd",
                 background: tab===t ? CL.gBg : "transparent",
                 color: tab===t ? CL.green : "#555" }}>
-              {t === "screening" ? "Screening" : t.charAt(0).toUpperCase()+t.slice(1)}
+              {t === "screening" ? "Screening" : t === "history" ? "📋 History" : t.charAt(0).toUpperCase()+t.slice(1)}
             </button>
           ))}
         </nav>
-        <div style={{ display:"flex", gap:6 }}>
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <button
+            onClick={() => {
+              const description = prompt("Describe this version (optional):");
+              const newVersioning = addSnapshot(
+                versioning,
+                { aspects, opportunities: opps },
+                'manual',
+                description || 'Manual checkpoint'
+              );
+              setVersioning(newVersioning);
+              saveVersioningToStorage(project.id, newVersioning);
+              alert("Version saved! You now have " + newVersioning.snapshots.length + " versions.");
+            }}
+            title="Save a manual version (Ctrl+S)"
+            style={{ padding:"4px 12px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:"inherit",
+              background:"#d4a574", color:"white", border:"none", fontWeight:500 }}>
+            💾 Save Version
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await exportProjectToExcel(project, calcSig, calcScore, calcOppScore);
+              } catch (error) {
+                alert("Export failed: " + error.message);
+              }
+            }}
+            title="Export project to Excel"
+            style={{ padding:"4px 12px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:"inherit",
+              background:"#4CAF50", color:"white", border:"none", fontWeight:500 }}>
+            📊 Export Excel
+          </button>
           {project.type  && <span style={{ fontSize:11, padding:"2px 8px", borderRadius:4, background:CL.sBg,    color:CL.slate }}>{project.type}</span>}
           {project.phase && <span style={{ fontSize:11, padding:"2px 8px", borderRadius:4, background:CL.blueBg, color:CL.blue  }}>{project.phase}</span>}
+          <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:"#f0f0f0", color:"#666" }}>
+            {versioning.snapshots.length} version{versioning.snapshots.length !== 1 ? "s" : ""}
+          </span>
         </div>
       </div>
 
@@ -933,46 +794,16 @@ function ProjectView({ project, onChange, onDelete }) {
               {aspects.length === 0 ? "No aspects yet. Use the Screening tab or add one manually." : "No aspects match \""+sigFilter+"\"."}
             </div>
           ) : (
-            <div style={{ overflowX:"auto", borderRadius:10, border:"1px solid #e8e8e8" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                <thead>
-                  <tr style={{ background:"#f5f5f5" }}>
-                    {["Ref","Phase","Aspect","Cond.","Impact / Receptor","Score","Significance","Status",""].map(h => (
-                      <th key={h} style={{ padding:"9px 10px", textAlign:"left", fontWeight:600, fontSize:11, color:"#777", borderBottom:"1px solid #e0e0e0", whiteSpace:"nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((a, i) => {
-                    const score = calcScore(a);
-                    const sig   = calcSig(a);
-                    return (
-                      <tr key={a.id} style={{ borderBottom:"1px solid #f0f0f0", background:i%2===0?"#fff":"#fafafa" }}>
-                        <td style={{ padding:"9px 10px", fontWeight:600, color:CL.green, fontSize:12, whiteSpace:"nowrap" }}>{a.ref}</td>
-                        <td style={{ padding:"9px 10px" }}><span style={{ fontSize:10, padding:"2px 6px", borderRadius:3, background:"#f0f0f0", color:"#555" }}>{a.phase||"--"}</span></td>
-                        <td style={{ padding:"9px 10px", maxWidth:180 }}>
-                          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500 }} title={a.aspect}>{a.aspect||"--"}</div>
-                          {a.area && <div style={{ fontSize:11, color:"#888" }}>{a.area}</div>}
-                        </td>
-                        <td style={{ padding:"9px 10px" }}>{a.condition && <span style={condStyle(a.condition)}>{a.condition}</span>}</td>
-                        <td style={{ padding:"9px 10px", maxWidth:200 }}>
-                          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:12 }} title={a.impact}>{a.impact||"--"}</div>
-                          {a.receptors && <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:11, color:"#888" }}>{a.receptors}</div>}
-                        </td>
-                        <td style={{ padding:"9px 10px", textAlign:"center", fontWeight:700, fontSize:14 }}>{score !== null ? score : <span style={{ color:"#ccc" }}>--</span>}</td>
-                        <td style={{ padding:"9px 10px" }}>{sig ? <span style={sigStyle(sig)}>{sig}</span> : <span style={{ color:"#ccc" }}>--</span>}</td>
-                        <td style={{ padding:"9px 10px" }}><span style={{ fontSize:10, padding:"2px 6px", borderRadius:3, background:"#f0f0f0", color:"#555" }}>{a.status}</span></td>
-                        <td style={{ padding:"9px 10px", whiteSpace:"nowrap" }}>
-                          <Btn size="sm" onClick={() => setEditAspect(a)}>Edit</Btn>
-                          {" "}
-                          <Btn size="sm" variant="danger" onClick={() => onChange({ ...project, aspects:aspects.filter(x => x.id!==a.id) })}>x</Btn>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <AspectTable
+              aspects={filtered}
+              onEdit={setEditAspect}
+              onDelete={(id) => onChange({ ...project, aspects:aspects.filter(x => x.id!==id) })}
+              calcScore={calcScore}
+              calcSig={calcSig}
+              condStyle={condStyle}
+              STATUSES={STATUSES}
+              Btn={Btn}
+            />
           )}
         </div>
       )}
@@ -990,41 +821,53 @@ function ProjectView({ project, onChange, onDelete }) {
               <p style={{ fontSize:12, margin:0, maxWidth:400, marginInline:"auto" }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
             </div>
           ) : (
-            <div style={{ display:"grid", gap:8 }}>
-              {opps.map(o => {
-                const score = calcOppScore(o);
-                const sc    = score>=18 ? {bg:"#e0f2f1",c:"#00695c"} : score>=9 ? {bg:CL.gBg,c:CL.green} : {bg:CL.pBg,c:CL.purple};
-                const matC  = o.materiality && o.materiality.startsWith("Inside") ? {bg:CL.gBg,c:CL.green} : o.materiality && o.materiality.startsWith("Outside") ? {bg:CL.blueBg,c:CL.blue} : {bg:CL.pBg,c:CL.purple};
-                return (
-                  <Card key={o.id}>
-                    <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start" }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:6, alignItems:"center" }}>
-                          <span style={{ fontWeight:700, fontSize:12, color:CL.purple }}>{o.ref}</span>
-                          {o.type && <span style={{ fontSize:11, padding:"2px 8px", borderRadius:4, background:CL.pBg, color:CL.purple, fontWeight:600 }}>{o.type}</span>}
-                          {o.aspectRef && <span style={{ fontSize:11, padding:"2px 6px", borderRadius:4, background:CL.gBg, color:CL.green }}>{o.aspectRef}</span>}
-                          {score > 0 && <span style={{ fontSize:11, padding:"2px 8px", borderRadius:4, fontWeight:600, background:sc.bg, color:sc.c }}>Score {score}</span>}
-                          {o.materiality && <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>}
-                        </div>
-                        <p style={{ fontSize:14, margin:"0 0 6px", fontWeight:500 }}>{o.description||"(No description)"}</p>
-                        {o.envBenefit && <p style={{ fontSize:12, color:CL.green, margin:"0 0 2px" }}>Env: {o.envBenefit}</p>}
-                        {o.bizBenefit && <p style={{ fontSize:12, color:CL.blue,  margin:"0 0 2px" }}>Business: {o.bizBenefit}</p>}
-                        {o.action     && <p style={{ fontSize:12, color:"#777",   margin:"4px 0 0" }}>Action: {o.action}</p>}
-                      </div>
-                      <div style={{ display:"flex", gap:4, flexShrink:0, flexDirection:"column", alignItems:"flex-end" }}>
-                        <span style={{ fontSize:10, padding:"2px 6px", borderRadius:3, background:"#f0f0f0", color:"#555" }}>{o.status}</span>
-                        <div style={{ display:"flex", gap:4 }}>
-                          <Btn size="sm" onClick={() => setEditOpp(o)}>Edit</Btn>
-                          <Btn size="sm" variant="danger" onClick={() => onChange({ ...project, opps:opps.filter(x => x.id!==o.id) })}>x</Btn>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+            <OpportunityTable
+              opportunities={opps}
+              onEdit={setEditOpp}
+              onDelete={(id) => onChange({ ...project, opps:opps.filter(x => x.id!==id) })}
+              calcOppScore={calcOppScore}
+              OPP_STATUSES={OPP_STATUSES}
+              Btn={Btn}
+            />
           )}
         </div>
+      )}
+
+      {/* Matrices */}
+      {tab === "matrices" && (
+        <div style={{ display: "grid", gap: "2rem" }}>
+          <RiskMatrix aspects={aspects} calcSig={calcSig} calcScore={calcScore} />
+          <OpportunityMatrix opportunities={opps} calcOppScore={calcOppScore} />
+        </div>
+      )}
+
+      {/* History */}
+      {tab === "history" && (
+        <HistoryTab
+          versioningSystem={versioning}
+          onRollback={(snapshotIndex) => {
+            const newVersioning = rollbackToSnapshot(versioning, snapshotIndex);
+            const snapshotState = newVersioning.snapshots[snapshotIndex].state;
+
+            // Create a new snapshot for the rollback action
+            const rollbackVersioning = addSnapshot(
+              newVersioning,
+              snapshotState,
+              'manual',
+              `Rolled back to version v${versioning.snapshots.length - snapshotIndex}`
+            );
+
+            // Restore the project state
+            onChange({
+              ...project,
+              aspects: snapshotState.aspects || [],
+              opps: snapshotState.opportunities || []
+            });
+
+            setVersioning(rollbackVersioning);
+            saveVersioningToStorage(project.id, rollbackVersioning);
+          }}
+        />
       )}
 
       {/* Settings */}
@@ -1075,13 +918,27 @@ function ProjectView({ project, onChange, onDelete }) {
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ projects, activeId, onSelect, onNew }) {
+  const isPortfolioActive = activeId === "portfolio";
   return (
     <div style={{ width:220, flexShrink:0, background:"#f9f9f9", borderRight:"1px solid #e8e8e8", display:"flex", flexDirection:"column", minHeight:"100vh" }}>
       <div style={{ padding:"1.25rem 1rem 0.75rem", borderBottom:"1px solid #e8e8e8" }}>
         <p style={{ fontSize:13, fontWeight:700, color:"#1a1a1a", margin:0 }}>Env Aspects Toolkit</p>
       </div>
       <div style={{ padding:"0.75rem 0.5rem", flex:1, overflowY:"auto" }}>
-        <p style={{ fontSize:10, fontWeight:600, color:"#bbb", letterSpacing:"0.07em", textTransform:"uppercase", margin:"0 0.5rem 6px" }}>Projects ({projects.length})</p>
+        {/* Portfolio view button */}
+        <button onClick={() => onSelect("portfolio")}
+          style={{ width:"100%", textAlign:"left", padding:"9px 10px", borderRadius:8, marginBottom:8, cursor:"pointer", fontFamily:"inherit",
+            border: isPortfolioActive ? "1.5px solid "+CL.gBd : "1px solid transparent",
+            background: isPortfolioActive ? "#fff" : "transparent",
+            boxShadow: isPortfolioActive ? "0 1px 3px rgba(0,0,0,0.07)" : undefined }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontSize:18 }}>📊</span>
+            <span style={{ fontSize:13, fontWeight:isPortfolioActive?600:400, color:isPortfolioActive?"#1a1a1a":"#555" }}>Portfolio</span>
+          </div>
+          <p style={{ fontSize:11, color:"#aaa", margin:"2px 0 0" }}>All projects</p>
+        </button>
+
+        <p style={{ fontSize:10, fontWeight:600, color:"#bbb", letterSpacing:"0.07em", textTransform:"uppercase", margin:"0.75rem 0.5rem 6px" }}>Projects ({projects.length})</p>
         {projects.length === 0 && <p style={{ fontSize:12, color:"#ccc", padding:"0 0.5rem", fontStyle:"italic" }}>No projects yet</p>}
         {projects.map(p => {
           const sigC    = (p.aspects||[]).filter(a => calcSig(a)==="SIGNIFICANT").length;
@@ -1154,13 +1011,42 @@ export default function App() {
 
   if (!loaded) return <div style={{ padding:"2rem", fontSize:14, color:"#888" }}>Loading...</div>;
 
-  const active = projects.find(p => p.id === activeId) || null;
+  const active = activeId === "portfolio" ? null : projects.find(p => p.id === activeId) || null;
+  const isPortfolioView = activeId === "portfolio";
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color:"#1a1a1a", background:"#fff" }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}/>
       <div style={{ flex:1, overflowX:"hidden" }}>
-        {!active ? (
+        {isPortfolioView ? (
+          <div style={{ padding:"2rem" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"1.5rem" }}>
+              <div>
+                <h1 style={{ fontSize:24, fontWeight:600, margin:"0 0 0.5rem" }}>📊 Portfolio Dashboard</h1>
+                <p style={{ fontSize:13, color:"#666", margin:0 }}>Consolidated view of all {projects.length} project{projects.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    await exportMultipleProjectsToExcel(projects, calcSig, calcScore, calcOppScore);
+                  } catch (error) {
+                    alert("Export failed: " + error.message);
+                  }
+                }}
+                title="Export portfolio to Excel"
+                style={{ padding:"8px 16px", fontSize:13, borderRadius:6, cursor:"pointer", fontFamily:"inherit",
+                  background:"#4CAF50", color:"white", border:"none", fontWeight:500 }}>
+                📊 Export Portfolio
+              </button>
+            </div>
+            <ContractsDashboard
+              allProjects={projects}
+              calcSig={calcSig}
+              calcScore={calcScore}
+              calcOppScore={calcOppScore}
+            />
+          </div>
+        ) : !active ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", gap:16, padding:"2rem" }}>
             <p style={{ fontSize:36, margin:0 }}>🌿</p>
             <p style={{ fontSize:16, fontWeight:500, color:"#555", margin:0 }}>No project selected</p>
