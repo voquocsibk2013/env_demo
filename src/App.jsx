@@ -640,12 +640,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const isRisks   = mode === "risks";
   const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
 
-  const prefillRisk = (code, item) => {
-    setRiskForm({ ...emptyAspect(), phase:PHASE_MAP[code]||"", area:item.area||"", aspect:item.aspect||"", condition:COND_MAP[code]||"Normal" });
+  const prefillRisk = (code, item, sectionColor) => {
+    setRiskForm({ ...emptyAspect(), phase:PHASE_MAP[code]||"", area:item.area||"", aspect:item.aspect||"", condition:COND_MAP[code]||"Normal", _color:sectionColor||"" });
     setView("form");
   };
-  const prefillOpp = (code, item) => {
-    setOppForm({ ...emptyOpp(), description:item.opp||"" });
+  const prefillOpp = (code, item, sectionColor) => {
+    setOppForm({ ...emptyOpp(), description:item.opp||"", _color:sectionColor||"" });
     setView("form");
   };
 
@@ -745,7 +745,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                               {isRisks?"Aspect: "+item.aspect:"Opportunity: "+item.opp}
                             </span>
                           </div>
-                          <button onClick={() => isRisks ? prefillRisk(activeStage, item) : prefillOpp(activeStage, item)}
+                          <button onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
                             style={{ padding:"5px 11px", fontSize:11, borderRadius:5, border:"none", background:col.head, color:"#fff", cursor:"pointer", fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap", flexShrink:0 }}>
                             Use
                           </button>
@@ -1011,10 +1011,12 @@ function ProjectView({ project, onChange, onDelete }) {
                 </thead>
                 <tbody>
                   {filtered.map((a, i) => {
-                    const score = calcScore(a);
-                    const sig   = calcSig(a);
+                    const score  = calcScore(a);
+                    const sig    = calcSig(a);
+                    const rowCol = a._color ? (COLOR_MAP[a._color]||COLOR_MAP.gray) : null;
+                    const leftBd = rowCol ? "3px solid "+rowCol.head : "3px solid transparent";
                     return (
-                      <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd }}>
+                      <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
                         <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span></td>
                         <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.phase||"—"}</span></td>
                         <td style={{ padding:"9px 12px", maxWidth:180 }}>
@@ -1051,43 +1053,63 @@ function ProjectView({ project, onChange, onDelete }) {
             <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>{opps.length} opportunit{opps.length!==1?"ies":"y"}</span>
           </div>
           {opps.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
               <p style={{ margin:"0 0 8px", fontSize:13, color:T.muted }}>No opportunities tracked yet.</p>
               <p style={{ fontSize:12, margin:0, maxWidth:400, marginInline:"auto" }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
             </div>
           ) : (
-            <div style={{ display:"grid", gap:8 }}>
-              {opps.map(o => {
-                const score = calcOppScore(o);
-                const sc    = score>=18?{bg:"#E0F2F1",c:T.tealDark}:score>=9?{bg:T.tealBg,c:T.teal}:{bg:T.purpleBg,c:T.purple};
-                const matC  = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
-                return (
-                  <Card key={o.id}>
-                    <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start" }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:6, alignItems:"center" }}>
-                          <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:10, color:T.purple }}>{o.ref}</span>
-                          {o.type && <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:T.purpleBg, color:T.purple, border:"1px solid "+T.purpleBd }}>{o.type}</span>}
-                          {o.aspectRef && <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>}
-                          {score>0 && <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, border:"1px solid "+sc.bg, background:sc.bg, color:sc.c }}>Score {score}</span>}
-                          {o.materiality && <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>}
-                        </div>
-                        <p style={{ fontSize:13, margin:"0 0 5px", fontWeight:500, color:T.text }}>{o.description||"(No description)"}</p>
-                        {o.envBenefit && <p style={{ fontSize:12, color:T.teal, margin:"0 0 2px" }}>Env: {o.envBenefit}</p>}
-                        {o.bizBenefit && <p style={{ fontSize:12, color:T.blue, margin:"0 0 2px" }}>Business: {o.bizBenefit}</p>}
-                        {o.action     && <p style={{ fontSize:12, color:T.muted, margin:"4px 0 0" }}>Action: {o.action}</p>}
-                      </div>
-                      <div style={{ display:"flex", gap:4, flexShrink:0, flexDirection:"column", alignItems:"flex-end" }}>
-                        <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span>
-                        <div style={{ display:"flex", gap:4 }}>
-                          <Btn size="sm" onClick={()=>setEditOpp(o)}>Edit</Btn>
+            <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
+                <thead>
+                  <tr style={{ background:"#F9F8F5" }}>
+                    {["Ref","Type","Description","Linked aspect","Score","Priority","Materiality","Status",""].map(h => (
+                      <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {opps.map((o, i) => {
+                    const score  = calcOppScore(o);
+                    const sc     = score>=18?{bg:"#E0F2F1",c:T.tealDark,bd:"#80CBC4"}:score>=9?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
+                    const matC   = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
+                    const rowCol = o._color ? (COLOR_MAP[o._color]||COLOR_MAP.gray) : null;
+                    const leftBd = rowCol ? "3px solid "+rowCol.head : "3px solid transparent";
+                    return (
+                      <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
+                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
+                        <td style={{ padding:"9px 12px", maxWidth:130 }}>
+                          {o.type
+                            ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:rowCol?rowCol.bg:T.purpleBg, color:rowCol?rowCol.head:T.purple, border:"1px solid "+(rowCol?rowCol.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>
+                            : <span style={{ color:T.faint }}>—</span>}
+                        </td>
+                        <td style={{ padding:"9px 12px", maxWidth:200 }}>
+                          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color:T.text }} title={o.description}>{o.description||"—"}</div>
+                          {o.envBenefit && <div style={{ fontSize:11, color:T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
+                        </td>
+                        <td style={{ padding:"9px 12px" }}>
+                          {o.aspectRef
+                            ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>
+                            : <span style={{ color:T.faint }}>—</span>}
+                        </td>
+                        <td style={{ padding:"9px 12px", textAlign:"center" }}>
+                          <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span>
+                        </td>
+                        <td style={{ padding:"9px 12px" }}>
+                          {score>0 ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=18?"High":score>=9?"Medium":"Low"}</span> : <span style={{ color:T.faint }}>—</span>}
+                        </td>
+                        <td style={{ padding:"9px 12px" }}>
+                          {o.materiality ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span> : <span style={{ color:T.faint }}>—</span>}
+                        </td>
+                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
+                        <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                          <Btn size="sm" onClick={()=>setEditOpp(o)}>Edit</Btn>{" "}
                           <Btn size="sm" variant="danger" onClick={()=>onChange({...project,opps:opps.filter(x=>x.id!==o.id)})}>x</Btn>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
