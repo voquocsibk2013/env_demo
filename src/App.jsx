@@ -1,10 +1,5 @@
 import { useState, useEffect } from "react";
 
-// ── Google Fonts ──────────────────────────────────────────────────────────────
-const _fl = document.createElement("link");
-_fl.rel = "stylesheet";
-_fl.href = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap";
-document.head.appendChild(_fl);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PHASES        = ["Concept / FEED","Construction","Drilling","Operations","Maintenance","Decommissioning","Commissioning"];
@@ -435,28 +430,6 @@ const T = {
   sans:     "'IBM Plex Sans', system-ui, sans-serif",
 };
 
-// Inject global CSS
-const _style = document.createElement("style");
-_style.textContent = `
-  * { box-sizing: border-box; }
-  body { margin: 0; }
-  input, select, textarea {
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
-    font-size: 13px;
-    color: var(--text);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 6px 10px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  input:focus, select:focus, textarea:focus { border-color: var(--teal); }
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-`;
-document.head.appendChild(_style);
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
 function calcScore({ severity, probability, recSensitivity, scale, duration }) {
