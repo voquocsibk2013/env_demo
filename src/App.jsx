@@ -1324,7 +1324,7 @@ function ProjectView({ project, onChange, onDelete }) {
           {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
           {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match ""+aspFilter+""."}
+              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
             <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
