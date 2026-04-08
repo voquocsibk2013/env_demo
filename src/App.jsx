@@ -364,9 +364,9 @@ const THEMES = {
     "--sb-bg":       "#0D1117",
     "--sb-bg2":      "#141820",
     "--sb-bd":       "#1E222C",
-    "--sb-text":     "#D6D0C8",
-    "--sb-muted":    "#8892A4",
-    "--sb-faint":    "#5A6478",
+    "--sb-text":     "#F8F8F8",
+    "--sb-muted":    "#B0BAC8",
+    "--sb-faint":    "#6B7A8D",
     "--sb-sig":      "#3D0808",
     "--sb-sig-text": "#E24B4A",
     "--cat-teal-bg": "#081E16", "--cat-teal-bd": "#0F6E56", "--cat-teal-tx": "#5DCAA5", "--cat-teal-hd": "#1D9E75",
@@ -426,7 +426,7 @@ const T = {
   sbFaint:  "var(--sb-faint)",
   sbSig:    "var(--sb-sig)",
   sbSigTx:  "var(--sb-sig-text)",
-  mono:     "'IBM Plex Mono', 'Courier New', monospace",
+  mono:     "'Inter', system-ui, sans-serif",
   sans:     "'Inter', system-ui, sans-serif",
 };
 
@@ -853,31 +853,33 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const key = (isRisks?"R":"O")+activeStage+section.cat;
               const open = expanded[key] !== false;
               return (
-                <div key={key} style={{ marginBottom:6, borderRadius:7, border:"1px solid "+col.border, overflow:"hidden" }}>
+                <div key={key} style={{ marginBottom:10 }}>
                   <button onClick={() => toggleCat(key)}
                     style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
-                             padding:"6px 12px", background:col.bg, border:"none", cursor:"pointer", fontFamily:T.sans }}>
-                    <span style={{ fontSize:11, fontWeight:600, color:col.head }}>{section.cat}</span>
-                    <span style={{ fontFamily:T.mono, fontSize:9, color:col.head, opacity:0.5 }}>{open?"v":">"}</span>
+                             padding:"10px 16px", background:col.head,
+                             border:"none", cursor:"pointer", fontFamily:T.sans,
+                             borderRadius: open ? "8px 8px 0 0" : "8px" }}>
+                    <span style={{ fontSize:13, fontWeight:600, color:"#fff" }}>{section.cat}</span>
+                    <span style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>{open?"▾":"▸"}</span>
                   </button>
                   {open && (
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:8, background:T.bg }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:1,
+                                  background:col.head, borderRadius:"0 0 8px 8px", overflow:"hidden", padding:1 }}>
                       {section.items.map((item, i) => (
                         <button key={i}
                           onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
-                          style={{ textAlign:"left", padding:"12px 14px", borderRadius:8,
-                                   border:"1px solid "+col.border, background:T.surface,
-                                   cursor:"pointer", fontFamily:T.sans, transition:"background 0.12s",
-                                   display:"flex", flexDirection:"column", gap:6 }}
-                          onMouseEnter={e => { e.currentTarget.style.background=col.bg; }}
-                          onMouseLeave={e => { e.currentTarget.style.background=T.surface; }}>
-                          <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:col.head,
-                                         letterSpacing:"0.02em" }}>{item.kw}</span>
+                          style={{ textAlign:"left", padding:"12px 14px",
+                                   border:"none", background:col.bg,
+                                   cursor:"pointer", fontFamily:T.sans,
+                                   display:"flex", flexDirection:"column", gap:6,
+                                   transition:"filter 0.12s" }}
+                          onMouseEnter={e => e.currentTarget.style.filter="brightness(0.94)"}
+                          onMouseLeave={e => e.currentTarget.style.filter="none"}>
+                          <span style={{ fontSize:12, fontWeight:600, color:col.head }}>{item.kw}</span>
                           <span style={{ fontSize:12, color:T.text, lineHeight:1.5 }}>{item.q}</span>
-                          <span style={{ fontFamily:T.mono, fontSize:10, padding:"2px 7px", borderRadius:3,
-                                         background:col.bg, color:col.text, alignSelf:"flex-start",
-                                         border:"1px solid "+col.border }}>
-                            {isRisks ? "Aspect: "+item.aspect : "Opportunity: "+item.opp}
+                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:3, fontWeight:500,
+                                         background:col.head, color:"#fff", alignSelf:"flex-start" }}>
+                            {isRisks ? item.aspect : item.opp}
                           </span>
                         </button>
                       ))}
@@ -1090,6 +1092,15 @@ function ProjectView({ project, onChange, onDelete }) {
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
     return r;
   })();
+  const sortedDashAspects = (() => {
+    if (!aspSort.col) return dashAspects;
+    return [...dashAspects].sort((a,b)=>{ let va,vb;
+      if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
+      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
+      return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
+  })();
+
   const filteredOpps = (() => {
     let r = opps;
     if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
@@ -1341,7 +1352,7 @@ function ProjectView({ project, onChange, onDelete }) {
                   : <p style={{ margin:0, fontSize:13, color:T.muted }}>No {dashFilter==="sig"?"significant":dashFilter==="watch"?"watch":dashFilter} aspects.</p>}
               </div>
             ) : (
-              <AspectTable rows={dashAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
+              <AspectTable rows={sortedDashAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
             )
           )}
         </div>
@@ -1607,6 +1618,8 @@ export default function App() {
     localStorage.setItem("env-zoom", String(zoom));
   }, [projects, activeId, loaded, isDark]);
 
+  useEffect(() => { document.body.style.zoom = String(zoom); }, [zoom]);
+
   const toggleTheme = () => {
     const next = !isDark;
     setIsDark(next);
@@ -1635,7 +1648,7 @@ export default function App() {
   const active = projects.find(p => p.id === activeId) || null;
 
   return (
-    <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg, fontSize:"calc("+zoom+"*13px)" }}>
+    <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
                isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
