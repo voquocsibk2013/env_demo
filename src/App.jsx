@@ -176,94 +176,94 @@ const GW_RISK = {
 const GW_OPP = {
   E:[
     { cat:"Design for circularity", color:"teal", items:[
-      { kw:"Modular / demountable design",  q:"Can structural elements, modules or equipment be designed for disassembly and reuse at end of project life?",               opp:"Circular economy - design for disassembly and reuse",           area:"Engineering design" },
-      { kw:"Material efficiency at FEED",   q:"Can material volumes be reduced through optimised structural design, shared infrastructure, or prefabrication?",            opp:"Resource efficiency - material reduction at source",            area:"Engineering design" },
-      { kw:"Renewable energy integration",  q:"Is there scope to integrate solar, wind or waste-heat recovery into the facility design at FEED stage?",                    opp:"Low-carbon technology - on-site renewable energy generation",   area:"Process design" },
-      { kw:"Heat recovery / WHR",           q:"Are there process streams with significant waste heat that could be captured for power generation or heating?",             opp:"Resource efficiency - waste heat recovery",                     area:"Process design" },
+      { kw:"Modular / demountable design",  q:"Can structural elements, modules or equipment be designed for disassembly and reuse at end of project life?",               opp:"Circular economy - design for disassembly and reuse", type:"Circular Economy",           area:"Engineering design" },
+      { kw:"Material efficiency at FEED",   q:"Can material volumes be reduced through optimised structural design, shared infrastructure, or prefabrication?",            opp:"Resource efficiency - material reduction at source", type:"Resource Efficiency",            area:"Engineering design" },
+      { kw:"Renewable energy integration",  q:"Is there scope to integrate solar, wind or waste-heat recovery into the facility design at FEED stage?",                    opp:"Low-carbon technology - on-site renewable energy generation", type:"Low-Carbon Technology",   area:"Process design" },
+      { kw:"Heat recovery / WHR",           q:"Are there process streams with significant waste heat that could be captured for power generation or heating?",             opp:"Resource efficiency - waste heat recovery", type:"Resource Efficiency",                     area:"Process design" },
     ]},
     { cat:"Nature & biodiversity by design", color:"green", items:[
-      { kw:"Biodiversity net gain target",  q:"Can the facility deliver measurable BNG - green roofs, habitat corridors, artificial reefs?",                               opp:"Biodiversity net gain - habitat creation or enhancement",       area:"Site design" },
-      { kw:"Nature-based drainage",         q:"Can SuDS, wetlands or bioswales replace hard engineered drainage?",                                                         opp:"Nature-based solutions - SuDS and natural flood management",    area:"Drainage design" },
+      { kw:"Biodiversity net gain target",  q:"Can the facility deliver measurable BNG - green roofs, habitat corridors, artificial reefs?",                               opp:"Biodiversity net gain - habitat creation or enhancement", type:"Biodiversity Net Gain",       area:"Site design" },
+      { kw:"Nature-based drainage",         q:"Can SuDS, wetlands or bioswales replace hard engineered drainage?",                                                         opp:"Nature-based solutions - SuDS and natural flood management", type:"Nature-Based Solutions",    area:"Drainage design" },
     ]},
     { cat:"Green finance & taxonomy", color:"purple", items:[
-      { kw:"EU Taxonomy alignment at FEED", q:"Which activities in the design qualify as substantially contributing to climate mitigation under EU Taxonomy?",             opp:"Green Finance & Taxonomy - EU Taxonomy-aligned project elements",area:"Engineering design" },
-      { kw:"Green bonds / SLL finance",     q:"Can project finance be structured as green bonds or sustainability-linked loans tied to environmental KPI targets?",        opp:"Green Finance & Taxonomy - green bond or sustainability-linked loan", area:"Project finance" },
+      { kw:"EU Taxonomy alignment at FEED", q:"Which activities in the design qualify as substantially contributing to climate mitigation under EU Taxonomy?",             opp:"Green Finance & Taxonomy - EU Taxonomy-aligned project elements", type:"Green Finance & Taxonomy",area:"Engineering design" },
+      { kw:"Green bonds / SLL finance",     q:"Can project finance be structured as green bonds or sustainability-linked loans tied to environmental KPI targets?",        opp:"Green Finance & Taxonomy - green bond or sustainability-linked loan", type:"Green Finance & Taxonomy", area:"Project finance" },
     ]},
   ],
   P:[
     { cat:"Sustainable procurement", color:"teal", items:[
-      { kw:"Low-carbon materials spec",     q:"Can the procurement spec require EPDs and low-embodied-carbon materials (recycled steel, low-carbon concrete)?",             opp:"Low-carbon technology - low-embodied-carbon materials procurement",area:"Procurement" },
-      { kw:"Circular supplier requirements",q:"Can suppliers be required to take back packaging, surplus or end-of-life equipment?",                                       opp:"Circular economy - supplier take-back and packaging reduction",  area:"Procurement" },
+      { kw:"Low-carbon materials spec",     q:"Can the procurement spec require EPDs and low-embodied-carbon materials (recycled steel, low-carbon concrete)?",             opp:"Low-carbon technology - low-embodied-carbon materials procurement", type:"Low-Carbon Technology",area:"Procurement" },
+      { kw:"Circular supplier requirements",q:"Can suppliers be required to take back packaging, surplus or end-of-life equipment?",                                       opp:"Circular economy - supplier take-back and packaging reduction", type:"Circular Economy",  area:"Procurement" },
     ]},
     { cat:"Supply chain emissions", color:"amber", items:[
-      { kw:"Low-emission logistics",        q:"Can low-emission transport (rail, LNG vessels, electric HGVs) be specified in logistics contracts?",                        opp:"Low-carbon technology - low-emission transport in supply chain", area:"Logistics" },
-      { kw:"Local sourcing",                q:"Can materials and services be sourced locally or regionally to reduce transport emissions and support local economy?",      opp:"Resource efficiency - local sourcing reduces transport GHG",     area:"Procurement" },
+      { kw:"Low-emission logistics",        q:"Can low-emission transport (rail, LNG vessels, electric HGVs) be specified in logistics contracts?",                        opp:"Low-carbon technology - low-emission transport in supply chain", type:"Low-Carbon Technology", area:"Logistics" },
+      { kw:"Local sourcing",                q:"Can materials and services be sourced locally or regionally to reduce transport emissions and support local economy?",      opp:"Resource efficiency - local sourcing reduces transport GHG", type:"Resource Efficiency",     area:"Procurement" },
     ]},
   ],
   C:[
     { cat:"Waste minimisation & circular economy", color:"teal", items:[
-      { kw:"On-site concrete recycling",    q:"Can demolished or surplus concrete be crushed and reused as recycled aggregate on-site?",                                    opp:"Circular economy - on-site concrete aggregate recycling",       area:"Demolition / civil works" },
-      { kw:"Construction waste exchange",   q:"Can surplus materials (timber, steel offcuts, cabling) be offered to a materials exchange or social enterprise?",          opp:"Circular economy - materials exchange / reuse of surplus",      area:"Construction compound" },
+      { kw:"On-site concrete recycling",    q:"Can demolished or surplus concrete be crushed and reused as recycled aggregate on-site?",                                    opp:"Circular economy - on-site concrete aggregate recycling", type:"Circular Economy",       area:"Demolition / civil works" },
+      { kw:"Construction waste exchange",   q:"Can surplus materials (timber, steel offcuts, cabling) be offered to a materials exchange or social enterprise?",          opp:"Circular economy - materials exchange / reuse of surplus", type:"Circular Economy",      area:"Construction compound" },
     ]},
     { cat:"Ecology enhancement", color:"green", items:[
-      { kw:"Habitat creation during construction",q:"Can topsoil be stored and reused, and habitat features be created as part of the construction scope?",               opp:"Biodiversity net gain - habitat creation during construction",  area:"Site preparation" },
-      { kw:"Invasive species eradication",  q:"Can clearance works provide an opportunity to permanently remove invasive plant species from the site?",                    opp:"Biodiversity net gain - invasive species eradication",          area:"Site preparation" },
+      { kw:"Habitat creation during construction",q:"Can topsoil be stored and reused, and habitat features be created as part of the construction scope?",               opp:"Biodiversity net gain - habitat creation during construction", type:"Biodiversity Net Gain",  area:"Site preparation" },
+      { kw:"Invasive species eradication",  q:"Can clearance works provide an opportunity to permanently remove invasive plant species from the site?",                    opp:"Biodiversity net gain - invasive species eradication", type:"Biodiversity Net Gain",          area:"Site preparation" },
     ]},
     { cat:"Low-carbon construction", color:"amber", items:[
-      { kw:"Stage V / zero-emission plant", q:"Can the construction plant fleet be specified as Stage V diesel or battery / hydrogen electric?",                           opp:"Low-carbon technology - zero-emission construction plant",      area:"Construction plant" },
-      { kw:"Renewable site power",          q:"Can solar panels, battery storage or grid connections replace diesel generators for site power?",                           opp:"Low-carbon technology - renewable site power during construction",area:"Construction compound" },
+      { kw:"Stage V / zero-emission plant", q:"Can the construction plant fleet be specified as Stage V diesel or battery / hydrogen electric?",                           opp:"Low-carbon technology - zero-emission construction plant", type:"Low-Carbon Technology",      area:"Construction plant" },
+      { kw:"Renewable site power",          q:"Can solar panels, battery storage or grid connections replace diesel generators for site power?",                           opp:"Low-carbon technology - renewable site power during construction", type:"Low-Carbon Technology",area:"Construction compound" },
     ]},
   ],
   I:[
     { cat:"Marine ecology enhancement", color:"teal", items:[
-      { kw:"Artificial reef / habitat",     q:"Could jacket legs, scour protection or cable burial create habitat for fish, corals or invertebrates?",                     opp:"Biodiversity net gain - artificial reef / marine habitat creation",area:"Structure installation" },
-      { kw:"Marine protected area benefit", q:"Could exclusion zones create de facto MPAs, benefiting fish stocks and biodiversity?",                                      opp:"Nature-based solutions - de facto MPA / marine reserve benefit",area:"Marine operations" },
+      { kw:"Artificial reef / habitat",     q:"Could jacket legs, scour protection or cable burial create habitat for fish, corals or invertebrates?",                     opp:"Biodiversity net gain - artificial reef / marine habitat creation", type:"Biodiversity Net Gain",area:"Structure installation" },
+      { kw:"Marine protected area benefit", q:"Could exclusion zones create de facto MPAs, benefiting fish stocks and biodiversity?",                                      opp:"Nature-based solutions - de facto MPA / marine reserve benefit", type:"Nature-Based Solutions",area:"Marine operations" },
     ]},
     { cat:"Low-carbon vessel operations", color:"green", items:[
-      { kw:"Shore power / hybrid vessels",  q:"Can installation vessels use shore power at port, hybrid propulsion or LNG / methanol fuel?",                               opp:"Low-carbon technology - low-emission installation vessels",     area:"Vessel operations" },
-      { kw:"Voyage optimisation",           q:"Can route planning, weather routing and slow steaming minimise fuel consumption across the campaign?",                      opp:"Resource efficiency - fuel savings from voyage optimisation",   area:"Marine logistics" },
+      { kw:"Shore power / hybrid vessels",  q:"Can installation vessels use shore power at port, hybrid propulsion or LNG / methanol fuel?",                               opp:"Low-carbon technology - low-emission installation vessels", type:"Low-Carbon Technology",     area:"Vessel operations" },
+      { kw:"Voyage optimisation",           q:"Can route planning, weather routing and slow steaming minimise fuel consumption across the campaign?",                      opp:"Resource efficiency - fuel savings from voyage optimisation", type:"Resource Efficiency",   area:"Marine logistics" },
     ]},
     { cat:"Regulatory incentives", color:"purple", items:[
-      { kw:"Norwegian O&G incentives",      q:"Are there Norwegian government or Enova grant schemes available for low-carbon offshore installation?",                     opp:"Regulatory incentive - Norwegian Enova / state grant for low-carbon ops",area:"Project finance" },
+      { kw:"Norwegian O&G incentives",      q:"Are there Norwegian government or Enova grant schemes available for low-carbon offshore installation?",                     opp:"Regulatory incentive - Norwegian Enova / state grant for low-carbon ops", type:"Regulatory Incentive",area:"Project finance" },
     ]},
   ],
   C2:[
     { cat:"Chemical & water efficiency", color:"teal", items:[
-      { kw:"Hydrotest water reuse",         q:"Can hydrotest water be reused across multiple systems or treated and re-injected?",                                          opp:"Resource efficiency - hydrotest water recycling",               area:"Commissioning - hydrotest" },
-      { kw:"Chemical substitution",         q:"Can less hazardous alternatives replace standard commissioning chemicals?",                                                 opp:"Resource efficiency - hazardous chemical substitution",         area:"Chemical management" },
+      { kw:"Hydrotest water reuse",         q:"Can hydrotest water be reused across multiple systems or treated and re-injected?",                                          opp:"Resource efficiency - hydrotest water recycling", type:"Resource Efficiency",               area:"Commissioning - hydrotest" },
+      { kw:"Chemical substitution",         q:"Can less hazardous alternatives replace standard commissioning chemicals?",                                                 opp:"Resource efficiency - hazardous chemical substitution", type:"Resource Efficiency",         area:"Chemical management" },
     ]},
     { cat:"Flaring minimisation", color:"amber", items:[
-      { kw:"Gas capture during start-up",   q:"Can commissioning gas be captured for on-site power generation rather than flared?",                                        opp:"Low-carbon technology - gas capture instead of flaring",        area:"Commissioning - flaring" },
-      { kw:"Cold commissioning priority",   q:"Can the commissioning sequence be optimised to maximise cold commissioning and minimise hot flaring volumes?",              opp:"Resource efficiency - reduced commissioning flare volumes",      area:"Commissioning sequence" },
+      { kw:"Gas capture during start-up",   q:"Can commissioning gas be captured for on-site power generation rather than flared?",                                        opp:"Low-carbon technology - gas capture instead of flaring", type:"Low-Carbon Technology",        area:"Commissioning - flaring" },
+      { kw:"Cold commissioning priority",   q:"Can the commissioning sequence be optimised to maximise cold commissioning and minimise hot flaring volumes?",              opp:"Resource efficiency - reduced commissioning flare volumes", type:"Resource Efficiency",      area:"Commissioning sequence" },
     ]},
   ],
   OM:[
     { cat:"Operational efficiency & carbon", color:"teal", items:[
-      { kw:"Electrification of offshore",   q:"Can gas turbines be replaced or supplemented by grid power or renewable energy to reduce operational emissions?",           opp:"Low-carbon technology - offshore electrification / power from shore",area:"Power systems" },
-      { kw:"CCUS opportunity",              q:"Is there scope to capture and store CO2 from process operations, contributing to Norwegian CCS targets?",                  opp:"Low-carbon technology - carbon capture, utilisation and storage",area:"Process design" },
-      { kw:"Methane monetisation",          q:"Can vented or flared methane be recovered and sold, generating revenue while reducing GHG emissions?",                      opp:"Resource efficiency - methane recovery and monetisation",       area:"Production operations" },
-      { kw:"Produced water as a resource",  q:"Can treated produced water be beneficially reused for injection, dust suppression or other uses?",                         opp:"Circular economy - produced water beneficial reuse",            area:"Water treatment" },
+      { kw:"Electrification of offshore",   q:"Can gas turbines be replaced or supplemented by grid power or renewable energy to reduce operational emissions?",           opp:"Low-carbon technology - offshore electrification / power from shore", type:"Low-Carbon Technology",area:"Power systems" },
+      { kw:"CCUS opportunity",              q:"Is there scope to capture and store CO2 from process operations, contributing to Norwegian CCS targets?",                  opp:"Low-carbon technology - carbon capture, utilisation and storage", type:"Low-Carbon Technology",area:"Process design" },
+      { kw:"Methane monetisation",          q:"Can vented or flared methane be recovered and sold, generating revenue while reducing GHG emissions?",                      opp:"Resource efficiency - methane recovery and monetisation", type:"Resource Efficiency",       area:"Production operations" },
+      { kw:"Produced water as a resource",  q:"Can treated produced water be beneficially reused for injection, dust suppression or other uses?",                         opp:"Circular economy - produced water beneficial reuse", type:"Circular Economy",            area:"Water treatment" },
     ]},
     { cat:"Sustainability reporting", color:"purple", items:[
-      { kw:"CSRD / ESRS reporting",         q:"Can environmental KPI data be structured to directly support CSRD ESRS E1-E5 mandatory disclosures?",                        opp:"Reputational / SLO - CSRD / ESRS reporting-ready KPI framework",area:"Sustainability reporting" },
-      { kw:"SBTi / net zero alignment",     q:"Can emission reduction measures be aligned with Science Based Targets (SBTi) to support net-zero commitments?",             opp:"Reputational / SLO - SBTi / net-zero target alignment",         area:"GHG management" },
+      { kw:"CSRD / ESRS reporting",         q:"Can environmental KPI data be structured to directly support CSRD ESRS E1-E5 mandatory disclosures?",                        opp:"Reputational / SLO - CSRD / ESRS reporting-ready KPI framework", type:"Reputational / SLO",area:"Sustainability reporting" },
+      { kw:"SBTi / net zero alignment",     q:"Can emission reduction measures be aligned with Science Based Targets (SBTi) to support net-zero commitments?",             opp:"Reputational / SLO - SBTi / net-zero target alignment", type:"Reputational / SLO",         area:"GHG management" },
     ]},
     { cat:"Climate resilience", color:"amber", items:[
-      { kw:"Climate risk assessment",       q:"Has a TCFD-aligned physical climate risk assessment been carried out for 2050+ scenarios?",                                  opp:"Climate resilience - physical climate risk adaptation measures", area:"Asset integrity" },
+      { kw:"Climate risk assessment",       q:"Has a TCFD-aligned physical climate risk assessment been carried out for 2050+ scenarios?",                                  opp:"Climate resilience - physical climate risk adaptation measures", type:"Climate Resilience", area:"Asset integrity" },
     ]},
   ],
   D:[
     { cat:"Materials recovery & circular economy", color:"teal", items:[
-      { kw:"Steel recycling maximisation",  q:"Can all removed steel be sent to high-grade recycling (EAF steelmaking) rather than lower-grade recovery?",                 opp:"Circular economy - high-grade steel recycling from decommissioning",area:"Decommissioning" },
-      { kw:"Equipment refurbishment / reuse",q:"Can equipment, instruments, valves or piping be refurbished and resold rather than scrapped?",                            opp:"Circular economy - equipment reuse and refurbishment",          area:"Decommissioning" },
-      { kw:"Concrete aggregate recovery",   q:"Can demolition concrete be processed for recycled aggregate rather than going to landfill?",                                opp:"Circular economy - recycled aggregate from demolition concrete", area:"Demolition" },
+      { kw:"Steel recycling maximisation",  q:"Can all removed steel be sent to high-grade recycling (EAF steelmaking) rather than lower-grade recovery?",                 opp:"Circular economy - high-grade steel recycling from decommissioning", type:"Circular Economy",area:"Decommissioning" },
+      { kw:"Equipment refurbishment / reuse",q:"Can equipment, instruments, valves or piping be refurbished and resold rather than scrapped?",                            opp:"Circular economy - equipment reuse and refurbishment", type:"Circular Economy",          area:"Decommissioning" },
+      { kw:"Concrete aggregate recovery",   q:"Can demolition concrete be processed for recycled aggregate rather than going to landfill?",                                opp:"Circular economy - recycled aggregate from demolition concrete", type:"Circular Economy", area:"Demolition" },
     ]},
     { cat:"Habitat & legacy benefits", color:"green", items:[
-      { kw:"Seabed recovery as positive legacy",q:"Can post-decommissioning seabed surveys document improved benthic communities as a net positive environmental legacy?", opp:"Biodiversity net gain - documented seabed recovery as project legacy",area:"Offshore decommissioning" },
-      { kw:"Land restoration to higher standard",q:"Can land reinstatement go beyond pre-disturbance baseline - creating wetlands, meadows or community green space?",  opp:"Biodiversity net gain - land restored to higher ecological standard",area:"Site reinstatement" },
+      { kw:"Seabed recovery as positive legacy",q:"Can post-decommissioning seabed surveys document improved benthic communities as a net positive environmental legacy?", opp:"Biodiversity net gain - documented seabed recovery as project legacy", type:"Biodiversity Net Gain",area:"Offshore decommissioning" },
+      { kw:"Land restoration to higher standard",q:"Can land reinstatement go beyond pre-disturbance baseline - creating wetlands, meadows or community green space?",  opp:"Biodiversity net gain - land restored to higher ecological standard", type:"Biodiversity Net Gain",area:"Site reinstatement" },
     ]},
     { cat:"Decommissioning finance", color:"purple", items:[
-      { kw:"Green decommissioning certification",q:"Are there emerging certification schemes or green bond frameworks for responsible decommissioning?",                   opp:"Green Finance & Taxonomy - green decommissioning certification / finance",area:"Project finance" },
+      { kw:"Green decommissioning certification",q:"Are there emerging certification schemes or green bond frameworks for responsible decommissioning?",                   opp:"Green Finance & Taxonomy - green decommissioning certification / finance", type:"Green Finance & Taxonomy",area:"Project finance" },
     ]},
   ],
 };
@@ -756,8 +756,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
     setView("form");
   };
   const prefillOpp = (code, item, sectionColor) => {
-    const inferredType = inferOppType(item.opp||"");
-    setOppForm({ ...emptyOpp(), description:item.opp||"", type:inferredType, _color:sectionColor||"" });
+    setOppForm({ ...emptyOpp(), description:item.opp||"", type:item.type||"", _color:sectionColor||"" });
     setView("form");
   };
 
