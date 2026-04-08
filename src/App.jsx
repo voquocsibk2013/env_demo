@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 
 // ── Google Fonts ──────────────────────────────────────────────────────────────
-const fontLink = document.createElement("link");
-fontLink.rel = "stylesheet";
-fontLink.href = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap";
-document.head.appendChild(fontLink);
+const _fl = document.createElement("link");
+_fl.rel = "stylesheet";
+_fl.href = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap";
+document.head.appendChild(_fl);
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 const PHASES        = ["Concept / FEED","Construction","Drilling","Operations","Maintenance","Decommissioning","Commissioning"];
 const CONDITIONS    = ["Normal","Abnormal","Emergency"];
 const SENSITIVITIES = ["High","Medium","Low"];
@@ -18,7 +18,7 @@ const OPP_TYPES     = ["Resource Efficiency","Circular Economy","Low-Carbon Tech
 const OPP_STATUSES  = ["Open","In Progress","Implemented","Partially implemented","Deferred","Not feasible"];
 const STORAGE_KEY   = "env-toolkit-v4";
 
-// ── EPCIC stages ─────────────────────────────────────────────────────────────
+// ── EPCIC stages ──────────────────────────────────────────────────────────────
 const EPCIC_STAGES = [
   { code:"E",  label:"Engineering",              sub:"FEED & detail design" },
   { code:"P",  label:"Procurement",              sub:"Materials, chemicals, logistics" },
@@ -31,7 +31,7 @@ const EPCIC_STAGES = [
 const PHASE_MAP = { E:"Concept / FEED", P:"Construction", C:"Construction", I:"Operations", C2:"Commissioning", OM:"Operations", D:"Decommissioning" };
 const COND_MAP  = { E:"Normal", P:"Normal", C:"Normal", I:"Normal", C2:"Abnormal", OM:"Normal", D:"Normal" };
 
-// ── Guide words — Risks ──────────────────────────────────────────────────────
+// ── Guide words — Risks ───────────────────────────────────────────────────────
 const GW_RISK = {
   E:[
     { cat:"Site selection & footprint", color:"teal", items:[
@@ -177,7 +177,7 @@ const GW_RISK = {
   ],
 };
 
-// ── Guide words — Opportunities ──────────────────────────────────────────────
+// ── Guide words — Opportunities ───────────────────────────────────────────────
 const GW_OPP = {
   E:[
     { cat:"Design for circularity", color:"teal", items:[
@@ -273,54 +273,190 @@ const GW_OPP = {
   ],
 };
 
-// ── Design tokens ────────────────────────────────────────────────────────────
-const T = {
-  bg:        "#F5F3EE",
-  surface:   "#FFFFFF",
-  sidebar:   "#1C2127",
-  sidebar2:  "#242B33",
-  sideBd:    "#2E3740",
-  text:      "#1A1C1E",
-  muted:     "#6B7280",
-  faint:     "#9CA3AF",
-  border:    "#DDD9D0",
-  rowBd:     "#F0EDE6",
-  mono:      "'IBM Plex Mono', 'Courier New', monospace",
-  sans:      "'IBM Plex Sans', system-ui, sans-serif",
-  teal:      "#0F6E56",
-  tealBg:    "#E1F5EE",
-  tealBd:    "#9FE1CB",
-  tealDark:  "#085041",
-  red:       "#A32D2D",
-  redBg:     "#FCEBEB",
-  redBd:     "#F09595",
-  amber:     "#633806",
-  amberBg:   "#FAEEDA",
-  amberBd:   "#EF9F27",
-  green:     "#27500A",
-  greenBg:   "#EAF3DE",
-  greenBd:   "#97C459",
-  purple:    "#3C3489",
-  purpleBg:  "#EEEDFE",
-  purpleBd:  "#AFA9EC",
-  blue:      "#0C447C",
-  blueBg:    "#E6F1FB",
-  blueBd:    "#85B7EB",
-  slate:     "#455A64",
-  slateBg:   "#ECEFF1",
-  slateBd:   "#B0BEC5",
+// ── Color map for guide word categories ──────────────────────────────────────
+const COLOR_MAP = {
+  teal:   { bg:"var(--cat-teal-bg)",   border:"var(--cat-teal-bd)",   text:"var(--cat-teal-tx)",   head:"var(--cat-teal-hd)" },
+  purple: { bg:"var(--cat-purple-bg)", border:"var(--cat-purple-bd)", text:"var(--cat-purple-tx)", head:"var(--cat-purple-hd)" },
+  amber:  { bg:"var(--cat-amber-bg)",  border:"var(--cat-amber-bd)",  text:"var(--cat-amber-tx)",  head:"var(--cat-amber-hd)" },
+  red:    { bg:"var(--cat-red-bg)",    border:"var(--cat-red-bd)",    text:"var(--cat-red-tx)",    head:"var(--cat-red-hd)" },
+  green:  { bg:"var(--cat-green-bg)",  border:"var(--cat-green-bd)",  text:"var(--cat-green-tx)",  head:"var(--cat-green-hd)" },
+  blue:   { bg:"var(--cat-blue-bg)",   border:"var(--cat-blue-bd)",   text:"var(--cat-blue-tx)",   head:"var(--cat-blue-hd)" },
+  gray:   { bg:"var(--cat-gray-bg)",   border:"var(--cat-gray-bd)",   text:"var(--cat-gray-tx)",   head:"var(--cat-gray-hd)" },
 };
 
-// Color map for guide word categories
-const COLOR_MAP = {
-  teal:   { bg:T.tealBg,   border:T.tealBd,   text:T.tealDark, head:T.teal },
-  purple: { bg:T.purpleBg, border:T.purpleBd, text:T.purple,   head:T.purple },
-  amber:  { bg:T.amberBg,  border:T.amberBd,  text:T.amber,    head:T.amber },
-  red:    { bg:T.redBg,    border:T.redBd,    text:T.red,      head:T.red },
-  green:  { bg:T.greenBg,  border:T.greenBd,  text:T.green,    head:T.green },
-  blue:   { bg:T.blueBg,   border:T.blueBd,   text:T.blue,     head:T.blue },
-  gray:   { bg:T.slateBg,  border:T.slateBd,  text:T.slate,    head:T.slate },
+// ── Theme definitions ─────────────────────────────────────────────────────────
+const THEMES = {
+  light: {
+    "--bg":          "#F5F3EE",
+    "--surface":     "#FFFFFF",
+    "--surface2":    "#FAFAF8",
+    "--text":        "#1A1C1E",
+    "--muted":       "#6B7280",
+    "--faint":       "#9CA3AF",
+    "--border":      "#DDD9D0",
+    "--row-bd":      "#F0EDE6",
+    "--teal":        "#0F6E56",
+    "--teal-bg":     "#E1F5EE",
+    "--teal-bd":     "#9FE1CB",
+    "--teal-dk":     "#085041",
+    "--teal-hi":     "#1D9E75",
+    "--red":         "#A32D2D",
+    "--red-bg":      "#FCEBEB",
+    "--red-bd":      "#F09595",
+    "--amber":       "#633806",
+    "--amber-bg":    "#FAEEDA",
+    "--amber-bd":    "#EF9F27",
+    "--green":       "#27500A",
+    "--green-bg":    "#EAF3DE",
+    "--green-bd":    "#97C459",
+    "--purple":      "#3C3489",
+    "--purple-bg":   "#EEEDFE",
+    "--purple-bd":   "#AFA9EC",
+    "--blue":        "#0C447C",
+    "--blue-bg":     "#E6F1FB",
+    "--blue-bd":     "#85B7EB",
+    "--slate":       "#455A64",
+    "--slate-bg":    "#ECEFF1",
+    "--slate-bd":    "#B0BEC5",
+    "--sb-bg":       "#1C2127",
+    "--sb-bg2":      "#242B33",
+    "--sb-bd":       "#2E3740",
+    "--sb-text":     "#D1C9BE",
+    "--sb-muted":    "#6B7280",
+    "--sb-faint":    "#374151",
+    "--sb-sig":      "#501313",
+    "--sb-sig-text": "#F09595",
+    "--cat-teal-bg": "#E0F2F1", "--cat-teal-bd": "#80CBC4", "--cat-teal-tx": "#004D40", "--cat-teal-hd": "#00695C",
+    "--cat-purple-bg":"#EDE7F6","--cat-purple-bd":"#CE93D8","--cat-purple-tx":"#4527A0","--cat-purple-hd":"#6A1B9A",
+    "--cat-amber-bg": "#FFF8E1","--cat-amber-bd": "#FFE082","--cat-amber-tx": "#E65100","--cat-amber-hd": "#F57F17",
+    "--cat-red-bg":   "#FFEBEE","--cat-red-bd":   "#EF9A9A","--cat-red-tx":   "#B71C1C","--cat-red-hd":   "#C62828",
+    "--cat-green-bg": "#E8F5E9","--cat-green-bd": "#A5D6A7","--cat-green-tx": "#1B5E20","--cat-green-hd": "#2E7D52",
+    "--cat-blue-bg":  "#E3F2FD","--cat-blue-bd":  "#90CAF9","--cat-blue-tx":  "#0D47A1","--cat-blue-hd":  "#1565C0",
+    "--cat-gray-bg":  "#ECEFF1","--cat-gray-bd":  "#CFD8DC","--cat-gray-tx":  "#37474F","--cat-gray-hd":  "#455A64",
+  },
+  dark: {
+    "--bg":          "#0F1117",
+    "--surface":     "#1A1D26",
+    "--surface2":    "#151821",
+    "--text":        "#E2DFD8",
+    "--muted":       "#7C8190",
+    "--faint":       "#4A4E5A",
+    "--border":      "#252830",
+    "--row-bd":      "#1E2028",
+    "--teal":        "#1D9E75",
+    "--teal-bg":     "#081E16",
+    "--teal-bd":     "#0F6E56",
+    "--teal-dk":     "#5DCAA5",
+    "--teal-hi":     "#5DCAA5",
+    "--red":         "#E24B4A",
+    "--red-bg":      "#1A0808",
+    "--red-bd":      "#7B2020",
+    "--amber":       "#EF9F27",
+    "--amber-bg":    "#1A1006",
+    "--amber-bd":    "#7A4F0A",
+    "--green":       "#97C459",
+    "--green-bg":    "#0A1505",
+    "--green-bd":    "#3B6D11",
+    "--purple":      "#AFA9EC",
+    "--purple-bg":   "#10101F",
+    "--purple-bd":   "#534AB7",
+    "--blue":        "#85B7EB",
+    "--blue-bg":     "#070F1A",
+    "--blue-bd":     "#1565C0",
+    "--slate":       "#8B8F9A",
+    "--slate-bg":    "#1A1D26",
+    "--slate-bd":    "#252830",
+    "--sb-bg":       "#0D1117",
+    "--sb-bg2":      "#141820",
+    "--sb-bd":       "#1E222C",
+    "--sb-text":     "#C8C2B8",
+    "--sb-muted":    "#4A5568",
+    "--sb-faint":    "#2D3748",
+    "--sb-sig":      "#3D0808",
+    "--sb-sig-text": "#E24B4A",
+    "--cat-teal-bg": "#081E16", "--cat-teal-bd": "#0F6E56", "--cat-teal-tx": "#5DCAA5", "--cat-teal-hd": "#1D9E75",
+    "--cat-purple-bg":"#10101F","--cat-purple-bd":"#534AB7","--cat-purple-tx":"#AFA9EC","--cat-purple-hd":"#7F77DD",
+    "--cat-amber-bg": "#1A1006","--cat-amber-bd": "#7A4F0A","--cat-amber-tx": "#FAC775","--cat-amber-hd": "#EF9F27",
+    "--cat-red-bg":   "#1A0808","--cat-red-bd":   "#7B2020","--cat-red-tx":   "#F09595","--cat-red-hd":   "#E24B4A",
+    "--cat-green-bg": "#0A1505","--cat-green-bd": "#3B6D11","--cat-green-tx": "#C0DD97","--cat-green-hd": "#639922",
+    "--cat-blue-bg":  "#070F1A","--cat-blue-bd":  "#1565C0","--cat-blue-tx":  "#85B7EB","--cat-blue-hd":  "#378ADD",
+    "--cat-gray-bg":  "#1A1D26","--cat-gray-bd":  "#252830","--cat-gray-tx":  "#8B8F9A","--cat-gray-hd":  "#5F5E5A",
+  },
 };
+
+function applyTheme(name) {
+  const vars = THEMES[name] || THEMES.light;
+  const root = document.documentElement;
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+}
+
+// ── Design tokens (CSS var references) ───────────────────────────────────────
+const T = {
+  bg:       "var(--bg)",
+  surface:  "var(--surface)",
+  surface2: "var(--surface2)",
+  text:     "var(--text)",
+  muted:    "var(--muted)",
+  faint:    "var(--faint)",
+  border:   "var(--border)",
+  rowBd:    "var(--row-bd)",
+  teal:     "var(--teal)",
+  tealBg:   "var(--teal-bg)",
+  tealBd:   "var(--teal-bd)",
+  tealDark: "var(--teal-dk)",
+  tealHi:   "var(--teal-hi)",
+  red:      "var(--red)",
+  redBg:    "var(--red-bg)",
+  redBd:    "var(--red-bd)",
+  amber:    "var(--amber)",
+  amberBg:  "var(--amber-bg)",
+  amberBd:  "var(--amber-bd)",
+  green:    "var(--green)",
+  greenBg:  "var(--green-bg)",
+  greenBd:  "var(--green-bd)",
+  purple:   "var(--purple)",
+  purpleBg: "var(--purple-bg)",
+  purpleBd: "var(--purple-bd)",
+  blue:     "var(--blue)",
+  blueBg:   "var(--blue-bg)",
+  blueBd:   "var(--blue-bd)",
+  slate:    "var(--slate)",
+  slateBg:  "var(--slate-bg)",
+  slateBd:  "var(--slate-bd)",
+  sbBg:     "var(--sb-bg)",
+  sbBg2:    "var(--sb-bg2)",
+  sbBd:     "var(--sb-bd)",
+  sbText:   "var(--sb-text)",
+  sbMuted:  "var(--sb-muted)",
+  sbFaint:  "var(--sb-faint)",
+  sbSig:    "var(--sb-sig)",
+  sbSigTx:  "var(--sb-sig-text)",
+  mono:     "'IBM Plex Mono', 'Courier New', monospace",
+  sans:     "'IBM Plex Sans', system-ui, sans-serif",
+};
+
+// Inject global CSS
+const _style = document.createElement("style");
+_style.textContent = `
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  input, select, textarea {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--teal); }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+`;
+document.head.appendChild(_style);
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
 function calcScore({ severity, probability, recSensitivity, scale, duration }) {
@@ -341,116 +477,104 @@ function calcSig(a) {
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
 
+function inferOppType(oppText) {
+  if (!oppText) return "";
+  const lower = oppText.toLowerCase();
+  return OPP_TYPES.find(t => lower.startsWith(t.toLowerCase())) || "";
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 const emptyAspect = () => ({
   phase:"", area:"", activity:"", aspect:"", condition:"Normal",
   impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
   severity:3, probability:3, duration:"Temporary (<1yr)",
   legalThreshold:"N", stakeholderConcern:"N",
-  control:"", legalRef:"", owner:"", status:"Open"
+  control:"", legalRef:"", owner:"", status:"Open", _color:""
 });
 const emptyOpp = () => ({
   type:"", aspectRef:"", materiality:"Both",
   description:"", envBenefit:"", bizBenefit:"",
   envValue:2, bizValue:2, feasibility:2,
-  action:"", alignment:"", owner:"", status:"Open"
+  action:"", alignment:"", owner:"", status:"Open", _color:""
 });
 const newProject = () => ({
   id: Date.now().toString(),
   name:"", company:"", type:"", phase:"",
   createdAt: new Date().toISOString(),
-  aspects:[], opps:[]
+  aspects:[], opps:[], changelog:[]
 });
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const iw = { width:"100%", boxSizing:"border-box" };
 
-// Inject global CSS overrides for form elements + scrollbar
-const styleEl = document.createElement("style");
-styleEl.textContent = `
-  * { box-sizing: border-box; }
-  body { margin: 0; background: ${T.bg}; }
-  input, select, textarea, button { font-family: '${T.sans}'; }
-  input, select, textarea {
-    font-family: ${T.sans};
-    font-size: 13px;
-    color: ${T.text};
-    background: ${T.surface};
-    border: 1px solid ${T.border};
-    border-radius: 5px;
-    padding: 6px 10px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  input:focus, select:focus, textarea:focus { border-color: ${T.teal}; }
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 2px; }
-`;
-document.head.appendChild(styleEl);
-
 function sigStyle(sig) {
-  const c = sig==="SIGNIFICANT" ? {bg:T.redBg,c:T.red,bd:T.redBd}
-           : sig==="WATCH"      ? {bg:T.amberBg,c:T.amber,bd:T.amberBd}
-           :                      {bg:T.greenBg,c:T.green,bd:T.greenBd};
-  return { fontFamily:T.mono, fontSize:10, fontWeight:500, padding:"2px 7px", borderRadius:3, display:"inline-block",
-           background:c.bg, color:c.c, border:"1px solid "+c.bd, letterSpacing:"0.03em" };
+  const c = sig==="SIGNIFICANT" ? {bg:T.redBg,   c:T.red,   bd:T.redBd}
+           : sig==="WATCH"      ? {bg:T.amberBg, c:T.amber, bd:T.amberBd}
+           :                      {bg:T.greenBg, c:T.green, bd:T.greenBd};
+  return { fontFamily:T.mono, fontSize:10, fontWeight:500, padding:"2px 7px", borderRadius:3,
+           display:"inline-block", background:c.bg, color:c.c, border:"1px solid "+c.bd, letterSpacing:"0.03em" };
 }
 function condStyle(cd) {
-  const c = cd==="Emergency" ? {bg:T.redBg,c:T.red}
-           : cd==="Abnormal" ? {bg:T.amberBg,c:T.amber}
-           :                    {bg:T.greenBg,c:T.green};
-  return { fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"2px 6px", borderRadius:3, display:"inline-block",
-           background:c.bg, color:c.c, letterSpacing:"0.05em", textTransform:"uppercase" };
+  const c = cd==="Emergency" ? {bg:T.redBg,   c:T.red}
+           : cd==="Abnormal" ? {bg:T.amberBg, c:T.amber}
+           :                    {bg:T.greenBg, c:T.green};
+  return { fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"2px 6px", borderRadius:3,
+           display:"inline-block", background:c.bg, color:c.c, letterSpacing:"0.05em", textTransform:"uppercase" };
 }
 
-// ── Shared UI ─────────────────────────────────────────────────────────────────
 function Fld({ label, children, wide }) {
   return (
     <div style={wide ? {gridColumn:"span 2"} : {}}>
-      <label style={{ fontFamily:T.mono, fontSize:10, color:T.muted, display:"block", marginBottom:5, letterSpacing:"0.05em", textTransform:"uppercase" }}>{label}</label>
+      <label style={{ fontFamily:T.mono, fontSize:10, color:T.muted, display:"block", marginBottom:5,
+                      letterSpacing:"0.05em", textTransform:"uppercase" }}>{label}</label>
       {children}
     </div>
   );
 }
-
 function Card({ children, style, accent }) {
   return (
-    <div style={{
-      background:T.surface, borderRadius:8,
-      border:"1px solid "+T.border,
-      borderLeft: accent ? "3px solid "+accent : undefined,
-      padding:"1.25rem",
-      ...style
-    }}>{children}</div>
+    <div style={{ background:T.surface, borderRadius:8, border:"1px solid "+T.border,
+                  borderLeft: accent ? "3px solid "+accent : undefined, padding:"1.25rem", ...style }}>
+      {children}
+    </div>
+  );
+}
+function SectionLabel({ children }) {
+  return <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.faint,
+                     letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 0 12px" }}>{children}</p>;
+}
+function Btn({ children, onClick, variant="default", size="md", disabled }) {
+  const v = {
+    default:{ background:T.surface,  color:T.text,   border:"1px solid "+T.border },
+    primary:{ background:T.teal,     color:"#fff",   border:"none" },
+    purple: { background:T.purple,   color:"#fff",   border:"none" },
+    danger: { background:"transparent", color:T.red, border:"1px solid "+T.redBd },
+    ghost:  { background:"transparent", color:T.muted, border:"none" },
+  }[variant] || {};
+  const s = { sm:{padding:"4px 10px",fontSize:11}, md:{padding:"7px 14px",fontSize:12}, lg:{padding:"9px 18px",fontSize:13} }[size];
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{ borderRadius:6, cursor:disabled?"not-allowed":"pointer", fontFamily:T.sans,
+               fontWeight:500, opacity:disabled?0.45:1, ...v, ...s }}>
+      {children}
+    </button>
   );
 }
 
-function SectionLabel({ children }) {
-  return <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.faint, letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 0 12px" }}>{children}</p>;
-}
-
-function Btn({ children, onClick, variant="default", size="md", disabled }) {
-  const variants = {
-    default: { background:T.surface,  color:T.text,   border:"1px solid "+T.border },
-    primary: { background:T.teal,     color:"#fff",   border:"none" },
-    purple:  { background:T.purple,   color:"#fff",   border:"none" },
-    danger:  { background:"transparent", color:T.red, border:"1px solid "+T.redBd },
-    ghost:   { background:"transparent", color:T.muted, border:"none" },
-  };
-  const sizes = {
-    sm: { padding:"4px 10px", fontSize:11 },
-    md: { padding:"7px 14px", fontSize:12 },
-    lg: { padding:"9px 18px", fontSize:13 },
-  };
-  const v = variants[variant] || variants.default;
-  const s = sizes[size] || sizes.md;
+// ── Theme toggle button ───────────────────────────────────────────────────────
+function ThemeToggle({ isDark, onToggle }) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{
-      borderRadius:6, cursor:disabled?"not-allowed":"pointer",
-      fontFamily:T.sans, fontWeight:500, opacity:disabled?0.45:1,
-      transition:"opacity 0.15s", ...v, ...s
-    }}>{children}</button>
+    <button onClick={onToggle} title={isDark?"Switch to light theme":"Switch to dark theme"}
+      style={{ background:"transparent", border:"1px solid var(--sb-bd)", borderRadius:5,
+               cursor:"pointer", padding:"5px 8px", display:"flex", alignItems:"center", gap:6,
+               color:"var(--sb-muted)", fontFamily:T.mono, fontSize:9 }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        {isDark
+          ? <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>
+          : <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></>}
+      </svg>
+      {isDark?"Light":"Dark"}
+    </button>
   );
 }
 
@@ -462,12 +586,14 @@ function AspectForm({ aspect, onSave, onCancel }) {
   const sig   = calcSig(f);
   return (
     <div style={{ maxWidth:800, margin:"0 auto", padding:"1.5rem" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem", paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
+                    paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
         <Btn onClick={onCancel} variant="ghost">Back</Btn>
-        <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans, color:T.text }}>{aspect.id ? "Edit aspect" : "New aspect"}</h2>
+        <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans, color:T.text }}>
+          {aspect.id ? "Edit aspect" : "New aspect"}
+        </h2>
         {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
       </div>
-
       <Card style={{ marginBottom:"1rem" }}>
         <SectionLabel>Activity details</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px 16px" }}>
@@ -480,9 +606,8 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
         </div>
       </Card>
-
-      <Card style={{ marginBottom:"1rem", background:"#FAFDF8" }} accent={T.teal}>
-        <SectionLabel>Significance scoring — (Sv x Pb) + receptor + scale + duration bonuses</SectionLabel>
+      <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
+        <SectionLabel>Significance scoring</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:12 }}>
           <Fld label="Receptor sensitivity"><select value={f.recSensitivity} onChange={e=>set("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
           <Fld label="Scale"><select value={f.scale} onChange={e=>set("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
@@ -495,15 +620,17 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
         </div>
         {score !== null && (
-          <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid "+T.tealBd, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-            <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>Score: <strong style={{ fontSize:20, color:T.text }}>{score}</strong></span>
+          <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid "+T.tealBd,
+                        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
+              Score: <strong style={{ fontSize:20, color:T.text }}>{score}</strong>
+            </span>
             <span style={sigStyle(sig)}>{sig}</span>
             {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
             {f.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
           </div>
         )}
       </Card>
-
       <Card style={{ marginBottom:"1.5rem" }}>
         <SectionLabel>Controls & management</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
@@ -515,7 +642,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
       </Card>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id ? "Save changes" : "Add to register"}</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Add to register"}</Btn>
       </div>
     </div>
   );
@@ -526,12 +653,13 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
   const [f, setF] = useState({ ...emptyOpp(), ...opp });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
   const score = calcOppScore(f);
-  const sc = score>=18 ? {bg:"#E0F2F1",c:T.tealDark} : score>=9 ? {bg:T.tealBg,c:T.teal} : {bg:T.slateBg,c:T.slate};
+  const sc = score>=18?{bg:"var(--teal-bg)",c:"var(--teal-dk)"}:score>=9?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
   return (
     <div style={{ maxWidth:800, margin:"0 auto", padding:"1.5rem" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem", paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
+                    paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
         <Btn onClick={onCancel} variant="ghost">Back</Btn>
-        <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans }}>{opp.id ? "Edit opportunity" : "New opportunity"}</h2>
+        <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans }}>{opp.id?"Edit opportunity":"New opportunity"}</h2>
       </div>
       <Card style={{ marginBottom:"1rem" }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
@@ -543,7 +671,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
           <Fld label="Business / strategic benefit"><textarea value={f.bizBenefit} onChange={e=>set("bizBenefit",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
         </div>
       </Card>
-      <Card style={{ marginBottom:"1rem", background:"#FAFDF9" }} accent={T.teal}>
+      <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
         <SectionLabel>Priority score = env value x business value x feasibility (max 27)</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px" }}>
           {[{k:"envValue",l:"Env value (1-3)"},{k:"bizValue",l:"Business value (1-3)"},{k:"feasibility",l:"Feasibility (1-3)"}].map(({ k, l }) => (
@@ -566,7 +694,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
       </Card>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)}>{opp.id ? "Save changes" : "Add opportunity"}</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)}>{opp.id?"Save changes":"Add opportunity"}</Btn>
       </div>
     </div>
   );
@@ -617,7 +745,6 @@ function AIPanel({ project, onAdd }) {
               </div>
               <p style={{ fontFamily:T.mono, fontSize:10, color:T.muted, margin:"0 0 2px" }}>{s.phase}{s.area?" / "+s.area:""}</p>
               <p style={{ fontSize:12, color:T.muted, margin:0 }}>{s.impact}</p>
-              {s.legalRef && <p style={{ fontFamily:T.mono, fontSize:10, color:T.faint, margin:"4px 0 0" }}>{s.legalRef}</p>}
             </div>
             <Btn size="sm" variant="primary" onClick={()=>{ onAdd(s); setResults(p=>p.filter(x=>x!==s)); }}>Add</Btn>
           </div>
@@ -626,6 +753,16 @@ function AIPanel({ project, onAdd }) {
     </div>
   );
 }
+
+// ── Shared table ─────────────────────────────────────────────────────────────
+const TH = ({ children }) => (
+  <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:"'IBM Plex Mono',monospace",
+               fontWeight:500, fontSize:9, color:"var(--muted)", borderBottom:"1px solid var(--border)",
+               whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase",
+               background:"var(--surface2)" }}>
+    {children}
+  </th>
+);
 
 // ── Screening tab ─────────────────────────────────────────────────────────────
 function ScreeningTab({ project, onAddAspect, onAddOpp }) {
@@ -641,11 +778,13 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
 
   const prefillRisk = (code, item, sectionColor) => {
-    setRiskForm({ ...emptyAspect(), phase:PHASE_MAP[code]||"", area:item.area||"", aspect:item.aspect||"", condition:COND_MAP[code]||"Normal", _color:sectionColor||"" });
+    setRiskForm({ ...emptyAspect(), phase:PHASE_MAP[code]||"", area:item.area||"",
+                  aspect:item.aspect||"", condition:COND_MAP[code]||"Normal", _color:sectionColor||"" });
     setView("form");
   };
   const prefillOpp = (code, item, sectionColor) => {
-    setOppForm({ ...emptyOpp(), description:item.opp||"", _color:sectionColor||"" });
+    const inferredType = inferOppType(item.opp||"");
+    setOppForm({ ...emptyOpp(), description:item.opp||"", type:inferredType, _color:sectionColor||"" });
     setView("form");
   };
 
@@ -653,60 +792,74 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const setOF = (k, v) => setOppForm(p => ({ ...p, [k]:v }));
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2500); };
-  const saveRisk  = () => { if (!riskForm.aspect.trim()) return; onAddAspect(riskForm); setRiskForm(emptyAspect()); setView("guide"); showToast("Aspect saved to register"); };
-  const saveOpp   = () => { if (!oppForm.description.trim()) return; onAddOpp(oppForm); setOppForm(emptyOpp()); setView("guide"); showToast("Opportunity saved to register"); };
+  const saveRisk  = () => {
+    if (!riskForm.aspect.trim()) return;
+    onAddAspect(riskForm); setRiskForm(emptyAspect()); setView("guide");
+    showToast("Aspect saved to register");
+  };
+  const saveOpp = () => {
+    if (!oppForm.description.trim()) return;
+    onAddOpp(oppForm); setOppForm(emptyOpp()); setView("guide");
+    showToast("Opportunity saved to register");
+  };
 
   const riskScore = calcScore(riskForm);
   const riskSig   = calcSig(riskForm);
   const oppScore  = calcOppScore(oppForm);
-  const oppSc     = oppScore>=18 ? {bg:"#E0F2F1",c:T.tealDark} : oppScore>=9 ? {bg:T.tealBg,c:T.teal} : {bg:T.slateBg,c:T.slate};
+  const oppSc     = oppScore>=18?{bg:T.tealBg,c:T.tealDark}:oppScore>=9?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
   const guideData = isRisks ? (GW_RISK[activeStage]||[]) : (GW_OPP[activeStage]||[]);
 
   return (
     <div style={{ display:"flex", height:"calc(100vh - 110px)", minHeight:500, margin:"-1.25rem" }}>
-      {/* Stage sidebar */}
-      <div style={{ width:185, flexShrink:0, borderRight:"1px solid "+T.border, background:"#FAFAF8", overflowY:"auto", padding:"0.75rem 0.5rem" }}>
-        <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.faint, letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 0.5rem 8px" }}>EPCIC Stage</p>
+      <div style={{ width:185, flexShrink:0, borderRight:"1px solid "+T.border, background:T.surface2,
+                    overflowY:"auto", padding:"0.75rem 0.5rem" }}>
+        <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.faint, letterSpacing:"0.1em",
+                    textTransform:"uppercase", margin:"0 0.5rem 8px" }}>EPCIC Stage</p>
         {EPCIC_STAGES.map(s => (
           <button key={s.code} onClick={() => { setActiveStage(s.code); setView("guide"); }}
-            style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6, marginBottom:2, cursor:"pointer", fontFamily:T.sans, background:"transparent",
-              border: activeStage===s.code ? "1px solid "+T.tealBd : "1px solid transparent",
-              backgroundColor: activeStage===s.code ? T.tealBg : "transparent" }}>
-            <div style={{ fontSize:12, fontWeight:activeStage===s.code?600:400, color:activeStage===s.code?T.teal:T.text }}>{s.label}</div>
+            style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6, marginBottom:2,
+                     cursor:"pointer", fontFamily:T.sans, background:"transparent",
+                     border: activeStage===s.code ? "1px solid "+T.tealBd : "1px solid transparent",
+                     backgroundColor: activeStage===s.code ? T.tealBg : "transparent" }}>
+            <div style={{ fontSize:12, fontWeight:activeStage===s.code?600:400,
+                          color:activeStage===s.code?T.teal:T.text }}>{s.label}</div>
             <div style={{ fontFamily:T.mono, fontSize:9, color:T.faint, marginTop:2 }}>{s.sub}</div>
           </button>
         ))}
       </div>
 
-      {/* Main */}
       <div style={{ flex:1, overflowY:"auto", padding:"1.25rem" }}>
-        {/* Mode toggle */}
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.25rem", flexWrap:"wrap" }}>
           <div style={{ display:"inline-flex", borderRadius:6, overflow:"hidden", border:"1px solid "+T.border }}>
             <button onClick={() => { setMode("risks"); setView("guide"); }}
-              style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans, fontWeight:isRisks?600:400, border:"none",
-                background:isRisks?T.redBg:T.surface, color:isRisks?T.red:T.muted, borderRight:"1px solid "+T.border }}>
+              style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:isRisks?600:400, border:"none",
+                       background:isRisks?T.redBg:T.surface, color:isRisks?T.red:T.muted,
+                       borderRight:"1px solid "+T.border }}>
               Risks &amp; aspects
             </button>
             <button onClick={() => { setMode("opps"); setView("guide"); }}
-              style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans, fontWeight:!isRisks?600:400, border:"none",
-                background:!isRisks?T.purpleBg:T.surface, color:!isRisks?T.purple:T.muted }}>
+              style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:!isRisks?600:400, border:"none",
+                       background:!isRisks?T.purpleBg:T.surface, color:!isRisks?T.purple:T.muted }}>
               Opportunities
             </button>
           </div>
           {toast && (
-            <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, background:T.tealBg, border:"1px solid "+T.tealBd, padding:"4px 10px", borderRadius:4 }}>
+            <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, background:T.tealBg,
+                           border:"1px solid "+T.tealBd, padding:"4px 10px", borderRadius:4 }}>
               {toast}
             </span>
           )}
         </div>
 
-        {/* Guide view */}
         {view === "guide" && (
           <div>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", flexWrap:"wrap", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                          marginBottom:"1rem", flexWrap:"wrap", gap:8 }}>
               <div>
-                <h3 style={{ fontSize:14, fontWeight:600, margin:"0 0 2px", color:isRisks?T.red:T.purple, fontFamily:T.sans }}>
+                <h3 style={{ fontSize:14, fontWeight:600, margin:"0 0 2px",
+                             color:isRisks?T.red:T.purple, fontFamily:T.sans }}>
                   {EPCIC_STAGES.find(s=>s.code===activeStage)?.label} — {isRisks?"risk guide words":"opportunity guide words"}
                 </h3>
                 <p style={{ fontSize:12, color:T.muted, margin:0 }}>
@@ -714,15 +867,16 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 </p>
               </div>
               <button onClick={() => setView("form")}
-                style={{ padding:"6px 13px", fontSize:12, borderRadius:6, border:"none", background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+                style={{ padding:"6px 13px", fontSize:12, borderRadius:6, border:"none",
+                         background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer",
+                         fontFamily:T.sans, fontWeight:500 }}>
                 + Blank form
               </button>
             </div>
-
             {guideData.length === 0 && (
-              <div style={{ padding:"2rem", textAlign:"center", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No guide words for this stage yet.</div>
+              <div style={{ padding:"2rem", textAlign:"center", background:T.slateBg,
+                            borderRadius:8, color:T.faint, fontSize:12 }}>No guide words for this stage yet.</div>
             )}
-
             {guideData.map(section => {
               const col = COLOR_MAP[section.color] || COLOR_MAP.gray;
               const key = (isRisks?"R":"O")+activeStage+section.cat;
@@ -730,23 +884,29 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               return (
                 <div key={key} style={{ marginBottom:8, borderRadius:8, border:"1px solid "+col.border, overflow:"hidden" }}>
                   <button onClick={() => toggleCat(key)}
-                    style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 14px", background:col.bg, border:"none", cursor:"pointer", fontFamily:T.sans }}>
+                    style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+                             padding:"9px 14px", background:col.bg, border:"none", cursor:"pointer", fontFamily:T.sans }}>
                     <span style={{ fontSize:12, fontWeight:600, color:col.head }}>{section.cat}</span>
                     <span style={{ fontFamily:T.mono, fontSize:10, color:col.head, opacity:0.5 }}>{open?"v":">"}</span>
                   </button>
                   {open && (
                     <div style={{ background:T.surface }}>
                       {section.items.map((item, i) => (
-                        <div key={i} style={{ padding:"10px 14px", borderTop:"1px solid "+col.border, display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
+                        <div key={i} style={{ padding:"10px 14px", borderTop:"1px solid "+col.border,
+                                             display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
                           <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:col.head, marginBottom:4, letterSpacing:"0.02em" }}>{item.kw}</div>
+                            <div style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:col.head,
+                                         marginBottom:4, letterSpacing:"0.02em" }}>{item.kw}</div>
                             <p style={{ fontSize:12, color:T.muted, margin:"0 0 5px", lineHeight:1.55 }}>{item.q}</p>
-                            <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 7px", borderRadius:3, background:col.bg, color:col.text }}>
+                            <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 7px", borderRadius:3,
+                                          background:col.bg, color:col.text }}>
                               {isRisks?"Aspect: "+item.aspect:"Opportunity: "+item.opp}
                             </span>
                           </div>
                           <button onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
-                            style={{ padding:"5px 11px", fontSize:11, borderRadius:5, border:"none", background:col.head, color:"#fff", cursor:"pointer", fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap", flexShrink:0 }}>
+                            style={{ padding:"5px 11px", fontSize:11, borderRadius:5, border:"none",
+                                     background:col.head, color:"#fff", cursor:"pointer", fontFamily:T.sans,
+                                     fontWeight:500, whiteSpace:"nowrap", flexShrink:0 }}>
                             Use
                           </button>
                         </div>
@@ -759,26 +919,29 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
           </div>
         )}
 
-        {/* Risk form */}
         {view === "form" && isRisks && (
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
-              <button onClick={() => setView("guide")} style={{ padding:"5px 11px", fontSize:11, borderRadius:5, border:"1px solid "+T.border, background:"transparent", cursor:"pointer", fontFamily:T.sans, color:T.muted }}>Back</button>
-              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red, fontFamily:T.sans }}>Risk screening — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}</h3>
+              <button onClick={() => setView("guide")} style={{ padding:"5px 11px", fontSize:11, borderRadius:5,
+                border:"1px solid "+T.border, background:"transparent", cursor:"pointer",
+                fontFamily:T.sans, color:T.muted }}>Back</button>
+              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red, fontFamily:T.sans }}>
+                Risk screening — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}
+              </h3>
             </div>
             <Card style={{ marginBottom:"1rem" }} accent={T.red}>
               <SectionLabel>Activity details</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
                 <Fld label="Phase"><select value={riskForm.phase} onChange={e=>setRF("phase",e.target.value)} style={iw}><option value="">Select</option>{PHASES.map(p=><option key={p}>{p}</option>)}</select></Fld>
                 <Fld label="Activity area"><input value={riskForm.area} onChange={e=>setRF("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-                <Fld label="Specific activity" wide><input value={riskForm.activity} onChange={e=>setRF("activity",e.target.value)} placeholder="Specific activity giving rise to the aspect" style={iw}/></Fld>
-                <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust generation from excavation" style={iw}/></Fld>
+                <Fld label="Specific activity" wide><input value={riskForm.activity} onChange={e=>setRF("activity",e.target.value)} style={iw}/></Fld>
+                <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
                 <Fld label="Condition"><select value={riskForm.condition} onChange={e=>setRF("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
-                <Fld label="Receptors affected"><input value={riskForm.receptors} onChange={e=>setRF("receptors",e.target.value)} placeholder="e.g. Air, Human health, Ecology" style={iw}/></Fld>
+                <Fld label="Receptors affected"><input value={riskForm.receptors} onChange={e=>setRF("receptors",e.target.value)} placeholder="e.g. Air, Human health" style={iw}/></Fld>
                 <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
               </div>
             </Card>
-            <Card style={{ marginBottom:"1rem", background:"#FAFDF8" }} accent={T.teal}>
+            <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
               <SectionLabel>Significance scoring</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:10 }}>
                 <Fld label="Receptor sensitivity"><select value={riskForm.recSensitivity} onChange={e=>setRF("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
@@ -792,8 +955,11 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 <Fld label="Stakeholder concern"><select value={riskForm.stakeholderConcern} onChange={e=>setRF("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
               </div>
               {riskScore !== null && (
-                <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>Score: <strong style={{ fontSize:20, color:T.text }}>{riskScore}</strong></span>
+                <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
+                              display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
+                    Score: <strong style={{ fontSize:20, color:T.text }}>{riskScore}</strong>
+                  </span>
                   <span style={sigStyle(riskSig)}>{riskSig}</span>
                   {riskForm.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
                   {riskForm.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
@@ -804,7 +970,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               <SectionLabel>Controls & management</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
                 <Fld label="Key control measure" wide><textarea value={riskForm.control} onChange={e=>setRF("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
-                <Fld label="Legal / regulatory reference" wide><input value={riskForm.legalRef} onChange={e=>setRF("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7, OSPAR" style={iw}/></Fld>
+                <Fld label="Legal / regulatory reference" wide><input value={riskForm.legalRef} onChange={e=>setRF("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7" style={iw}/></Fld>
                 <Fld label="Owner"><input value={riskForm.owner} onChange={e=>setRF("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
                 <Fld label="Status"><select value={riskForm.status} onChange={e=>setRF("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
               </div>
@@ -812,31 +978,36 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
               <Btn onClick={() => setRiskForm(emptyAspect())}>Clear</Btn>
               <button onClick={saveRisk} disabled={!riskForm.aspect.trim()}
-                style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.red, color:"#fff", cursor:riskForm.aspect.trim()?"pointer":"not-allowed", fontSize:12, fontFamily:T.sans, fontWeight:500, opacity:riskForm.aspect.trim()?1:0.45 }}>
+                style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.red, color:"#fff",
+                         cursor:riskForm.aspect.trim()?"pointer":"not-allowed", fontSize:12,
+                         fontFamily:T.sans, fontWeight:500, opacity:riskForm.aspect.trim()?1:0.45 }}>
                 Save to aspects register
               </button>
             </div>
           </div>
         )}
 
-        {/* Opp form */}
         {view === "form" && !isRisks && (
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
-              <button onClick={() => setView("guide")} style={{ padding:"5px 11px", fontSize:11, borderRadius:5, border:"1px solid "+T.border, background:"transparent", cursor:"pointer", fontFamily:T.sans, color:T.muted }}>Back</button>
-              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple, fontFamily:T.sans }}>Opportunity screening — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}</h3>
+              <button onClick={() => setView("guide")} style={{ padding:"5px 11px", fontSize:11, borderRadius:5,
+                border:"1px solid "+T.border, background:"transparent", cursor:"pointer",
+                fontFamily:T.sans, color:T.muted }}>Back</button>
+              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple, fontFamily:T.sans }}>
+                Opportunity screening — {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}
+              </h3>
             </div>
             <Card style={{ marginBottom:"1rem" }} accent={T.purple}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
                 <Fld label="Opportunity type"><select value={oppForm.type} onChange={e=>setOF("type",e.target.value)} style={iw}><option value="">Select type</option>{OPP_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fld>
                 <Fld label="Linked aspect (optional)"><input value={oppForm.aspectRef} onChange={e=>setOF("aspectRef",e.target.value)} placeholder="e.g. ASP-001" style={iw}/></Fld>
                 <Fld label="Materiality (CSRD)" wide><select value={oppForm.materiality} onChange={e=>setOF("materiality",e.target.value)} style={iw}><option>Inside-out (positive impact on environment)</option><option>Outside-in (financial / business benefit)</option><option>Both</option></select></Fld>
-                <Fld label="Opportunity description" wide><textarea value={oppForm.description} onChange={e=>setOF("description",e.target.value)} rows={3} placeholder="What positive outcome is possible?" style={{ ...iw, resize:"vertical" }}/></Fld>
+                <Fld label="Opportunity description" wide><textarea value={oppForm.description} onChange={e=>setOF("description",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
                 <Fld label="Environmental benefit"><textarea value={oppForm.envBenefit} onChange={e=>setOF("envBenefit",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
                 <Fld label="Business / strategic benefit"><textarea value={oppForm.bizBenefit} onChange={e=>setOF("bizBenefit",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
               </div>
             </Card>
-            <Card style={{ marginBottom:"1rem", background:"#FAFDF9" }} accent={T.teal}>
+            <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
               <SectionLabel>Priority score = env value x business value x feasibility (max 27)</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px" }}>
                 {[{k:"envValue",l:"Env value (1-3)"},{k:"bizValue",l:"Business value (1-3)"},{k:"feasibility",l:"Feasibility (1-3)"}].map(({ k, l }) => (
@@ -852,7 +1023,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             <Card style={{ marginBottom:"1rem" }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
                 <Fld label="Key action / implementation route" wide><textarea value={oppForm.action} onChange={e=>setOF("action",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
-                <Fld label="ESRS / framework alignment"><input value={oppForm.alignment} onChange={e=>setOF("alignment",e.target.value)} placeholder="e.g. ESRS E1, EU Taxonomy, SBTi" style={iw}/></Fld>
+                <Fld label="ESRS / framework alignment"><input value={oppForm.alignment} onChange={e=>setOF("alignment",e.target.value)} placeholder="e.g. ESRS E1, EU Taxonomy" style={iw}/></Fld>
                 <Fld label="Owner"><input value={oppForm.owner} onChange={e=>setOF("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
                 <Fld label="Status"><select value={oppForm.status} onChange={e=>setOF("status",e.target.value)} style={iw}>{OPP_STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
               </div>
@@ -860,7 +1031,9 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
               <Btn onClick={() => setOppForm(emptyOpp())}>Clear</Btn>
               <button onClick={saveOpp} disabled={!oppForm.description.trim()}
-                style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.purple, color:"#fff", cursor:oppForm.description.trim()?"pointer":"not-allowed", fontSize:12, fontFamily:T.sans, fontWeight:500, opacity:oppForm.description.trim()?1:0.45 }}>
+                style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.purple, color:"#fff",
+                         cursor:oppForm.description.trim()?"pointer":"not-allowed", fontSize:12,
+                         fontFamily:T.sans, fontWeight:500, opacity:oppForm.description.trim()?1:0.45 }}>
                 Save to opportunities register
               </button>
             </div>
@@ -877,245 +1050,386 @@ function ProjectView({ project, onChange, onDelete }) {
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
   const [aiOpen, setAiOpen]               = useState(false);
-  const [sigFilter, setSigFilter]         = useState("All");
+  const [dashFilter, setDashFilter]       = useState("all");
+  const [aspFilter, setAspFilter]         = useState("All");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const aspects = project.aspects || [];
   const opps    = project.opps    || [];
+  const changelog = project.changelog || [];
   const nextRef = (arr, pfx) => pfx+"-"+String(arr.length+1).padStart(3,"0");
 
+  const logChange = (action, detail) => {
+    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail };
+    return [...(project.changelog||[]), entry];
+  };
+
   const saveAspect = a => {
-    const updated = a.id ? aspects.map(x=>x.id===a.id?a:x) : [...aspects,{...a,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
-    onChange({ ...project, aspects:updated }); setEditAspect(null);
+    const isEdit = !!a.id;
+    const updated = isEdit ? aspects.map(x=>x.id===a.id?a:x)
+                           : [...aspects,{...a,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
+    const ref = isEdit ? a.ref : nextRef(aspects,"ASP");
+    onChange({ ...project, aspects:updated,
+               changelog:logChange(isEdit?"Edited aspect":"Added aspect",
+                 `${ref}: ${(a.aspect||"").slice(0,60)}`) });
+    setEditAspect(null);
   };
   const saveOpp = o => {
-    const updated = o.id ? opps.map(x=>x.id===o.id?o:x) : [...opps,{...o,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
-    onChange({ ...project, opps:updated }); setEditOpp(null);
+    const isEdit = !!o.id;
+    const updated = isEdit ? opps.map(x=>x.id===o.id?o:x)
+                           : [...opps,{...o,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
+    const ref = isEdit ? o.ref : nextRef(opps,"OPP");
+    onChange({ ...project, opps:updated,
+               changelog:logChange(isEdit?"Edited opportunity":"Added opportunity",
+                 `${ref}: ${(o.description||"").slice(0,60)}`) });
+    setEditOpp(null);
+  };
+  const deleteAspect = (a) => {
+    onChange({ ...project, aspects:aspects.filter(x=>x.id!==a.id),
+               changelog:logChange("Deleted aspect", `${a.ref}: ${(a.aspect||"").slice(0,60)}`) });
+  };
+  const deleteOpp = (o) => {
+    onChange({ ...project, opps:opps.filter(x=>x.id!==o.id),
+               changelog:logChange("Deleted opportunity", `${o.ref}: ${(o.description||"").slice(0,60)}`) });
   };
 
   const sigCount   = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
   const watchCount = aspects.filter(a=>calcSig(a)==="WATCH").length;
+  const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
   const highOpps   = opps.filter(o=>calcOppScore(o)>=18).length;
-  const filtered   = sigFilter==="All" ? aspects : aspects.filter(a=>calcSig(a)===sigFilter);
 
-  if (editAspect !== null) return <div style={{ background:T.bg, minHeight:"100%" }}><AspectForm aspect={editAspect} onSave={saveAspect} onCancel={()=>setEditAspect(null)}/></div>;
-  if (editOpp    !== null) return <div style={{ background:T.bg, minHeight:"100%" }}><OppForm opp={editOpp} aspects={aspects} onSave={saveOpp} onCancel={()=>setEditOpp(null)}/></div>;
+  // Dashboard filter drives which aspects show
+  const dashAspects = dashFilter==="all"     ? aspects
+                    : dashFilter==="sig"     ? aspects.filter(a=>calcSig(a)==="SIGNIFICANT")
+                    : dashFilter==="watch"   ? aspects.filter(a=>calcSig(a)==="WATCH")
+                    : dashFilter==="low"     ? aspects.filter(a=>calcSig(a)==="Low")
+                    : dashFilter==="opps"    ? aspects
+                    : aspects;
 
-  // Stat card helper
-  const StatCard = ({ label, value, bg, color, border }) => (
-    <div style={{ background:bg||T.surface, borderRadius:7, padding:"12px 14px", border:"1px solid "+(border||T.border) }}>
-      <p style={{ fontFamily:T.mono, fontSize:9, color:color||T.muted, margin:"0 0 6px", letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
-      <p style={{ fontFamily:T.mono, fontSize:22, fontWeight:500, margin:0, color:color||T.text, lineHeight:1 }}>{value}</p>
+  const filteredAspects = aspFilter==="All" ? aspects : aspects.filter(a=>calcSig(a)===aspFilter);
+
+  if (editAspect !== null) return (
+    <div style={{ background:T.bg, minHeight:"100%" }}>
+      <AspectForm aspect={editAspect} onSave={saveAspect} onCancel={()=>setEditAspect(null)}/>
+    </div>
+  );
+  if (editOpp !== null) return (
+    <div style={{ background:T.bg, minHeight:"100%" }}>
+      <OppForm opp={editOpp} aspects={aspects} onSave={saveOpp} onCancel={()=>setEditOpp(null)}/>
     </div>
   );
 
+  const StatCard = ({ label, value, bg, color, border, filterId }) => {
+    const active = dashFilter === filterId;
+    return (
+      <div onClick={() => { setDashFilter(dashFilter===filterId?"all":filterId); if(filterId!=="opps") setTab("dashboard"); }}
+        style={{ background:bg||T.surface, borderRadius:7, padding:"12px 14px",
+                 border: active ? "2px solid "+color : "1px solid "+(border||T.border),
+                 cursor:"pointer", transition:"all 0.15s",
+                 boxShadow: active ? "0 0 0 1px "+(color||T.teal) : "none" }}>
+        <p style={{ fontFamily:T.mono, fontSize:9, color:color||T.muted, margin:"0 0 6px",
+                    letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
+        <p style={{ fontFamily:T.mono, fontSize:22, fontWeight:500, margin:0,
+                    color:color||T.text, lineHeight:1 }}>{value}</p>
+      </div>
+    );
+  };
+
+  // Colour helper for rows
+  const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
+
+  // Shared aspect table renderer
+  const AspectTable = ({ rows, onEdit, onDelete: onDel }) => (
+    <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
+        <thead><tr>{["Ref","Phase","Aspect","Cond.","Impact / Receptor","Score","Significance","Status",""].map(h=><TH key={h}>{h}</TH>)}</tr></thead>
+        <tbody>
+          {rows.map((a) => {
+            const score  = calcScore(a);
+            const sig    = calcSig(a);
+            const rc     = rowColor(a);
+            const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
+            return (
+              <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.phase||"—"}</span>
+                </td>
+                <td style={{ padding:"9px 12px", maxWidth:180 }}>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>
+                    {a.aspect||"—"}
+                  </div>
+                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
+                </td>
+                <td style={{ padding:"9px 12px" }}>{a.condition && <span style={condStyle(a.condition)}>{a.condition}</span>}</td>
+                <td style={{ padding:"9px 12px", maxWidth:200 }}>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.muted }} title={a.impact}>{a.impact||"—"}</div>
+                  {a.receptors && <div style={{ fontFamily:T.mono, fontSize:10, color:T.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.receptors}</div>}
+                </td>
+                <td style={{ padding:"9px 12px", textAlign:"center" }}>
+                  <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score!==null?score:"—"}</span>
+                </td>
+                <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>x</Btn>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // Shared opp table renderer
+  const OppTable = ({ rows, onEdit, onDelete: onDel }) => (
+    <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
+        <thead><tr>{["Ref","Type","Description","Linked aspect","Score","Priority","Materiality","Status",""].map(h=><TH key={h}>{h}</TH>)}</tr></thead>
+        <tbody>
+          {rows.map((o) => {
+            const score  = calcOppScore(o);
+            const sc     = score>=18?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}:score>=9?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
+            const matC   = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
+            const rc     = rowColor(o);
+            const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
+            return (
+              <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span>
+                </td>
+                <td style={{ padding:"9px 12px", maxWidth:130 }}>
+                  {o.type
+                    ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                                     background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
+                                     border:"1px solid "+(rc?rc.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>
+                    : <span style={{ color:T.faint }}>—</span>}
+                </td>
+                <td style={{ padding:"9px 12px", maxWidth:200 }}>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                fontWeight:500, color: rc ? rc.head : T.text }} title={o.description}>
+                    {o.description||"—"}
+                  </div>
+                  {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  {o.aspectRef?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>:<span style={{ color:T.faint }}>—</span>}
+                </td>
+                <td style={{ padding:"9px 12px", textAlign:"center" }}>
+                  <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span>
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  {score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=18?"High":score>=9?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  {o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const TABS = ["dashboard","screening","aspects","opportunities","changes","settings"];
+
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
-      {/* Tab bar */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                    marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
         <div style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border }}>
-          {["dashboard","screening","aspects","opportunities","settings"].map(t => (
+          {TABS.map(t => (
             <button key={t} onClick={()=>setTab(t)}
-              style={{ padding:"8px 16px", fontSize:12, cursor:"pointer", fontFamily:T.sans, fontWeight:500,
-                background:"transparent", border:"none", borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
-                marginBottom:"-2px", color: tab===t ? T.teal : T.muted,
-                transition:"color 0.15s" }}>
-              {t==="screening"?"Screening":t.charAt(0).toUpperCase()+t.slice(1)}
+              style={{ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:500, background:"transparent", border:"none",
+                       borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
+                       marginBottom:"-2px", color: tab===t ? T.teal : T.muted }}>
+              {t.charAt(0).toUpperCase()+t.slice(1)}
             </button>
           ))}
         </div>
         <div style={{ display:"flex", gap:6 }}>
           {project.type  && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, letterSpacing:"0.05em" }}>{project.type}</span>}
-          {project.phase && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.blueBg, color:T.blue, border:"1px solid "+T.blueBd, letterSpacing:"0.05em" }}>{project.phase}</span>}
+          {project.phase && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.blueBg,  color:T.blue,  border:"1px solid "+T.blueBd,  letterSpacing:"0.05em" }}>{project.phase}</span>}
         </div>
       </div>
 
-      {/* DASHBOARD */}
       {tab === "dashboard" && (
         <div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:"1.25rem" }}>
-            <StatCard label="Total aspects" value={aspects.length}/>
-            <StatCard label="Significant"   value={sigCount}   bg={T.redBg}    color={T.red}      border={T.redBd}/>
-            <StatCard label="Watch"         value={watchCount} bg={T.amberBg}  color={T.amber}    border={T.amberBd}/>
-            <StatCard label="Opportunities" value={opps.length} bg={T.purpleBg} color={T.purple}  border={T.purpleBd}/>
-            <StatCard label="High priority" value={highOpps}   bg={T.tealBg}   color={T.tealDark} border={T.tealBd}/>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
+            <StatCard label="All aspects"   value={aspects.length} filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
+            <StatCard label="Significant"   value={sigCount}       filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
+            <StatCard label="Watch"         value={watchCount}     filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Low"           value={lowCount}       filterId="low"   color={T.green}  border={T.greenBd}  bg={T.greenBg}/>
+            <StatCard label="Opportunities" value={opps.length}    filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
           </div>
-          {sigCount > 0 && (
-            <div style={{ background:T.redBg, border:"1px solid "+T.redBd, borderLeft:"3px solid "+T.red, borderRadius:"0 7px 7px 0", padding:"10px 14px", marginBottom:"1rem" }}>
-              <p style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.red, margin:"0 0 8px", letterSpacing:"0.05em", textTransform:"uppercase" }}>Significant aspects — action required ({sigCount})</p>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                {aspects.filter(a=>calcSig(a)==="SIGNIFICANT").map(a => (
-                  <button key={a.id} onClick={()=>setEditAspect(a)}
-                    style={{ fontFamily:T.mono, fontSize:10, padding:"3px 9px", borderRadius:3, background:T.surface, color:T.red, border:"1px solid "+T.redBd, cursor:"pointer" }}>
-                    {a.ref} — {(a.aspect||"").slice(0,45)}
-                  </button>
-                ))}
-              </div>
+
+          {dashFilter !== "all" && dashFilter !== "opps" && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"1rem" }}>
+              <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>
+                Showing: <strong style={{ color:T.text }}>{dashFilter==="sig"?"Significant":dashFilter==="watch"?"Watch":"Low"}</strong> ({dashAspects.length})
+              </span>
+              <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>
+                Clear filter x
+              </button>
             </div>
           )}
-          {aspects.length === 0 && (
-            <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
-              <p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects identified yet.</p>
-              <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to identify aspects with guide words, or add one manually.</p>
-              <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
-                <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
-                <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
+
+          {dashFilter === "opps" && (
+            <div style={{ marginBottom:"1rem" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"0.75rem" }}>
+                <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>Showing: <strong style={{ color:T.text }}>Opportunities</strong> ({opps.length})</span>
+                <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>Clear filter x</button>
               </div>
+              {opps.length===0
+                ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
+                : <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp}/>}
             </div>
+          )}
+
+          {dashFilter !== "opps" && (
+            dashAspects.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
+                {dashFilter==="all"
+                  ? <><p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects identified yet.</p>
+                      <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to get started.</p>
+                      <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+                        <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
+                        <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
+                      </div></>
+                  : <p style={{ margin:0, fontSize:13, color:T.muted }}>No {dashFilter==="sig"?"significant":dashFilter==="watch"?"watch":dashFilter} aspects.</p>}
+              </div>
+            ) : (
+              <AspectTable rows={dashAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
+            )
           )}
         </div>
       )}
 
-      {/* SCREENING */}
       {tab === "screening" && (
         <ScreeningTab project={project} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
       )}
 
-      {/* ASPECTS */}
       {tab === "aspects" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
             <button onClick={()=>setAiOpen(v=>!v)}
-              style={{ padding:"7px 13px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans, fontWeight:500,
-                border:"1px solid "+T.purpleBd, background:aiOpen?T.purpleBg:"transparent", color:T.purple }}>
+              style={{ padding:"7px 13px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:500, border:"1px solid "+T.purpleBd,
+                       background:aiOpen?T.purpleBg:"transparent", color:T.purple }}>
               AI suggest
             </button>
             <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
               {["All","SIGNIFICANT","WATCH","Low"].map(f => (
-                <button key={f} onClick={()=>setSigFilter(f)}
+                <button key={f} onClick={()=>setAspFilter(f)}
                   style={{ fontFamily:T.mono, padding:"4px 9px", fontSize:10, borderRadius:4, cursor:"pointer",
-                    fontWeight:sigFilter===f?500:400, letterSpacing:"0.03em",
-                    border: sigFilter===f ? "1px solid "+T.teal : "1px solid "+T.border,
-                    background: sigFilter===f ? T.tealBg : "transparent",
-                    color: sigFilter===f ? T.teal : T.muted }}>
+                           fontWeight:aspFilter===f?500:400, letterSpacing:"0.03em",
+                           border: aspFilter===f ? "1px solid "+T.teal : "1px solid "+T.border,
+                           background: aspFilter===f ? T.tealBg : "transparent",
+                           color: aspFilter===f ? T.teal : T.muted }}>
                   {f}
                 </button>
               ))}
             </div>
           </div>
           {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
-          {filtered.length === 0 ? (
+          {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match \""+sigFilter+"\"."}
+              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match ""+aspFilter+""."}
             </div>
           ) : (
-            <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
-                <thead>
-                  <tr style={{ background:"#F9F8F5" }}>
-                    {["Ref","Phase","Aspect","Cond.","Impact / Receptor","Score","Significance","Status",""].map(h => (
-                      <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((a, i) => {
-                    const score  = calcScore(a);
-                    const sig    = calcSig(a);
-                    const rowCol = a._color ? (COLOR_MAP[a._color]||COLOR_MAP.gray) : null;
-                    const leftBd = rowCol ? "3px solid "+rowCol.head : "3px solid transparent";
-                    return (
-                      <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
-                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span></td>
-                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.phase||"—"}</span></td>
-                        <td style={{ padding:"9px 12px", maxWidth:180 }}>
-                          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color:T.text }} title={a.aspect}>{a.aspect||"—"}</div>
-                          {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{a.area}</div>}
-                        </td>
-                        <td style={{ padding:"9px 12px" }}>{a.condition && <span style={condStyle(a.condition)}>{a.condition}</span>}</td>
-                        <td style={{ padding:"9px 12px", maxWidth:200 }}>
-                          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.muted }} title={a.impact}>{a.impact||"—"}</div>
-                          {a.receptors && <div style={{ fontFamily:T.mono, fontSize:10, color:T.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.receptors}</div>}
-                        </td>
-                        <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score!==null?score:"—"}</span></td>
-                        <td style={{ padding:"9px 12px" }}>{sig ? <span style={sigStyle(sig)}>{sig}</span> : <span style={{ color:T.faint }}>—</span>}</td>
-                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span></td>
-                        <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
-                          <Btn size="sm" onClick={()=>setEditAspect(a)}>Edit</Btn>{" "}
-                          <Btn size="sm" variant="danger" onClick={()=>onChange({...project,aspects:aspects.filter(x=>x.id!==a.id)})}>x</Btn>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
           )}
         </div>
       )}
 
-      {/* OPPORTUNITIES */}
       {tab === "opportunities" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center" }}>
             <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
-            <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>{opps.length} opportunit{opps.length!==1?"ies":"y"}</span>
+            <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>
+              {opps.length} opportunit{opps.length!==1?"ies":"y"}
+            </span>
           </div>
           {opps.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
               <p style={{ margin:"0 0 8px", fontSize:13, color:T.muted }}>No opportunities tracked yet.</p>
-              <p style={{ fontSize:12, margin:0, maxWidth:400, marginInline:"auto" }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
+              <p style={{ fontSize:12, margin:0 }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
             </div>
           ) : (
-            <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
-                <thead>
-                  <tr style={{ background:"#F9F8F5" }}>
-                    {["Ref","Type","Description","Linked aspect","Score","Priority","Materiality","Status",""].map(h => (
-                      <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {opps.map((o, i) => {
-                    const score  = calcOppScore(o);
-                    const sc     = score>=18?{bg:"#E0F2F1",c:T.tealDark,bd:"#80CBC4"}:score>=9?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
-                    const matC   = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
-                    const rowCol = o._color ? (COLOR_MAP[o._color]||COLOR_MAP.gray) : null;
-                    const leftBd = rowCol ? "3px solid "+rowCol.head : "3px solid transparent";
-                    return (
-                      <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
-                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
-                        <td style={{ padding:"9px 12px", maxWidth:130 }}>
-                          {o.type
-                            ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:rowCol?rowCol.bg:T.purpleBg, color:rowCol?rowCol.head:T.purple, border:"1px solid "+(rowCol?rowCol.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>
-                            : <span style={{ color:T.faint }}>—</span>}
-                        </td>
-                        <td style={{ padding:"9px 12px", maxWidth:200 }}>
-                          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color:T.text }} title={o.description}>{o.description||"—"}</div>
-                          {o.envBenefit && <div style={{ fontSize:11, color:T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
-                        </td>
-                        <td style={{ padding:"9px 12px" }}>
-                          {o.aspectRef
-                            ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>
-                            : <span style={{ color:T.faint }}>—</span>}
-                        </td>
-                        <td style={{ padding:"9px 12px", textAlign:"center" }}>
-                          <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span>
-                        </td>
-                        <td style={{ padding:"9px 12px" }}>
-                          {score>0 ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=18?"High":score>=9?"Medium":"Low"}</span> : <span style={{ color:T.faint }}>—</span>}
-                        </td>
-                        <td style={{ padding:"9px 12px" }}>
-                          {o.materiality ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span> : <span style={{ color:T.faint }}>—</span>}
-                        </td>
-                        <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
-                        <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
-                          <Btn size="sm" onClick={()=>setEditOpp(o)}>Edit</Btn>{" "}
-                          <Btn size="sm" variant="danger" onClick={()=>onChange({...project,opps:opps.filter(x=>x.id!==o.id)})}>x</Btn>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp}/>
+          )}
+        </div>
+      )}
+
+      {tab === "changes" && (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
+            <div>
+              <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:600, fontFamily:T.sans }}>Change log</h3>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>{changelog.length} recorded change{changelog.length!==1?"s":""}</p>
+            </div>
+          </div>
+          {changelog.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              No changes recorded yet. Changes are logged automatically when you add, edit, or delete aspects and opportunities.
+            </div>
+          ) : (
+            <div style={{ background:T.surface, borderRadius:8, border:"1px solid "+T.border, overflow:"hidden" }}>
+              {[...changelog].reverse().map((entry, i) => {
+                const isAdd    = entry.action.startsWith("Added");
+                const isEdit   = entry.action.startsWith("Edited");
+                const isDel    = entry.action.startsWith("Deleted");
+                const dot      = isAdd ? T.teal : isEdit ? T.amber : T.red;
+                const ts       = new Date(entry.ts);
+                const dateStr  = ts.toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
+                const timeStr  = ts.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+                return (
+                  <div key={entry.id} style={{ display:"flex", gap:12, padding:"12px 16px",
+                                               borderBottom: i < changelog.length-1 ? "1px solid "+T.rowBd : "none",
+                                               alignItems:"flex-start" }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:dot, marginTop:5, flexShrink:0 }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+                        <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500,
+                                       color: isAdd?T.teal:isEdit?T.amber:T.red,
+                                       background: isAdd?T.tealBg:isEdit?T.amberBg:T.redBg,
+                                       padding:"1px 6px", borderRadius:3 }}>
+                          {entry.action}
+                        </span>
+                      </div>
+                      <p style={{ margin:0, fontSize:12, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {entry.detail}
+                      </p>
+                    </div>
+                    <div style={{ flexShrink:0, textAlign:"right" }}>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{dateStr}</p>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* SETTINGS */}
       {tab === "settings" && (
         <div>
           <Card style={{ marginBottom:"1rem" }}>
@@ -1159,54 +1473,60 @@ function ProjectView({ project, onChange, onDelete }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ projects, activeId, onSelect, onNew }) {
+function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme }) {
   return (
-    <div style={{ width:215, flexShrink:0, background:T.sidebar, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
-      {/* Header */}
-      <div style={{ padding:"18px 16px 14px", borderBottom:"1px solid "+T.sideBd }}>
-        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:3 }}>
+    <div style={{ width:215, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
+      <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid "+T.sbBd }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
           <div style={{ width:26, height:26, background:T.teal, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <circle cx="7" cy="7" r="5.5" stroke="white" strokeWidth="1.5"/>
               <path d="M7 4v3.5l2 1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </div>
-          <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:"#E8E4DC", letterSpacing:"0.05em" }}>ENV·ASPECTS</span>
+          <div style={{ flex:1 }}>
+            <p style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:T.sbText, margin:0, letterSpacing:"0.05em" }}>ENV·ASPECTS</p>
+            <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:0, letterSpacing:"0.07em" }}>TOOLKIT</p>
+          </div>
+          <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
         </div>
-        <span style={{ fontFamily:T.mono, fontSize:9, color:"#374151", letterSpacing:"0.07em" }}>TOOLKIT</span>
       </div>
-
-      {/* Projects list */}
       <div style={{ flex:1, overflowY:"auto", padding:"10px 8px" }}>
-        <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:"#374151", letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 8px 8px" }}>Projects ({projects.length})</p>
-        {projects.length === 0 && <p style={{ fontFamily:T.mono, fontSize:10, color:"#374151", padding:"0 8px", fontStyle:"italic" }}>No projects yet</p>}
+        <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.sbFaint, letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 8px 8px" }}>
+          Projects ({projects.length})
+        </p>
+        {projects.length === 0 && <p style={{ fontFamily:T.mono, fontSize:10, color:T.sbFaint, padding:"0 8px", fontStyle:"italic" }}>No projects yet</p>}
         {projects.map(p => {
           const sigC    = (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").length;
           const isActive = p.id === activeId;
           return (
             <button key={p.id} onClick={()=>onSelect(p.id)}
-              style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6, marginBottom:1, cursor:"pointer", fontFamily:T.sans, border:"1px solid transparent",
-                background: isActive ? "#242B33" : "transparent",
-                borderColor: isActive ? "#2E3740" : "transparent" }}>
+              style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6, marginBottom:1,
+                       cursor:"pointer", fontFamily:T.sans, border:"1px solid transparent",
+                       background: isActive ? T.sbBg2 : "transparent",
+                       borderColor: isActive ? T.sbBd : "transparent" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-                <span style={{ fontSize:12, fontWeight:isActive?600:400, color:isActive?"#D1C9BE":"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {p.name || <span style={{ color:"#374151", fontStyle:"italic" }}>Unnamed project</span>}
+                <span style={{ fontSize:12, fontWeight:isActive?600:400, color:isActive?T.sbText:T.sbMuted,
+                               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {p.name || <span style={{ color:T.sbFaint, fontStyle:"italic" }}>Unnamed project</span>}
                 </span>
-                {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"#501313", color:"#F09595", flexShrink:0 }}>{sigC}</span>}
+                {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"1px 5px",
+                                          borderRadius:3, background:T.sbSig, color:T.sbSigTx, flexShrink:0 }}>{sigC}</span>}
               </div>
-              <p style={{ fontFamily:T.mono, fontSize:9, color:"#374151", margin:"2px 0 0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:"2px 0 0",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {p.type||"No type"} · {(p.aspects||[]).length} aspects
               </p>
             </button>
           );
         })}
       </div>
-
-      {/* New project */}
-      <div style={{ padding:"8px", borderTop:"1px solid "+T.sideBd }}>
-        <button onClick={onNew} style={{ width:"100%", padding:"8px", borderRadius:6, border:"1px dashed #2E3740", background:"transparent", color:"#374151", fontFamily:T.mono, fontSize:11, cursor:"pointer", transition:"all 0.15s" }}
-          onMouseEnter={e=>{e.target.style.borderColor=T.teal;e.target.style.color="#1D9E75";}}
-          onMouseLeave={e=>{e.target.style.borderColor="#2E3740";e.target.style.color="#374151";}}>
+      <div style={{ padding:"8px", borderTop:"1px solid "+T.sbBd }}>
+        <button onClick={onNew}
+          style={{ width:"100%", padding:"8px", borderRadius:6, border:"1px dashed "+T.sbBd,
+                   background:"transparent", color:T.sbFaint, fontFamily:T.mono, fontSize:11, cursor:"pointer" }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.color=T.teal;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--sb-bd)";e.currentTarget.style.color="var(--sb-faint)";}}>
           + New project
         </button>
       </div>
@@ -1219,8 +1539,10 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [loaded,   setLoaded]   = useState(false);
+  const [isDark,   setIsDark]   = useState(false);
 
   useEffect(() => {
+    applyTheme("light");
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -1229,6 +1551,7 @@ export default function App() {
           setProjects(d.projects);
           setActiveId(d.activeId || d.projects[0].id);
         }
+        if (d.theme === "dark") { setIsDark(true); applyTheme("dark"); }
       }
     } catch {}
     setLoaded(true);
@@ -1236,8 +1559,14 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId })); } catch {}
-  }, [projects, activeId, loaded]);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId, theme: isDark?"dark":"light" })); } catch {}
+  }, [projects, activeId, loaded, isDark]);
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    applyTheme(next?"dark":"light");
+  };
 
   const createProject = () => {
     const p = newProject();
@@ -1251,16 +1580,22 @@ export default function App() {
     setActiveId(remaining.length>0 ? remaining[remaining.length-1].id : null);
   };
 
-  if (!loaded) return <div style={{ padding:"2rem", fontFamily:T.mono, fontSize:12, color:T.muted }}>Loading...</div>;
+  if (!loaded) return (
+    <div style={{ padding:"2rem", fontFamily:"'IBM Plex Mono',monospace", fontSize:12, color:"var(--muted)", background:"var(--bg)", minHeight:"100vh" }}>
+      Loading...
+    </div>
+  );
 
   const active = projects.find(p => p.id === activeId) || null;
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
-      <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}/>
+      <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
+               isDark={isDark} onToggleTheme={toggleTheme}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
         {!active ? (
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flex:1, gap:14, padding:"2rem" }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                        flex:1, gap:14, padding:"2rem" }}>
             <div style={{ width:48, height:48, background:T.teal, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
               <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
                 <circle cx="11" cy="11" r="9" stroke="white" strokeWidth="1.8"/>
@@ -1270,13 +1605,13 @@ export default function App() {
             <p style={{ fontSize:16, fontWeight:600, color:T.text, margin:0 }}>No project selected</p>
             <p style={{ fontSize:13, color:T.muted, margin:0, textAlign:"center" }}>Create a new project to get started.</p>
             <button onClick={createProject}
-              style={{ padding:"9px 20px", borderRadius:7, border:"none", background:T.teal, color:"#fff", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:T.sans, marginTop:4 }}>
+              style={{ padding:"9px 20px", borderRadius:7, border:"none", background:T.teal, color:"#fff",
+                       fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:T.sans, marginTop:4 }}>
               + New project
             </button>
           </div>
         ) : (
           <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
-            {/* Project header */}
             <div style={{ padding:"14px 20px 0", background:T.surface, borderBottom:"1px solid "+T.border }}>
               <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:0 }}>
                 <h1 style={{ fontSize:17, fontWeight:600, margin:0, fontFamily:T.sans, color:T.text }}>
