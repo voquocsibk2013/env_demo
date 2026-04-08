@@ -829,17 +829,17 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
         {view === "guide" && (
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                          marginBottom:"0.75rem", flexWrap:"wrap", gap:8 }}>
+                          marginBottom:"1rem", flexWrap:"wrap", gap:8 }}>
               <div>
-                <h3 style={{ fontSize:13, fontWeight:600, margin:"0 0 1px",
+                <h3 style={{ fontSize:14, fontWeight:600, margin:"0 0 2px",
                              color:isRisks?T.red:T.purple, fontFamily:T.sans }}>
-                  {EPCIC_STAGES.find(s=>s.code===activeStage)?.label} — {isRisks?"risk guide words":"opportunity guide words"}
+                  {EPCIC_STAGES.find(s=>s.code===activeStage)?.label}
                 </h3>
-                <p style={{ fontSize:11, color:T.faint, margin:0 }}>Click any item to pre-fill the form</p>
+                <p style={{ fontSize:11, color:T.faint, margin:0 }}>Click a card to pre-fill the screening form</p>
               </div>
               <button onClick={() => setView("form")}
-                style={{ padding:"5px 12px", fontSize:11, borderRadius:6, border:"1px solid "+(isRisks?T.redBd:T.purpleBd),
-                         background:"transparent", color:isRisks?T.red:T.purple, cursor:"pointer",
+                style={{ padding:"6px 14px", fontSize:12, borderRadius:6, border:"none",
+                         background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer",
                          fontFamily:T.sans, fontWeight:500 }}>
                 + Blank form
               </button>
@@ -853,33 +853,46 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const key = (isRisks?"R":"O")+activeStage+section.cat;
               const open = expanded[key] !== false;
               return (
-                <div key={key} style={{ marginBottom:10 }}>
-                  <button onClick={() => toggleCat(key)}
-                    style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
-                             padding:"10px 16px", background:col.head,
-                             border:"none", cursor:"pointer", fontFamily:T.sans,
-                             borderRadius: open ? "8px 8px 0 0" : "8px" }}>
-                    <span style={{ fontSize:13, fontWeight:600, color:"#fff" }}>{section.cat}</span>
-                    <span style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>{open?"▾":"▸"}</span>
-                  </button>
+                <div key={key} style={{ marginBottom:20 }}>
+                  {/* Solid full-width header bar */}
+                  <div onClick={() => toggleCat(key)}
+                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                             padding:"11px 18px", background:col.head,
+                             borderRadius:6, cursor:"pointer", userSelect:"none",
+                             marginBottom: open ? 10 : 0 }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:"#fff",
+                                   letterSpacing:"0.01em" }}>{section.cat}</span>
+                    <span style={{ fontSize:13, color:"rgba(255,255,255,0.75)" }}>{open?"▾":"▸"}</span>
+                  </div>
+                  {/* Card grid — no outer border, each card has its own border */}
                   {open && (
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:1,
-                                  background:col.head, borderRadius:"0 0 8px 8px", overflow:"hidden", padding:1 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
                       {section.items.map((item, i) => (
                         <button key={i}
                           onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
-                          style={{ textAlign:"left", padding:"12px 14px",
-                                   border:"none", background:col.bg,
+                          style={{ textAlign:"left", padding:"14px 16px",
+                                   background:col.bg,
+                                   border:"1.5px solid "+col.border,
+                                   borderRadius:8,
                                    cursor:"pointer", fontFamily:T.sans,
-                                   display:"flex", flexDirection:"column", gap:6,
-                                   transition:"filter 0.12s" }}
-                          onMouseEnter={e => e.currentTarget.style.filter="brightness(0.94)"}
-                          onMouseLeave={e => e.currentTarget.style.filter="none"}>
-                          <span style={{ fontSize:12, fontWeight:600, color:col.head }}>{item.kw}</span>
-                          <span style={{ fontSize:12, color:T.text, lineHeight:1.5 }}>{item.q}</span>
-                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:3, fontWeight:500,
-                                         background:col.head, color:"#fff", alignSelf:"flex-start" }}>
-                            {isRisks ? item.aspect : item.opp}
+                                   display:"flex", flexDirection:"column", gap:8,
+                                   transition:"background 0.1s, border-color 0.1s" }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background=col.bg.replace(/[^#]$/,'')+"ee";
+                            e.currentTarget.style.borderColor=col.head;
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background=col.bg;
+                            e.currentTarget.style.borderColor=col.border;
+                          }}>
+                          <span style={{ fontSize:13, fontWeight:700, color:col.head,
+                                         lineHeight:1.3 }}>{item.kw}</span>
+                          <span style={{ fontSize:12, color:T.text, lineHeight:1.6,
+                                         fontWeight:400 }}>{item.q}</span>
+                          <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>
+                            <strong style={{ fontWeight:600, color:T.text }}>
+                              {isRisks?"Aspect":"Opportunity"}:
+                            </strong>{" "}{isRisks ? item.aspect : item.opp}
                           </span>
                         </button>
                       ))}
