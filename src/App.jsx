@@ -316,9 +316,9 @@ const THEMES = {
     "--sb-bg":       "#1C2127",
     "--sb-bg2":      "#242B33",
     "--sb-bd":       "#2E3740",
-    "--sb-text":     "#D1C9BE",
-    "--sb-muted":    "#6B7280",
-    "--sb-faint":    "#374151",
+    "--sb-text":     "#E2DDD6",
+    "--sb-muted":    "#9AA3B0",
+    "--sb-faint":    "#6B7A8D",
     "--sb-sig":      "#501313",
     "--sb-sig-text": "#F09595",
     "--cat-teal-bg": "#E0F2F1", "--cat-teal-bd": "#80CBC4", "--cat-teal-tx": "#004D40", "--cat-teal-hd": "#00695C",
@@ -364,9 +364,9 @@ const THEMES = {
     "--sb-bg":       "#0D1117",
     "--sb-bg2":      "#141820",
     "--sb-bd":       "#1E222C",
-    "--sb-text":     "#C8C2B8",
-    "--sb-muted":    "#4A5568",
-    "--sb-faint":    "#2D3748",
+    "--sb-text":     "#D6D0C8",
+    "--sb-muted":    "#8892A4",
+    "--sb-faint":    "#5A6478",
     "--sb-sig":      "#3D0808",
     "--sb-sig-text": "#E24B4A",
     "--cat-teal-bg": "#081E16", "--cat-teal-bd": "#0F6E56", "--cat-teal-tx": "#5DCAA5", "--cat-teal-hd": "#1D9E75",
@@ -427,7 +427,7 @@ const T = {
   sbSig:    "var(--sb-sig)",
   sbSigTx:  "var(--sb-sig-text)",
   mono:     "'IBM Plex Mono', 'Courier New', monospace",
-  sans:     "'IBM Plex Sans', system-ui, sans-serif",
+  sans:     "'Inter', system-ui, sans-serif",
 };
 
 
@@ -829,25 +829,23 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
         {view === "guide" && (
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                          marginBottom:"1rem", flexWrap:"wrap", gap:8 }}>
+                          marginBottom:"0.75rem", flexWrap:"wrap", gap:8 }}>
               <div>
-                <h3 style={{ fontSize:14, fontWeight:600, margin:"0 0 2px",
+                <h3 style={{ fontSize:13, fontWeight:600, margin:"0 0 1px",
                              color:isRisks?T.red:T.purple, fontFamily:T.sans }}>
                   {EPCIC_STAGES.find(s=>s.code===activeStage)?.label} — {isRisks?"risk guide words":"opportunity guide words"}
                 </h3>
-                <p style={{ fontSize:12, color:T.muted, margin:0 }}>
-                  {isRisks?"Ask these questions to identify environmental aspects and risks":"Ask these questions to identify positive environmental opportunities"}
-                </p>
+                <p style={{ fontSize:11, color:T.faint, margin:0 }}>Click any item to pre-fill the form</p>
               </div>
               <button onClick={() => setView("form")}
-                style={{ padding:"6px 13px", fontSize:12, borderRadius:6, border:"none",
-                         background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer",
+                style={{ padding:"5px 12px", fontSize:11, borderRadius:6, border:"1px solid "+(isRisks?T.redBd:T.purpleBd),
+                         background:"transparent", color:isRisks?T.red:T.purple, cursor:"pointer",
                          fontFamily:T.sans, fontWeight:500 }}>
                 + Blank form
               </button>
             </div>
             {guideData.length === 0 && (
-              <div style={{ padding:"2rem", textAlign:"center", background:T.slateBg,
+              <div style={{ padding:"1.5rem", textAlign:"center", background:T.slateBg,
                             borderRadius:8, color:T.faint, fontSize:12 }}>No guide words for this stage yet.</div>
             )}
             {guideData.map(section => {
@@ -855,34 +853,32 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const key = (isRisks?"R":"O")+activeStage+section.cat;
               const open = expanded[key] !== false;
               return (
-                <div key={key} style={{ marginBottom:8, borderRadius:8, border:"1px solid "+col.border, overflow:"hidden" }}>
+                <div key={key} style={{ marginBottom:6, borderRadius:7, border:"1px solid "+col.border, overflow:"hidden" }}>
                   <button onClick={() => toggleCat(key)}
                     style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
-                             padding:"9px 14px", background:col.bg, border:"none", cursor:"pointer", fontFamily:T.sans }}>
-                    <span style={{ fontSize:12, fontWeight:600, color:col.head }}>{section.cat}</span>
-                    <span style={{ fontFamily:T.mono, fontSize:10, color:col.head, opacity:0.5 }}>{open?"v":">"}</span>
+                             padding:"6px 12px", background:col.bg, border:"none", cursor:"pointer", fontFamily:T.sans }}>
+                    <span style={{ fontSize:11, fontWeight:600, color:col.head }}>{section.cat}</span>
+                    <span style={{ fontFamily:T.mono, fontSize:9, color:col.head, opacity:0.5 }}>{open?"v":">"}</span>
                   </button>
                   {open && (
                     <div style={{ background:T.surface }}>
                       {section.items.map((item, i) => (
-                        <div key={i} style={{ padding:"10px 14px", borderTop:"1px solid "+col.border,
-                                             display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:col.head,
-                                         marginBottom:4, letterSpacing:"0.02em" }}>{item.kw}</div>
-                            <p style={{ fontSize:12, color:T.muted, margin:"0 0 5px", lineHeight:1.55 }}>{item.q}</p>
-                            <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 7px", borderRadius:3,
-                                          background:col.bg, color:col.text }}>
-                              {isRisks?"Aspect: "+item.aspect:"Opportunity: "+item.opp}
-                            </span>
-                          </div>
-                          <button onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
-                            style={{ padding:"5px 11px", fontSize:11, borderRadius:5, border:"none",
-                                     background:col.head, color:"#fff", cursor:"pointer", fontFamily:T.sans,
-                                     fontWeight:500, whiteSpace:"nowrap", flexShrink:0 }}>
-                            Use
-                          </button>
-                        </div>
+                        <button key={i}
+                          title={item.q}
+                          onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
+                          style={{ width:"100%", textAlign:"left", display:"flex", alignItems:"baseline", gap:10,
+                                   padding:"6px 12px", borderTop:"1px solid "+col.border,
+                                   background:"transparent", border:"none", borderTop:"1px solid "+col.border,
+                                   cursor:"pointer", fontFamily:T.sans, transition:"background 0.1s" }}
+                          onMouseEnter={e => e.currentTarget.style.background=col.bg}
+                          onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                          <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:col.head,
+                                         whiteSpace:"nowrap", flexShrink:0, minWidth:0 }}>{item.kw}</span>
+                          <span style={{ fontSize:11, color:T.faint, overflow:"hidden", textOverflow:"ellipsis",
+                                         whiteSpace:"nowrap", flex:1 }}>
+                            {isRisks ? item.aspect : item.opp}
+                          </span>
+                        </button>
                       ))}
                     </div>
                   )}
