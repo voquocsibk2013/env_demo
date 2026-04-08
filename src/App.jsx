@@ -313,14 +313,14 @@ const THEMES = {
     "--slate":       "#455A64",
     "--slate-bg":    "#ECEFF1",
     "--slate-bd":    "#B0BEC5",
-    "--sb-bg":       "#1C2127",
-    "--sb-bg2":      "#242B33",
-    "--sb-bd":       "#2E3740",
-    "--sb-text":     "#E2DDD6",
-    "--sb-muted":    "#9AA3B0",
-    "--sb-faint":    "#6B7A8D",
-    "--sb-sig":      "#501313",
-    "--sb-sig-text": "#F09595",
+    "--sb-bg":       "#EAE7DF",
+    "--sb-bg2":      "#DEDBD3",
+    "--sb-bd":       "#CBC7BF",
+    "--sb-text":     "#1A1C1E",
+    "--sb-muted":    "#4B5563",
+    "--sb-faint":    "#9CA3AF",
+    "--sb-sig":      "#FCEBEB",
+    "--sb-sig-text": "#A32D2D",
     "--cat-teal-bg": "#E0F2F1", "--cat-teal-bd": "#80CBC4", "--cat-teal-tx": "#004D40", "--cat-teal-hd": "#00695C",
     "--cat-purple-bg":"#EDE7F6","--cat-purple-bd":"#CE93D8","--cat-purple-tx":"#4527A0","--cat-purple-hd":"#6A1B9A",
     "--cat-amber-bg": "#FFF8E1","--cat-amber-bd": "#FFE082","--cat-amber-tx": "#E65100","--cat-amber-hd": "#F57F17",
@@ -861,22 +861,23 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                     <span style={{ fontFamily:T.mono, fontSize:9, color:col.head, opacity:0.5 }}>{open?"v":">"}</span>
                   </button>
                   {open && (
-                    <div style={{ background:T.surface }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:8, background:T.bg }}>
                       {section.items.map((item, i) => (
                         <button key={i}
-                          title={item.q}
                           onClick={() => isRisks ? prefillRisk(activeStage, item, section.color) : prefillOpp(activeStage, item, section.color)}
-                          style={{ width:"100%", textAlign:"left", display:"flex", alignItems:"baseline", gap:10,
-                                   padding:"6px 12px", borderTop:"1px solid "+col.border,
-                                   background:"transparent", border:"none", borderTop:"1px solid "+col.border,
-                                   cursor:"pointer", fontFamily:T.sans, transition:"background 0.1s" }}
-                          onMouseEnter={e => e.currentTarget.style.background=col.bg}
-                          onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                          style={{ textAlign:"left", padding:"12px 14px", borderRadius:8,
+                                   border:"1px solid "+col.border, background:T.surface,
+                                   cursor:"pointer", fontFamily:T.sans, transition:"background 0.12s",
+                                   display:"flex", flexDirection:"column", gap:6 }}
+                          onMouseEnter={e => { e.currentTarget.style.background=col.bg; }}
+                          onMouseLeave={e => { e.currentTarget.style.background=T.surface; }}>
                           <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:col.head,
-                                         whiteSpace:"nowrap", flexShrink:0, minWidth:0 }}>{item.kw}</span>
-                          <span style={{ fontSize:11, color:T.faint, overflow:"hidden", textOverflow:"ellipsis",
-                                         whiteSpace:"nowrap", flex:1 }}>
-                            {isRisks ? item.aspect : item.opp}
+                                         letterSpacing:"0.02em" }}>{item.kw}</span>
+                          <span style={{ fontSize:12, color:T.text, lineHeight:1.5 }}>{item.q}</span>
+                          <span style={{ fontFamily:T.mono, fontSize:10, padding:"2px 7px", borderRadius:3,
+                                         background:col.bg, color:col.text, alignSelf:"flex-start",
+                                         border:"1px solid "+col.border }}>
+                            {isRisks ? "Aspect: "+item.aspect : "Opportunity: "+item.opp}
                           </span>
                         </button>
                       ))}
@@ -1021,6 +1022,10 @@ function ProjectView({ project, onChange, onDelete }) {
   const [aiOpen, setAiOpen]               = useState(false);
   const [dashFilter, setDashFilter]       = useState("all");
   const [aspFilter, setAspFilter]         = useState("All");
+  const [aspSort,   setAspSort]           = useState({ col:null, dir:"asc" });
+  const [aspSearch, setAspSearch]         = useState("");
+  const [oppSort,   setOppSort]           = useState({ col:null, dir:"asc" });
+  const [oppSearch, setOppSearch]         = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const aspects = project.aspects || [];
@@ -1075,7 +1080,25 @@ function ProjectView({ project, onChange, onDelete }) {
                     : dashFilter==="opps"    ? aspects
                     : aspects;
 
-  const filteredAspects = aspFilter==="All" ? aspects : aspects.filter(a=>calcSig(a)===aspFilter);
+  const filteredAspects = (() => {
+    let r = aspFilter==="All" ? aspects : aspects.filter(a=>calcSig(a)===aspFilter);
+    if (aspSearch) { const q=aspSearch.toLowerCase(); r=r.filter(a=>(a.aspect||"").toLowerCase().includes(q)||(a.area||"").toLowerCase().includes(q)||(a.phase||"").toLowerCase().includes(q)); }
+    if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
+      if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
+      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
+      return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
+    return r;
+  })();
+  const filteredOpps = (() => {
+    let r = opps;
+    if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
+    if (oppSort.col) r=[...r].sort((a,b)=>{ let va,vb;
+      if(oppSort.col==="score"){va=calcOppScore(a);vb=calcOppScore(b);}
+      else{va=(a[oppSort.col]||"").toLowerCase();vb=(b[oppSort.col]||"").toLowerCase();}
+      return oppSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
+    return r;
+  })();
 
   if (editAspect !== null) return (
     <div style={{ background:T.bg, minHeight:"100%" }}>
@@ -1108,10 +1131,40 @@ function ProjectView({ project, onChange, onDelete }) {
   const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
 
   // Shared aspect table renderer
+  const STH = ({ col, label }) => {
+    const active = aspSort.col === col;
+    return (
+      <th onClick={()=>setAspSort(p=>({col, dir:p.col===col&&p.dir==="asc"?"desc":"asc"}))}
+        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+                 color:active?T.teal:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
+                 letterSpacing:"0.07em", textTransform:"uppercase", cursor:"pointer", userSelect:"none",
+                 background:active?T.tealBg:undefined }}>
+        <span style={{ display:"flex", alignItems:"center", gap:3 }}>
+          {label}
+          <span style={{ fontSize:10, opacity:active?1:0.35 }}>{active?(aspSort.dir==="asc"?"↑":"↓"):"↕"}</span>
+        </span>
+      </th>
+    );
+  };
+  const PlainTH = ({ children }) => (
+    <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+                 color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
+                 letterSpacing:"0.07em", textTransform:"uppercase" }}>{children}</th>
+  );
   const AspectTable = ({ rows, onEdit, onDelete: onDel }) => (
     <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
-        <thead><tr>{["Ref","Phase","Aspect","Cond.","Impact / Receptor","Score","Significance","Status",""].map(h=><TH key={h}>{h}</TH>)}</tr></thead>
+        <thead><tr>
+          <PlainTH>Ref</PlainTH>
+          <STH col="phase" label="Phase"/>
+          <STH col="aspect" label="Aspect"/>
+          <PlainTH>Cond.</PlainTH>
+          <STH col="impact" label="Impact / Receptor"/>
+          <STH col="score" label="Score"/>
+          <STH col="sig" label="Significance"/>
+          <STH col="status" label="Status"/>
+          <PlainTH></PlainTH>
+        </tr></thead>
         <tbody>
           {rows.map((a) => {
             const score  = calcScore(a);
@@ -1128,9 +1181,7 @@ function ProjectView({ project, onChange, onDelete }) {
                 </td>
                 <td style={{ padding:"9px 12px", maxWidth:180 }}>
                   <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>
-                    {a.aspect||"—"}
-                  </div>
+                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
                   {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
                 </td>
                 <td style={{ padding:"9px 12px" }}>{a.condition && <span style={condStyle(a.condition)}>{a.condition}</span>}</td>
@@ -1158,10 +1209,35 @@ function ProjectView({ project, onChange, onDelete }) {
   );
 
   // Shared opp table renderer
+  const OSTH = ({ col, label }) => {
+    const active = oppSort.col === col;
+    return (
+      <th onClick={()=>setOppSort(p=>({col, dir:p.col===col&&p.dir==="asc"?"desc":"asc"}))}
+        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+                 color:active?T.purple:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
+                 letterSpacing:"0.07em", textTransform:"uppercase", cursor:"pointer", userSelect:"none",
+                 background:active?T.purpleBg:undefined }}>
+        <span style={{ display:"flex", alignItems:"center", gap:3 }}>
+          {label}
+          <span style={{ fontSize:10, opacity:active?1:0.35 }}>{active?(oppSort.dir==="asc"?"↑":"↓"):"↕"}</span>
+        </span>
+      </th>
+    );
+  };
   const OppTable = ({ rows, onEdit, onDelete: onDel }) => (
     <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
-        <thead><tr>{["Ref","Type","Description","Linked aspect","Score","Priority","Materiality","Status",""].map(h=><TH key={h}>{h}</TH>)}</tr></thead>
+        <thead><tr>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
+          <OSTH col="type" label="Type"/>
+          <OSTH col="description" label="Description"/>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Linked</th>
+          <OSTH col="score" label="Score"/>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority</th>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
+          <OSTH col="status" label="Status"/>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}></th>
+        </tr></thead>
         <tbody>
           {rows.map((o) => {
             const score  = calcOppScore(o);
@@ -1171,38 +1247,19 @@ function ProjectView({ project, onChange, onDelete }) {
             const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
             return (
               <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
-                <td style={{ padding:"9px 12px" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span>
-                </td>
+                <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
                 <td style={{ padding:"9px 12px", maxWidth:130 }}>
-                  {o.type
-                    ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
-                                     background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
-                                     border:"1px solid "+(rc?rc.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>
-                    : <span style={{ color:T.faint }}>—</span>}
+                  {o.type?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple, border:"1px solid "+(rc?rc.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>:<span style={{ color:T.faint }}>—</span>}
                 </td>
                 <td style={{ padding:"9px 12px", maxWidth:200 }}>
-                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                                fontWeight:500, color: rc ? rc.head : T.text }} title={o.description}>
-                    {o.description||"—"}
-                  </div>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color: rc ? rc.head : T.text }} title={o.description}>{o.description||"—"}</div>
                   {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
                 </td>
-                <td style={{ padding:"9px 12px" }}>
-                  {o.aspectRef?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>:<span style={{ color:T.faint }}>—</span>}
-                </td>
-                <td style={{ padding:"9px 12px", textAlign:"center" }}>
-                  <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span>
-                </td>
-                <td style={{ padding:"9px 12px" }}>
-                  {score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=18?"High":score>=9?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}
-                </td>
-                <td style={{ padding:"9px 12px" }}>
-                  {o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}
-                </td>
-                <td style={{ padding:"9px 12px" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span>
-                </td>
+                <td style={{ padding:"9px 12px" }}>{o.aspectRef?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
+                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=18?"High":score>=9?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
                   <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
@@ -1304,6 +1361,8 @@ function ProjectView({ project, onChange, onDelete }) {
                        background:aiOpen?T.purpleBg:"transparent", color:T.purple }}>
               AI suggest
             </button>
+              <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
+              placeholder="Search aspects..." style={{ width:180, padding:"5px 10px", fontSize:12 }}/>
             <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
               {["All","SIGNIFICANT","WATCH","Low"].map(f => (
                 <button key={f} onClick={()=>setAspFilter(f)}
@@ -1330,10 +1389,12 @@ function ProjectView({ project, onChange, onDelete }) {
 
       {tab === "opportunities" && (
         <div>
-          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center" }}>
+          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
+            <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
+              placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
             <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>
-              {opps.length} opportunit{opps.length!==1?"ies":"y"}
+              {filteredOpps.length} of {opps.length} opportunit{opps.length!==1?"ies":"y"}
             </span>
           </div>
           {opps.length === 0 ? (
@@ -1342,7 +1403,7 @@ function ProjectView({ project, onChange, onDelete }) {
               <p style={{ fontSize:12, margin:0 }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
             </div>
           ) : (
-            <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp}/>
+            <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp}/>
           )}
         </div>
       )}
@@ -1442,7 +1503,7 @@ function ProjectView({ project, onChange, onDelete }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme }) {
+function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom }) {
   return (
     <div style={{ width:215, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
       <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid "+T.sbBd }}>
@@ -1492,12 +1553,25 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme })
       </div>
       <div style={{ padding:"8px", borderTop:"1px solid "+T.sbBd }}>
         <button onClick={onNew}
-          style={{ width:"100%", padding:"8px", borderRadius:6, border:"1px dashed "+T.sbBd,
-                   background:"transparent", color:T.sbFaint, fontFamily:T.mono, fontSize:11, cursor:"pointer" }}
+          style={{ width:"100%", padding:"7px", borderRadius:6, border:"1px dashed "+T.sbBd,
+                   background:"transparent", color:T.sbFaint, fontFamily:T.mono, fontSize:11, cursor:"pointer",
+                   marginBottom:6 }}
           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.color=T.teal;}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--sb-bd)";e.currentTarget.style.color="var(--sb-faint)";}}>
           + New project
         </button>
+        <div style={{ display:"flex", gap:4 }}>
+          {[[0.88,"A−"],[1.0,"A"],[1.15,"A+"]].map(([val,label]) => (
+            <button key={val} onClick={()=>onZoom(val)}
+              style={{ flex:1, padding:"4px 0", fontSize:val===1.15?12:val===1.0?11:10,
+                       fontFamily:T.mono, fontWeight:500, cursor:"pointer", borderRadius:4,
+                       border:"1px solid "+(Math.abs(zoom-val)<0.01?T.teal:"var(--sb-bd)"),
+                       background:Math.abs(zoom-val)<0.01?T.teal:"transparent",
+                       color:Math.abs(zoom-val)<0.01?"#fff":"var(--sb-muted)" }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1509,6 +1583,7 @@ export default function App() {
   const [activeId, setActiveId] = useState(null);
   const [loaded,   setLoaded]   = useState(false);
   const [isDark,   setIsDark]   = useState(false);
+  const [zoom,    setZoom]    = useState(() => parseFloat(localStorage.getItem("env-zoom")||"1"));
 
   useEffect(() => {
     applyTheme("light");
@@ -1529,6 +1604,7 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId, theme: isDark?"dark":"light" })); } catch {}
+    localStorage.setItem("env-zoom", String(zoom));
   }, [projects, activeId, loaded, isDark]);
 
   const toggleTheme = () => {
@@ -1536,6 +1612,7 @@ export default function App() {
     setIsDark(next);
     applyTheme(next?"dark":"light");
   };
+  const handleZoom = v => { setZoom(v); localStorage.setItem("env-zoom", String(v)); };
 
   const createProject = () => {
     const p = newProject();
@@ -1558,9 +1635,9 @@ export default function App() {
   const active = projects.find(p => p.id === activeId) || null;
 
   return (
-    <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
+    <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg, fontSize:"calc("+zoom+"*13px)" }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
-               isDark={isDark} onToggleTheme={toggleTheme}/>
+               isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
         {!active ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
