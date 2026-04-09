@@ -2262,7 +2262,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
 // ── Portfolio Overview ────────────────────────────────────────────────────────
 function PortfolioView({ projects, onClose, onSelect }) {
-  const [activeContract, setActiveContract] = React.useState("__all__");
+  const [activeContract, setActiveContract] = useState("__all__");
 
   // Build contract list
   const contractMap = {};
