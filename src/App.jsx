@@ -1040,6 +1040,8 @@ function ProjectView({ project, onChange, onDelete }) {
   const [aspSearch, setAspSearch]         = useState("");
   const [oppSort,   setOppSort]           = useState({ col:null, dir:"asc" });
   const [oppSearch, setOppSearch]         = useState("");
+  const [selectedAsp, setSelectedAsp]     = useState(new Set());
+  const [selectedOpp, setSelectedOpp]     = useState(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const aspects = project.aspects || [];
@@ -1081,10 +1083,44 @@ function ProjectView({ project, onChange, onDelete }) {
                changelog:logChange("Deleted opportunity", `${o.ref}: ${(o.description||"").slice(0,60)}`) });
   };
 
+  const bulkDeleteAspects = () => {
+    const kept = aspects.filter(a=>!selectedAsp.has(a.id));
+    const log  = logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed");
+    onChange({ ...project, aspects:kept, changelog:[...(project.changelog||[]), log] });
+    setSelectedAsp(new Set());
+  };
+  const bulkSetAspStatus = (status) => {
+    const updated = aspects.map(a => selectedAsp.has(a.id) ? { ...a, status } : a);
+    const log  = logChange("Bulk updated status", selectedAsp.size+" aspect(s) set to "+status);
+    onChange({ ...project, aspects:updated, changelog:[...(project.changelog||[]), log] });
+    setSelectedAsp(new Set());
+  };
+  const bulkDeleteOpps = () => {
+    const kept = opps.filter(o=>!selectedOpp.has(o.id));
+    const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed");
+    onChange({ ...project, opps:kept, changelog:[...(project.changelog||[]), log] });
+    setSelectedOpp(new Set());
+  };
+  const bulkSetOppStatus = (status) => {
+    const updated = opps.map(o => selectedOpp.has(o.id) ? { ...o, status } : o);
+    const log  = logChange("Bulk updated opp status", selectedOpp.size+" opportunity(s) set to "+status);
+    onChange({ ...project, opps:updated, changelog:[...(project.changelog||[]), log] });
+    setSelectedOpp(new Set());
+  };
+  const toggleSelAsp = (id) => setSelectedAsp(prev => { const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const toggleSelOpp = (id) => setSelectedOpp(prev => { const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const toggleAllAsp = (rows) => setSelectedAsp(prev => prev.size===rows.length ? new Set() : new Set(rows.map(a=>a.id)));
+  const toggleAllOpp = (rows) => setSelectedOpp(prev => prev.size===rows.length ? new Set() : new Set(rows.map(o=>o.id)));
+
   const sigCount   = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
   const watchCount = aspects.filter(a=>calcSig(a)==="WATCH").length;
   const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
   const highOpps   = opps.filter(o=>calcOppScore(o)>=18).length;
+  const statusCounts = STATUSES.reduce((acc,s) => {
+    acc[s] = aspects.filter(a=>a.status===s).length; return acc;
+  }, {});
+  const statusColors = { "Open":T.red, "In Progress":T.amber, "Controlled":T.teal, "Accepted":T.green, "Closed":T.slateBg };
+  const statusBg    = { "Open":T.redBg, "In Progress":T.amberBg, "Controlled":T.tealBg, "Accepted":T.greenBg, "Closed":T.slateBg };
 
   // Dashboard filter drives which aspects show
   const dashAspects = dashFilter==="all"     ? aspects
@@ -1154,6 +1190,31 @@ function ProjectView({ project, onChange, onDelete }) {
   const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
 
   // Shared aspect table renderer
+  const BulkBar = ({ count, onDelete, onStatusChange, statusOptions, accentColor, accentBg, accentBd }) => (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px",
+                  background:accentBg, border:"1px solid "+accentBd,
+                  borderRadius:"8px 8px 0 0", borderBottom:"none" }}>
+      <span style={{ fontSize:12, fontWeight:500, color:accentColor }}>{count} selected</span>
+      <select onChange={e=>{ if(e.target.value){ onStatusChange(e.target.value); e.target.value=""; }}}
+        style={{ fontSize:11, padding:"3px 8px", borderRadius:4, border:"1px solid "+accentBd,
+                 background:"transparent", color:accentColor, cursor:"pointer" }}
+        defaultValue="">
+        <option value="" disabled>Set status...</option>
+        {statusOptions.map(s=><option key={s} value={s}>{s}</option>)}
+      </select>
+      <button onClick={onDelete}
+        style={{ fontSize:11, padding:"4px 10px", borderRadius:4, border:"1px solid "+T.redBd,
+                 background:T.redBg, color:T.red, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+        Delete selected
+      </button>
+      <button onClick={()=> onStatusChange(null)}
+        style={{ fontSize:11, padding:"4px 8px", borderRadius:4, border:"none",
+                 background:"transparent", color:accentColor, cursor:"pointer", marginLeft:"auto" }}>
+        Clear ✕
+      </button>
+    </div>
+  );
+
   const STH = ({ col, label }) => {
     const active = aspSort.col === col;
     return (
@@ -1174,10 +1235,16 @@ function ProjectView({ project, onChange, onDelete }) {
                  color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
                  letterSpacing:"0.07em", textTransform:"uppercase" }}>{children}</th>
   );
-  const AspectTable = ({ rows, onEdit, onDelete: onDel }) => (
+  const AspectTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll }) => (
     <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
         <thead><tr>
+          <th style={{ padding:"8px 8px 8px 12px", borderBottom:"1px solid "+T.border, width:32 }}>
+            <input type="checkbox"
+              checked={rows.length>0 && rows.every(a=>selection&&selection.has(a.id))}
+              onChange={()=>onToggleAll&&onToggleAll(rows)}
+              style={{ cursor:"pointer", width:13, height:13 }}/>
+          </th>
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
           <STH col="aspect" label="Aspect"/>
@@ -1195,7 +1262,13 @@ function ProjectView({ project, onChange, onDelete }) {
             const rc     = rowColor(a);
             const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
             return (
-              <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
+              <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd,
+                                 background: selection&&selection.has(a.id) ? T.tealBg : undefined }}>
+                <td style={{ padding:"9px 8px 9px 12px" }}>
+                  <input type="checkbox" checked={!!(selection&&selection.has(a.id))}
+                    onChange={()=>onToggle&&onToggle(a.id)}
+                    style={{ cursor:"pointer", width:13, height:13 }}/>
+                </td>
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
                 </td>
@@ -1247,10 +1320,16 @@ function ProjectView({ project, onChange, onDelete }) {
       </th>
     );
   };
-  const OppTable = ({ rows, onEdit, onDelete: onDel }) => (
+  const OppTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll }) => (
     <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
         <thead><tr>
+          <th style={{ padding:"8px 8px 8px 12px", borderBottom:"1px solid "+T.border, width:32 }}>
+            <input type="checkbox"
+              checked={rows.length>0 && rows.every(o=>selection&&selection.has(o.id))}
+              onChange={()=>onToggleAll&&onToggleAll(rows)}
+              style={{ cursor:"pointer", width:13, height:13 }}/>
+          </th>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
           <OSTH col="type" label="Type"/>
           <OSTH col="description" label="Description"/>
@@ -1269,7 +1348,13 @@ function ProjectView({ project, onChange, onDelete }) {
             const rc     = rowColor(o);
             const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
             return (
-              <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd }}>
+              <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd,
+                                 background: selection&&selection.has(o.id) ? T.purpleBg : undefined }}>
+                <td style={{ padding:"9px 8px 9px 12px" }}>
+                  <input type="checkbox" checked={!!(selection&&selection.has(o.id))}
+                    onChange={()=>onToggle&&onToggle(o.id)}
+                    style={{ cursor:"pointer", width:13, height:13 }}/>
+                </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
                 <td style={{ padding:"9px 12px", maxWidth:130 }}>
                   {o.type?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple, border:"1px solid "+(rc?rc.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>:<span style={{ color:T.faint }}>—</span>}
@@ -1328,6 +1413,30 @@ function ProjectView({ project, onChange, onDelete }) {
             <StatCard label="Opportunities" value={opps.length}    filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
           </div>
 
+          {/* Status progress bar */}
+          {aspects.length > 0 && (
+            <div style={{ marginBottom:"1.25rem" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:11, fontWeight:500, color:T.muted }}>Aspect status</span>
+                <span style={{ fontSize:11, color:T.faint }}>{aspects.length} total</span>
+              </div>
+              <div style={{ display:"flex", borderRadius:6, overflow:"hidden", height:10, background:T.border, gap:"1px" }}>
+                {STATUSES.map(s => statusCounts[s] > 0 && (
+                  <div key={s} title={s+": "+statusCounts[s]}
+                    style={{ flex:statusCounts[s], background:statusColors[s], transition:"flex 0.3s", minWidth:2 }}/>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:12, marginTop:7, flexWrap:"wrap" }}>
+                {STATUSES.map(s => statusCounts[s] > 0 && (
+                  <span key={s} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:T.muted }}>
+                    <span style={{ width:8, height:8, borderRadius:"50%", background:statusColors[s], flexShrink:0, display:"inline-block" }}/>
+                    {s} <strong style={{ color:T.text, fontWeight:600 }}>{statusCounts[s]}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {dashFilter !== "all" && dashFilter !== "opps" && (
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"1rem" }}>
               <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>
@@ -1347,7 +1456,7 @@ function ProjectView({ project, onChange, onDelete }) {
               </div>
               {opps.length===0
                 ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
-                : <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp}/>}
+                : <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>}
             </div>
           )}
 
@@ -1364,7 +1473,7 @@ function ProjectView({ project, onChange, onDelete }) {
                   : <p style={{ margin:0, fontSize:13, color:T.muted }}>No {dashFilter==="sig"?"significant":dashFilter==="watch"?"watch":dashFilter} aspects.</p>}
               </div>
             ) : (
-              <AspectTable rows={sortedDashAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
+              <AspectTable rows={sortedDashAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
             )
           )}
         </div>
@@ -1405,7 +1514,16 @@ function ProjectView({ project, onChange, onDelete }) {
               {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
-            <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect}/>
+            <div>
+              {selectedAsp.size > 0 && (
+                <BulkBar count={selectedAsp.size}
+                  accentColor={T.teal} accentBg={T.tealBg} accentBd={T.tealBd}
+                  statusOptions={STATUSES}
+                  onDelete={bulkDeleteAspects}
+                  onStatusChange={s => s ? bulkSetAspStatus(s) : setSelectedAsp(new Set())}/>
+              )}
+              <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
+            </div>
           )}
         </div>
       )}
@@ -1426,7 +1544,16 @@ function ProjectView({ project, onChange, onDelete }) {
               <p style={{ fontSize:12, margin:0 }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
             </div>
           ) : (
-            <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp}/>
+            <div>
+              {selectedOpp.size > 0 && (
+                <BulkBar count={selectedOpp.size}
+                  accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
+                  statusOptions={OPP_STATUSES}
+                  onDelete={bulkDeleteOpps}
+                  onStatusChange={s => s ? bulkSetOppStatus(s) : setSelectedOpp(new Set())}/>
+              )}
+              <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
+            </div>
           )}
         </div>
       )}
@@ -1526,7 +1653,7 @@ function ProjectView({ project, onChange, onDelete }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom }) {
+function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate }) {
   return (
     <div style={{ width:215, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
       <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid "+T.sbBd }}>
@@ -1553,24 +1680,36 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
           const sigC    = (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").length;
           const isActive = p.id === activeId;
           return (
-            <button key={p.id} onClick={()=>onSelect(p.id)}
-              style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6, marginBottom:1,
-                       cursor:"pointer", fontFamily:T.sans, border:"1px solid transparent",
-                       background: isActive ? T.sbBg2 : "transparent",
-                       borderColor: isActive ? T.sbBd : "transparent" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
-                <span style={{ fontSize:12, fontWeight:isActive?600:400, color:isActive?T.sbText:T.sbMuted,
-                               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {p.name || <span style={{ color:T.sbFaint, fontStyle:"italic" }}>Unnamed project</span>}
-                </span>
-                {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"1px 5px",
-                                          borderRadius:3, background:T.sbSig, color:T.sbSigTx, flexShrink:0 }}>{sigC}</span>}
-              </div>
-              <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:"2px 0 0",
-                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {p.type||"No type"} · {(p.aspects||[]).length} aspects
-              </p>
-            </button>
+            <div key={p.id} style={{ position:"relative", marginBottom:1 }}
+              onMouseEnter={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="1"; }}
+              onMouseLeave={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="0"; }}>
+              <button onClick={()=>onSelect(p.id)}
+                style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6,
+                         cursor:"pointer", fontFamily:T.sans, border:"1px solid transparent",
+                         background: isActive ? T.sbBg2 : "transparent",
+                         borderColor: isActive ? T.sbBd : "transparent" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
+                  <span style={{ fontSize:12, fontWeight:isActive?600:400, color:isActive?T.sbText:T.sbMuted,
+                                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {p.name || <span style={{ color:T.sbFaint, fontStyle:"italic" }}>Unnamed project</span>}
+                  </span>
+                  {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"1px 5px",
+                                            borderRadius:3, background:T.sbSig, color:T.sbSigTx, flexShrink:0 }}>{sigC}</span>}
+                </div>
+                <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:"2px 0 0",
+                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {p.type||"No type"} · {(p.aspects||[]).length} aspects
+                </p>
+              </button>
+              <button className="dup-btn" onClick={e=>{ e.stopPropagation(); onDuplicate(p.id); }}
+                title="Duplicate project"
+                style={{ position:"absolute", top:"50%", right:6, transform:"translateY(-50%)",
+                         opacity:0, transition:"opacity 0.15s",
+                         background:T.sbBg2, border:"1px solid "+T.sbBd, borderRadius:4,
+                         padding:"3px 6px", cursor:"pointer", fontSize:11, color:T.sbMuted }}>
+                ⧉
+              </button>
+            </div>
           );
         })}
       </div>
@@ -1645,6 +1784,28 @@ export default function App() {
     setActiveId(p.id);
   };
   const updateProject = u => setProjects(prev => prev.map(p => p.id===u.id ? u : p));
+  const duplicateProject = id => {
+    const src = projects.find(p=>p.id===id);
+    if (!src) return;
+    const ts = Date.now();
+    const newId = ts.toString();
+    const copy = {
+      ...src,
+      id: newId,
+      name: (src.name||"Unnamed")+" (copy)",
+      createdAt: new Date().toISOString(),
+      aspects: (src.aspects||[]).map((a,i) => ({ ...a, id:(ts+i+1).toString() })),
+      opps:    (src.opps||[]).map((o,i)    => ({ ...o, id:(ts+100+i).toString() })),
+      changelog: [],
+    };
+    setProjects(prev => {
+      const idx = prev.findIndex(p=>p.id===id);
+      const next = [...prev];
+      next.splice(idx+1, 0, copy);
+      return next;
+    });
+    setActiveId(newId);
+  };
   const deleteProject = id => {
     const remaining = projects.filter(p => p.id !== id);
     setProjects(remaining);
@@ -1662,7 +1823,7 @@ export default function App() {
   return (
     <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
-               isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom}/>
+               isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
         {!active ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
