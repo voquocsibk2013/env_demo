@@ -8,9 +8,9 @@ const SENSITIVITIES = ["High","Medium","Low"];
 const SCALES        = ["Global","Regional","Local"];
 const DURATIONS     = ["Permanent (>10yr)","Long-term (1-10yr)","Temporary (<1yr)"];
 const PROJ_TYPES    = ["Offshore O&G","Onshore Infrastructure","Industrial / Process"];
-const STATUSES      = ["Open","In Progress","Controlled","Accepted","Closed"];
+const STATUSES      = ["Open","In Progress","Closed"];
 const OPP_TYPES     = ["Resource Efficiency","Circular Economy","Low-Carbon Technology","Nature-Based Solutions","Green Finance & Taxonomy","New Business / Market","Reputational / SLO","Climate Resilience","Regulatory Incentive","Biodiversity Net Gain"];
-const OPP_STATUSES  = ["Open","In Progress","Implemented","Partially implemented","Deferred","Not feasible"];
+const OPP_STATUSES  = ["Open","In Progress","Closed"];
 const STORAGE_KEY   = "env-toolkit-v4";
 
 // ── EPCIC stages ──────────────────────────────────────────────────────────────
@@ -467,7 +467,7 @@ const emptyAspect = () => ({
 const emptyOpp = () => ({
   type:"", aspectRef:"", materiality:"Both",
   description:"", envBenefit:"", bizBenefit:"",
-  envValue:2, bizValue:2, feasibility:2,
+  envValue:3, bizValue:3, feasibility:3,
   action:"", alignment:"", owner:"", status:"Open", _color:""
 });
 const newProject = () => ({
@@ -626,7 +626,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
   const [f, setF] = useState({ ...emptyOpp(), ...opp });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
   const score = calcOppScore(f);
-  const sc = score>=18?{bg:"var(--teal-bg)",c:"var(--teal-dk)"}:score>=9?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+  const sc = score>=75?{bg:"var(--teal-bg)",c:"var(--teal-dk)"}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
   return (
     <div style={{ maxWidth:800, margin:"0 auto", padding:"1.5rem" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
@@ -648,13 +648,13 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
         <SectionLabel>Priority score = env value x business value x feasibility (max 27)</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px" }}>
           {[{k:"envValue",l:"Env value (1-3)"},{k:"bizValue",l:"Business value (1-3)"},{k:"feasibility",l:"Feasibility (1-3)"}].map(({ k, l }) => (
-            <Fld key={k} label={l}><input type="number" min={1} max={3} value={f[k]} onChange={e=>set(k,Math.min(3,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+            <Fld key={k} label={l}><input type="number" min={1} max={3} value={f[k]} onChange={e=>set(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
           ))}
         </div>
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd, display:"flex", alignItems:"center", gap:12 }}>
           <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>Score:</span>
           <span style={{ fontFamily:T.mono, fontSize:20, fontWeight:500, padding:"2px 12px", borderRadius:5, background:sc.bg, color:sc.c }}>{score}</span>
-          <span style={{ fontSize:12, color:T.muted }}>{score>=18?"High priority - act now":score>=9?"Medium priority":"Low priority"}</span>
+          <span style={{ fontSize:12, color:T.muted }}>{score>=75?"High priority - act now":score>=30?"Medium priority":"Low priority"}</span>
         </div>
       </Card>
       <Card style={{ marginBottom:"1.5rem" }}>
@@ -778,7 +778,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const riskScore = calcScore(riskForm);
   const riskSig   = calcSig(riskForm);
   const oppScore  = calcOppScore(oppForm);
-  const oppSc     = oppScore>=18?{bg:T.tealBg,c:T.tealDark}:oppScore>=9?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+  const oppSc     = oppScore>=75?{bg:T.tealBg,c:T.tealDark}:oppScore>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
   const guideData = isRisks ? (GW_RISK[activeStage]||[]) : (GW_OPP[activeStage]||[]);
 
   return (
@@ -992,16 +992,16 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               </div>
             </Card>
             <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
-              <SectionLabel>Priority score = env value x business value x feasibility (max 27)</SectionLabel>
+              <SectionLabel>Priority score = env value x business value x feasibility (max 125)</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px" }}>
-                {[{k:"envValue",l:"Env value (1-3)"},{k:"bizValue",l:"Business value (1-3)"},{k:"feasibility",l:"Feasibility (1-3)"}].map(({ k, l }) => (
-                  <Fld key={k} label={l}><input type="number" min={1} max={3} value={oppForm[k]} onChange={e=>setOF(k,Math.min(3,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+                {[{k:"envValue",l:"Env value (1-5)"},{k:"bizValue",l:"Business value (1-5)"},{k:"feasibility",l:"Feasibility (1-5)"}].map(({ k, l }) => (
+                  <Fld key={k} label={l}><input type="number" min={1} max={5} value={oppForm[k]} onChange={e=>setOF(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
                 ))}
               </div>
               <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd, display:"flex", alignItems:"center", gap:12 }}>
                 <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>Score:</span>
                 <span style={{ fontFamily:T.mono, fontSize:20, fontWeight:500, padding:"2px 12px", borderRadius:5, background:oppSc.bg, color:oppSc.c }}>{oppScore}</span>
-                <span style={{ fontSize:12, color:T.muted }}>{oppScore>=18?"High priority - act now":oppScore>=9?"Medium priority":"Low priority"}</span>
+                <span style={{ fontSize:12, color:T.muted }}>{oppScore>=75?"High priority - act now":oppScore>=30?"Medium priority":"Low priority"}</span>
               </div>
             </Card>
             <Card style={{ marginBottom:"1rem" }}>
@@ -1115,12 +1115,12 @@ function ProjectView({ project, onChange, onDelete }) {
   const sigCount   = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
   const watchCount = aspects.filter(a=>calcSig(a)==="WATCH").length;
   const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
-  const highOpps   = opps.filter(o=>calcOppScore(o)>=18).length;
+  const highOpps   = opps.filter(o=>calcOppScore(o)>=75).length;
   const statusCounts = STATUSES.reduce((acc,s) => {
     acc[s] = aspects.filter(a=>a.status===s).length; return acc;
   }, {});
-  const statusColors = { "Open":T.red, "In Progress":T.amber, "Controlled":T.teal, "Accepted":T.green, "Closed":T.slateBg };
-  const statusBg    = { "Open":T.redBg, "In Progress":T.amberBg, "Controlled":T.tealBg, "Accepted":T.greenBg, "Closed":T.slateBg };
+  const statusColors = { "Open":T.red, "In Progress":T.amber, "Closed":T.green };
+  const statusBg    = { "Open":T.redBg, "In Progress":T.amberBg, "Closed":T.greenBg };
 
   // Dashboard filter drives which aspects show
   const dashAspects = dashFilter==="all"     ? aspects
@@ -1343,7 +1343,7 @@ function ProjectView({ project, onChange, onDelete }) {
         <tbody>
           {rows.map((o) => {
             const score  = calcOppScore(o);
-            const sc     = score>=18?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}:score>=9?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
+            const sc     = score>=75?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}:score>=30?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
             const matC   = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
             const rc     = rowColor(o);
             const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
@@ -1365,7 +1365,7 @@ function ProjectView({ project, onChange, onDelete }) {
                 </td>
                 <td style={{ padding:"9px 12px" }}>{o.aspectRef?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
-                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=18?"High":score>=9?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
@@ -1380,7 +1380,7 @@ function ProjectView({ project, onChange, onDelete }) {
     </div>
   );
 
-  const TABS = ["dashboard","screening","aspects","opportunities","changes","settings"];
+  const TABS = ["dashboard","screening","aspects","opportunities","matrix","changes","settings"];
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
@@ -1555,6 +1555,250 @@ function ProjectView({ project, onChange, onDelete }) {
               <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
             </div>
           )}
+        </div>
+      )}
+
+
+      {tab === "matrix" && (
+        <div>
+          <div style={{ marginBottom:"1rem" }}>
+            <h3 style={{ margin:"0 0 3px", fontSize:14, fontWeight:600 }}>Risk matrix</h3>
+            <p style={{ margin:0, fontSize:12, color:T.muted }}>Severity × Probability — hover dots to see aspect details</p>
+          </div>
+          {aspects.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              No aspects yet. Add aspects via the Screening tab first.
+            </div>
+          ) : (() => {
+            // Build 5x5 grid — x=Severity(1-5), y=Probability(1-5)
+            const CELL = 72;
+            const LABEL = 36;
+            const W = CELL*5 + LABEL;
+            const H = CELL*5 + LABEL;
+            const cellColor = (sv, pb) => {
+              const score = sv*pb;
+              if (score >= 15) return { bg:"#FFEBEE", border:"#EF9A9A" };
+              if (score >= 9)  return { bg:"#FFF8E1", border:"#FFE082" };
+              return { bg:"#E8F5E9", border:"#A5D6A7" };
+            };
+            // Group aspects by (severity, probability)
+            const grid = {};
+            aspects.forEach(a => {
+              if (!a.severity || !a.probability) return;
+              const sv = Math.min(5, Math.max(1, parseInt(a.severity)));
+              const pb = Math.min(5, Math.max(1, parseInt(a.probability)));
+              const key = sv+","+pb;
+              if (!grid[key]) grid[key] = [];
+              grid[key].push(a);
+            });
+            const unplotted = aspects.filter(a => !a.severity || !a.probability);
+            return (
+              <div>
+                <div style={{ overflowX:"auto" }}>
+                  <div style={{ position:"relative", width:W+60, minWidth:W+60 }}>
+                    {/* Y-axis label */}
+                    <div style={{ position:"absolute", left:0, top:LABEL/2, width:24, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <span style={{ fontSize:10, fontWeight:600, color:T.muted, transform:"rotate(-90deg)", whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>Probability</span>
+                    </div>
+                    <div style={{ marginLeft:28 }}>
+                      {/* X-axis label */}
+                      <div style={{ height:LABEL, display:"flex", alignItems:"flex-end", paddingLeft:LABEL, paddingBottom:4 }}>
+                        <span style={{ fontSize:10, fontWeight:600, color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>Severity →</span>
+                      </div>
+                      <div style={{ display:"flex" }}>
+                        {/* Y-axis numbers */}
+                        <div style={{ width:LABEL, flexShrink:0 }}>
+                          {[5,4,3,2,1].map(pb => (
+                            <div key={pb} style={{ height:CELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
+                              <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{pb}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Grid */}
+                        <div style={{ flex:1 }}>
+                          {[5,4,3,2,1].map(pb => (
+                            <div key={pb} style={{ display:"flex" }}>
+                              {[1,2,3,4,5].map(sv => {
+                                const c = cellColor(sv, pb);
+                                const items = grid[sv+","+pb] || [];
+                                return (
+                                  <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                         background:c.bg, border:"1px solid "+c.border,
+                                                         position:"relative", display:"flex",
+                                                         flexWrap:"wrap", alignContent:"center",
+                                                         justifyContent:"center", gap:3, padding:4 }}>
+                                    {items.map((a,i) => {
+                                      const rc = rowColor(a);
+                                      const sig = calcSig(a);
+                                      return (
+                                        <div key={i}
+                                          title={(a.ref||"")+" — "+(a.aspect||"")+" ["+sig+"]"}
+                                          onClick={() => setEditAspect(a)}
+                                          style={{ width:16, height:16, borderRadius:"50%",
+                                                   background: rc ? rc.head : (sig==="SIGNIFICANT"?T.red:sig==="WATCH"?T.amber:T.teal),
+                                                   border:"2px solid rgba(255,255,255,0.7)",
+                                                   cursor:"pointer", flexShrink:0,
+                                                   display:"flex", alignItems:"center", justifyContent:"center",
+                                                   fontSize:8, fontWeight:700, color:"#fff" }}>
+                                          {items.length>1 && i===0 ? items.length : ""}
+                                        </div>
+                                      );
+                                    })}
+                                    {items.length === 0 && (
+                                      <span style={{ fontSize:9, color:"rgba(0,0,0,0.1)", fontWeight:600 }}>{sv*pb}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                          {/* X-axis numbers */}
+                          <div style={{ display:"flex" }}>
+                            {[1,2,3,4,5].map(sv => (
+                              <div key={sv} style={{ width:CELL, height:24, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{sv}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Legend */}
+                <div style={{ display:"flex", gap:16, marginTop:"1.25rem", flexWrap:"wrap", alignItems:"center" }}>
+                  {[{bg:"#FFEBEE",bd:"#EF9A9A",label:"High risk (score ≥15)"},
+                    {bg:"#FFF8E1",bd:"#FFE082",label:"Medium risk (9–14)"},
+                    {bg:"#E8F5E9",bd:"#A5D6A7",label:"Low risk (<9)"}].map(({bg,bd,label}) => (
+                    <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
+                      <span style={{ width:14, height:14, borderRadius:3, background:bg, border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                      {label}
+                    </span>
+                  ))}
+                  <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
+                    <span style={{ width:14, height:14, borderRadius:"50%", background:T.red, border:"2px solid rgba(255,255,255,0.7)", flexShrink:0, display:"inline-block" }}/>
+                    Significant
+                  </span>
+                  <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
+                    <span style={{ width:14, height:14, borderRadius:"50%", background:T.amber, border:"2px solid rgba(255,255,255,0.7)", flexShrink:0, display:"inline-block" }}/>
+                    Watch
+                  </span>
+                  <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
+                    <span style={{ width:14, height:14, borderRadius:"50%", background:T.teal, border:"2px solid rgba(255,255,255,0.7)", flexShrink:0, display:"inline-block" }}/>
+                    Low
+                  </span>
+                  <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click any dot to edit aspect</span>
+                </div>
+                {/* Opportunity matrix */}
+                <div style={{ marginTop:"1.75rem", paddingTop:"1.25rem", borderTop:"1px solid "+T.border }}>
+                  <h3 style={{ margin:"0 0 3px", fontSize:14, fontWeight:600 }}>Opportunity matrix</h3>
+                  <p style={{ margin:"0 0 1rem", fontSize:12, color:T.muted }}>Env value × Business value — size indicates feasibility</p>
+                  {opps.length === 0 ? (
+                    <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
+                  ) : (() => {
+                    const OCELL = 72;
+                    const OLABEL = 36;
+                    const oppGrid = {};
+                    opps.forEach(o => {
+                      const ev = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+                      const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
+                      const key = ev+","+bv;
+                      if (!oppGrid[key]) oppGrid[key] = [];
+                      oppGrid[key].push(o);
+                    });
+                    const oppCellColor = (ev,bv) => {
+                      const s=ev*bv;
+                      if(s>=15) return {bg:T.tealBg,border:T.tealBd};
+                      if(s>=9)  return {bg:"#FFF8E1",border:"#FFE082"};
+                      return {bg:T.slateBg,border:T.slateBd};
+                    };
+                    return (
+                      <div style={{ overflowX:"auto" }}>
+                        <div style={{ position:"relative", width:OCELL*5+OLABEL+60, minWidth:OCELL*5+OLABEL+60 }}>
+                          <div style={{ position:"absolute", left:0, top:OLABEL/2, width:24, height:OCELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <span style={{ fontSize:10, fontWeight:600, color:T.muted, transform:"rotate(-90deg)", whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>Business value</span>
+                          </div>
+                          <div style={{ marginLeft:28 }}>
+                            <div style={{ height:OLABEL, display:"flex", alignItems:"flex-end", paddingLeft:OLABEL, paddingBottom:4 }}>
+                              <span style={{ fontSize:10, fontWeight:600, color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>Env value →</span>
+                            </div>
+                            <div style={{ display:"flex" }}>
+                              <div style={{ width:OLABEL, flexShrink:0 }}>
+                                {[5,4,3,2,1].map(bv => (
+                                  <div key={bv} style={{ height:OCELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
+                                    <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{bv}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div style={{ flex:1 }}>
+                                {[5,4,3,2,1].map(bv => (
+                                  <div key={bv} style={{ display:"flex" }}>
+                                    {[1,2,3,4,5].map(ev => {
+                                      const c = oppCellColor(ev,bv);
+                                      const items = oppGrid[ev+","+bv] || [];
+                                      return (
+                                        <div key={ev} style={{ width:OCELL, height:OCELL, flexShrink:0,
+                                                               background:c.bg, border:"1px solid "+c.border,
+                                                               position:"relative", display:"flex",
+                                                               flexWrap:"wrap", alignContent:"center",
+                                                               justifyContent:"center", gap:3, padding:4 }}>
+                                          {items.map((o,i) => {
+                                            const rc = rowColor(o);
+                                            const sz = 10 + (Math.min(5,Math.max(1,parseInt(o.feasibility)||1))-1)*2;
+                                            return (
+                                              <div key={i}
+                                                title={(o.ref||"")+" — "+(o.description||"").slice(0,60)+" [Feasibility: "+o.feasibility+"]"}
+                                                onClick={() => setEditOpp(o)}
+                                                style={{ width:sz, height:sz, borderRadius:"50%",
+                                                         background: rc ? rc.head : T.purple,
+                                                         border:"2px solid rgba(255,255,255,0.7)",
+                                                         cursor:"pointer", flexShrink:0 }}>
+                                              </div>
+                                            );
+                                          })}
+                                          {items.length === 0 && (
+                                            <span style={{ fontSize:9, color:"rgba(0,0,0,0.1)", fontWeight:600 }}>{ev*bv}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                                <div style={{ display:"flex" }}>
+                                  {[1,2,3,4,5].map(ev => (
+                                    <div key={ev} style={{ width:OCELL, height:24, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                      <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{ev}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", gap:16, marginTop:"1rem", flexWrap:"wrap", alignItems:"center" }}>
+                          {[{bg:T.tealBg,bd:T.tealBd,label:"High value (score ≥15)"},
+                            {bg:"#FFF8E1",bd:"#FFE082",label:"Medium (9–14)"},
+                            {bg:T.slateBg,bd:T.slateBd,label:"Lower (<9)"}].map(({bg,bd,label}) => (
+                            <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
+                              <span style={{ width:14, height:14, borderRadius:3, background:bg, border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                              {label}
+                            </span>
+                          ))}
+                          <span style={{ fontSize:12, color:T.muted }}>Dot size = feasibility (larger = more feasible)</span>
+                          <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click any dot to edit opportunity</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+                {unplotted.length > 0 && (
+                  <p style={{ marginTop:"1rem", fontSize:11, color:T.faint }}>
+                    {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted (missing severity or probability values).
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
