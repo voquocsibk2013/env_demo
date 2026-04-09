@@ -450,11 +450,10 @@ function calcSig(a) {
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
 function calcGhgTotal(o) {
-  if (!o.ghgLines || o.calcType==="qualitative") return null;
-  const t = (o.ghgLines||[]).reduce((s,l) => {
-    // supports both old format (id/qty/cf) and new format (uid/qty/cf)
-    return s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0);
-  }, 0);
+  if (o.calcType==="qualitative") return null;
+  const t1 = (o.ghgLines||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
+  const t2 = (o.customGhgRows||[]).reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.cf)||0),0);
+  const t  = t1+t2;
   return t > 0 ? t : null;
 }
 
@@ -502,14 +501,19 @@ const emptyOpp = () => ({
   action:"", alignment:"", owner:"", status:"Open", _color:"",
   createdAt:"", updatedAt:"",
   calcType:"qualitative",
-  ghgLines: GHG_LINES.map(l => ({ id:l.id, qty:"", cf:l.cfDefault, ref:"" }))
+  ghgLines: GHG_LINES.map(l => ({ id:l.id, qty:"", cf:l.cfDefault, ref:"" })),
+  customGhgRows: []
 });
-const newProject = () => ({
-  id: Date.now().toString(),
-  name:"", company:"", contract:"", type:"", phase:"",
-  createdAt: new Date().toISOString(),
-  aspects:[], opps:[], changelog:[]
-});
+const newProject = () => {
+  const ts = Date.now();
+  return {
+    id: ts.toString(),
+    projectId: "PRJ-"+ts.toString().slice(-5),
+    name:"", company:"", contract:"", type:"", phase:"",
+    createdAt: new Date().toISOString(),
+    aspects:[], opps:[], changelog:[]
+  };
+};
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const iw = { width:"100%", boxSizing:"border-box" };
@@ -738,7 +742,8 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
             const saved = (f.ghgLines||[]).find(x=>x.id===l.id);
             return { ...l, qty:saved?saved.qty:"", cf:(saved&&saved.cf!=="")?saved.cf:l.cfDefault, ref:saved?saved.ref||"":"" };
           });
-          const ghgTotal  = lines.reduce((s,l) => s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0), 0);
+          const ghgTotal  = lines.reduce((s,l) => s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0), 0)
+                           + (f.customGhgRows||[]).reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.cf)||0),0);
           const ghgTonnes = ghgTotal/1000;
           const scopeColors = {
             "Scope 1":      {bg:T.redBg,    c:T.red,    bd:T.redBd},
@@ -792,63 +797,134 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(scopeGroups).map(([scope, slines]) =>
-                      slines.map((l, li) => {
-                        const line   = lines.find(x=>x.id===l.id);
-                        const qty    = parseFloat(line.qty)||0;
-                        const cf     = parseFloat(line.cf)||0;
-                        const saving = qty && cf ? qty*cf : null;
-                        const sc2    = scopeColors[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
-                        return (
-                          <tr key={l.id} style={{ borderBottom:"1px solid "+T.rowBd,
-                                                   background:qty>0?sc2.bg+"55":undefined }}>
-                            {li===0 && (
-                              <td rowSpan={slines.length}
-                                style={{ ...tdS(), verticalAlign:"top", paddingTop:10,
-                                         borderRight:"1px solid "+T.border, width:90 }}>
-                                <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:3,
-                                               background:sc2.bg, color:sc2.c, border:"1px solid "+sc2.bd,
-                                               display:"inline-block", whiteSpace:"nowrap" }}>{scope}</span>
+                    {Object.entries(scopeGroups).map(([scope, slines]) => {
+                      const sc2 = scopeColors[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                      const customForScope = (f.customGhgRows||[]).filter(r=>r.scope===scope);
+                      const addCustomRow = () => setF(p=>({ ...p, customGhgRows:[
+                        ...(p.customGhgRows||[]),
+                        { uid:"c"+Date.now(), scope, type:"", unit:"kg", qty:"", cf:"", ref:"" }
+                      ]}));
+                      const delCustomRow = uid => setF(p=>({ ...p, customGhgRows:(p.customGhgRows||[]).filter(r=>r.uid!==uid) }));
+                      const setCustomRow = (uid,k,v) => setF(p=>({ ...p, customGhgRows:(p.customGhgRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r) }));
+                      const totalRows = slines.length + customForScope.length + 1; // +1 for add-row button row
+                      return [
+                        ...slines.map((l, li) => {
+                          const line   = lines.find(x=>x.id===l.id);
+                          const qty    = parseFloat(line.qty)||0;
+                          const cf     = parseFloat(line.cf)||0;
+                          const saving = qty && cf ? qty*cf : null;
+                          return (
+                            <tr key={l.id} style={{ borderBottom:"1px solid "+T.rowBd,
+                                                     background:qty>0?sc2.bg+"55":undefined }}>
+                              {li===0 && (
+                                <td rowSpan={totalRows}
+                                  style={{ ...tdS(), verticalAlign:"top", paddingTop:10,
+                                           borderRight:"1px solid "+T.border, width:90 }}>
+                                  <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:3,
+                                                 background:sc2.bg, color:sc2.c, border:"1px solid "+sc2.bd,
+                                                 display:"inline-block", whiteSpace:"nowrap" }}>{scope}</span>
+                                </td>
+                              )}
+                              <td style={{ ...tdS(), fontWeight:500, color:T.text }}>{l.type}</td>
+                              <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono, fontSize:10, color:T.faint }}>{l.unit}</td>
+                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
+                                <input type="number" min={0} value={line.qty}
+                                  onChange={e=>setLine(l.id,"qty",e.target.value)} placeholder="0"
+                                  style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono,
+                                           fontSize:12, border:"1px solid "+(qty>0?sc2.bd:T.border),
+                                           borderRadius:5, background:qty>0?sc2.bg:T.surface, color:qty>0?sc2.c:T.text }}/>
                               </td>
-                            )}
-                            <td style={{ ...tdS(), fontWeight:500, color:T.text }}>{l.type}</td>
-                            <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono, fontSize:10, color:T.faint }}>{l.unit}</td>
-                            <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                              <input type="number" min={0} value={line.qty}
-                                onChange={e=>setLine(l.id,"qty",e.target.value)}
-                                placeholder="0"
-                                style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono,
-                                         fontSize:12, border:"1px solid "+(qty>0?sc2.bd:T.border),
-                                         borderRadius:5, background:qty>0?sc2.bg:T.surface, color:qty>0?sc2.c:T.text }}/>
-                            </td>
-                            <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                              {l.cfFixed ? (
-                                <span style={{ fontFamily:T.mono, fontSize:12, color:T.muted }}>{l.cfDefault}</span>
-                              ) : (
-                                <input type="number" min={0} value={line.cf}
-                                  onChange={e=>setLine(l.id,"cf",e.target.value)}
-                                  placeholder="CF"
+                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
+                                {l.cfFixed ? (
+                                  <span style={{ fontFamily:T.mono, fontSize:12, color:T.muted }}>{l.cfDefault}</span>
+                                ) : (
+                                  <input type="number" min={0} value={line.cf}
+                                    onChange={e=>setLine(l.id,"cf",e.target.value)} placeholder="CF"
+                                    style={{ width:56, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
+                                             fontSize:12, border:"1px solid "+T.amberBd,
+                                             borderRadius:5, background:T.amberBg, color:T.amber }}/>
+                                )}
+                              </td>
+                              <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono,
+                                           fontWeight:saving?700:400, color:saving?T.teal:T.faint }}>
+                                {saving!=null ? saving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
+                              </td>
+                              <td style={{ ...tdS({ padding:"4px 6px" }) }}>
+                                <input value={line.ref} onChange={e=>setLine(l.id,"ref",e.target.value)}
+                                  placeholder="Source / note"
+                                  style={{ width:"100%", minWidth:100, padding:"3px 6px", fontSize:11,
+                                           border:"1px solid "+T.border, borderRadius:4,
+                                           background:"transparent", color:T.muted }}/>
+                              </td>
+                            </tr>
+                          );
+                        }),
+                        ...customForScope.map(cr => {
+                          const cqty = parseFloat(cr.qty)||0;
+                          const ccf  = parseFloat(cr.cf)||0;
+                          const csaving = cqty && ccf ? cqty*ccf : null;
+                          return (
+                            <tr key={cr.uid} style={{ borderBottom:"1px solid "+T.rowBd,
+                                                       background:cqty>0?sc2.bg+"55":T.amberBg+"33" }}>
+                              <td style={{ ...tdS({ padding:"4px 6px" }) }}>
+                                <input value={cr.type} onChange={e=>setCustomRow(cr.uid,"type",e.target.value)}
+                                  placeholder="Custom type description"
+                                  style={{ width:"100%", padding:"3px 6px", fontSize:12,
+                                           border:"1px solid "+T.amberBd, borderRadius:4,
+                                           background:T.amberBg, color:T.amber }}/>
+                              </td>
+                              <td style={{ ...tdS({ padding:"4px 6px", textAlign:"right" }) }}>
+                                <input value={cr.unit} onChange={e=>setCustomRow(cr.uid,"unit",e.target.value)}
+                                  placeholder="kg"
+                                  style={{ width:44, textAlign:"right", padding:"3px 5px", fontSize:11,
+                                           border:"1px solid "+T.border, borderRadius:4,
+                                           background:T.surface, color:T.muted }}/>
+                              </td>
+                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
+                                <input type="number" min={0} value={cr.qty}
+                                  onChange={e=>setCustomRow(cr.uid,"qty",e.target.value)} placeholder="0"
+                                  style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono,
+                                           fontSize:12, border:"1px solid "+(cqty>0?sc2.bd:T.border),
+                                           borderRadius:5, background:cqty>0?sc2.bg:T.surface, color:cqty>0?sc2.c:T.text }}/>
+                              </td>
+                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
+                                <input type="number" min={0} value={cr.cf}
+                                  onChange={e=>setCustomRow(cr.uid,"cf",e.target.value)} placeholder="CF"
                                   style={{ width:56, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
                                            fontSize:12, border:"1px solid "+T.amberBd,
                                            borderRadius:5, background:T.amberBg, color:T.amber }}/>
-                              )}
-                            </td>
-                            <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono,
-                                         fontWeight:saving?700:400, color:saving?T.teal:T.faint }}>
-                              {saving!=null ? saving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
-                            </td>
-                            <td style={{ ...tdS({ padding:"4px 6px" }) }}>
-                              <input value={line.ref}
-                                onChange={e=>setLine(l.id,"ref",e.target.value)}
-                                placeholder="Source / note"
-                                style={{ width:"100%", minWidth:100, padding:"3px 6px", fontSize:11,
-                                         border:"1px solid "+T.border, borderRadius:4,
-                                         background:"transparent", color:T.muted }}/>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
+                              </td>
+                              <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono,
+                                           fontWeight:csaving?700:400, color:csaving?T.teal:T.faint }}>
+                                {csaving!=null ? csaving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
+                              </td>
+                              <td style={{ ...tdS({ padding:"4px 6px" }) }}>
+                                <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                                  <input value={cr.ref} onChange={e=>setCustomRow(cr.uid,"ref",e.target.value)}
+                                    placeholder="Source / note"
+                                    style={{ flex:1, minWidth:80, padding:"3px 6px", fontSize:11,
+                                             border:"1px solid "+T.border, borderRadius:4,
+                                             background:"transparent", color:T.muted }}/>
+                                  <button onClick={()=>delCustomRow(cr.uid)}
+                                    style={{ fontSize:11, color:T.red, background:"transparent",
+                                             border:"none", cursor:"pointer", padding:"0 2px", flexShrink:0 }}>✕</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }),
+                        <tr key={"add-"+scope}>
+                          <td colSpan={6} style={{ padding:"4px 8px", borderBottom:"1px solid "+T.rowBd }}>
+                            <button onClick={addCustomRow}
+                              style={{ fontSize:11, color:sc2.c, background:"transparent",
+                                       border:"none", cursor:"pointer", padding:"2px 4px",
+                                       fontFamily:T.sans, fontWeight:500 }}>
+                              + Add custom row
+                            </button>
+                          </td>
+                        </tr>
+                      ];
+                    })}
                   </tbody>
                   <tfoot>
                     <tr style={{ background:T.tealBg, borderTop:"2px solid "+T.tealBd }}>
@@ -1263,7 +1339,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
 }
 
 // ── Project view ──────────────────────────────────────────────────────────────
-function ProjectView({ project, onChange, onDelete, initialTab }) {
+function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
@@ -1827,7 +1903,7 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
         <div>
           <div style={{ marginBottom:"1rem" }}>
             <h3 style={{ margin:"0 0 3px", fontSize:14, fontWeight:600 }}>Risk matrix</h3>
-            <p style={{ margin:0, fontSize:12, color:T.muted }}>Severity × Probability — hover dots to see aspect details</p>
+            <p style={{ margin:0, fontSize:12, color:T.muted }}>Severity × Probability · Cell colour = risk zone · Dot colour = management status</p>
           </div>
           {aspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
@@ -1894,16 +1970,18 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                                     {items.map((a,i) => {
                                       const rc = rowColor(a);
                                       const sig = calcSig(a);
+                                      const dotC = a.status==="Closed"?{bg:T.greenBg,bd:T.greenBd,c:T.green}
+                                                   : a.status==="In Progress"?{bg:T.amberBg,bd:T.amberBd,c:T.amber}
+                                                   : {bg:T.redBg,bd:T.redBd,c:T.red};
                                       return (
                                         <div key={i}
-                                          title={(a.ref||"")+" — "+(a.aspect||"")+" ["+sig+"]"}
+                                          title={(a.ref||"")+" — "+(a.aspect||"")+" ["+a.status+"] S:"+a.severity+" P:"+a.probability}
                                           onClick={() => setEditAspect(a)}
                                           style={{ width:16, height:16, borderRadius:"50%",
-                                                   background: rc ? rc.head : (sig==="SIGNIFICANT"?T.redBg:sig==="WATCH"?T.amberBg:T.greenBg),
-                                                   border: rc ? "2px solid rgba(255,255,255,0.7)" : "2px solid "+(sig==="SIGNIFICANT"?T.redBd:sig==="WATCH"?T.amberBd:T.greenBd),
+                                                   background:dotC.bg, border:"2px solid "+dotC.bd,
                                                    cursor:"pointer", flexShrink:0,
                                                    display:"flex", alignItems:"center", justifyContent:"center",
-                                                   fontSize:8, fontWeight:700, color:rc?"#fff":(sig==="SIGNIFICANT"?T.red:sig==="WATCH"?T.amber:T.green) }}>
+                                                   fontSize:8, fontWeight:700, color:dotC.c }}>
                                           {items.length>1 && i===0 ? items.length : ""}
                                         </div>
                                       );
@@ -1939,18 +2017,19 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                       {label}
                     </span>
                   ))}
-                  {[{label:"SIGNIFICANT",bg:T.redBg,c:T.red,bd:T.redBd},{label:"WATCH",bg:T.amberBg,c:T.amber,bd:T.amberBd},{label:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd}].map(({label,bg,c,bd})=>(
-                    <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
-                      <span style={{ width:14, height:14, borderRadius:"50%", background:bg, border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                  <span style={{ fontSize:11, fontWeight:600, color:T.muted, marginRight:4 }}>Aspect status:</span>
+                  {[{label:"Open",bg:T.redBg,bd:T.redBd,c:T.red},{label:"In Progress",bg:T.amberBg,bd:T.amberBd,c:T.amber},{label:"Closed",bg:T.greenBg,bd:T.greenBd,c:T.green}].map(({label,bg,bd,c})=>(
+                    <span key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:T.muted }}>
+                      <span style={{ width:12, height:12, borderRadius:"50%", background:bg, border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
                       {label}
                     </span>
                   ))}
-                  <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click any dot to edit aspect</span>
+                  <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click dot to edit · Number = aspects in that cell</span>
                 </div>
                 {/* Opportunity matrix */}
                 <div style={{ marginTop:"1.75rem", paddingTop:"1.25rem", borderTop:"1px solid "+T.border }}>
                   <h3 style={{ margin:"0 0 3px", fontSize:14, fontWeight:600 }}>Opportunity matrix</h3>
-                  <p style={{ margin:"0 0 1rem", fontSize:12, color:T.muted }}>Env value × Business value — size indicates feasibility</p>
+                  <p style={{ margin:"0 0 1rem", fontSize:12, color:T.muted }}>Env value × Business value · Cell colour = combined value · Dot colour = status · Dot size = feasibility</p>
                   {opps.length === 0 ? (
                     <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
                   ) : (() => {
@@ -2001,15 +2080,16 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                                                                flexWrap:"wrap", alignContent:"center",
                                                                justifyContent:"center", gap:3, padding:4 }}>
                                           {items.map((o,i) => {
-                                            const rc = rowColor(o);
                                             const sz = 10 + (Math.min(5,Math.max(1,parseInt(o.feasibility)||1))-1)*2;
+                                            const odotC = o.status==="Closed"?{bg:T.greenBg,bd:T.greenBd}
+                                                        : o.status==="In Progress"?{bg:T.amberBg,bd:T.amberBd}
+                                                        : {bg:T.purpleBg,bd:T.purpleBd};
                                             return (
                                               <div key={i}
-                                                title={(o.ref||"")+" — "+(o.description||"").slice(0,60)+" [Feasibility: "+o.feasibility+"]"}
+                                                title={(o.ref||"")+" — "+(o.description||"").slice(0,50)+" · "+o.status+" · Feasibility: "+o.feasibility}
                                                 onClick={() => setEditOpp(o)}
                                                 style={{ width:sz, height:sz, borderRadius:"50%",
-                                                         background: rc ? rc.head : T.purple,
-                                                         border:"2px solid rgba(255,255,255,0.7)",
+                                                         background:odotC.bg, border:"2px solid "+odotC.bd,
                                                          cursor:"pointer", flexShrink:0 }}>
                                               </div>
                                             );
@@ -2042,8 +2122,15 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                               {label}
                             </span>
                           ))}
-                          <span style={{ fontSize:12, color:T.muted }}>Dot size = feasibility (larger = more feasible)</span>
-                          <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click any dot to edit opportunity</span>
+                          <span style={{ fontSize:11, fontWeight:600, color:T.muted, marginRight:4 }}>Status:</span>
+                          {[{l:"Open",bg:T.purpleBg,bd:T.purpleBd},{l:"In Progress",bg:T.amberBg,bd:T.amberBd},{l:"Closed",bg:T.greenBg,bd:T.greenBd}].map(({l,bg,bd})=>(
+                            <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:T.muted }}>
+                              <span style={{ width:12, height:12, borderRadius:"50%", background:bg, border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                              {l}
+                            </span>
+                          ))}
+                          <span style={{ fontSize:12, color:T.faint }}>· Dot size = feasibility</span>
+                          <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click dot to edit</span>
                         </div>
                       </div>
                     );
@@ -2112,16 +2199,32 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
         </div>
       )}
 
-      {tab === "settings" && (
+      {tab === "settings" && (() => {
+        // Collect existing contract names for datalist
+        const existingContracts = [...new Set((allProjects||[]).map(p=>p.contract||"").filter(Boolean))];
+        // Check if projectId is unique
+        const idTaken = (allProjects||[]).some(p=>p.id!==project.id && p.projectId && p.projectId===(project.projectId||""));
+        return (
         <div>
           <Card style={{ marginBottom:"1rem" }}>
             <SectionLabel>Project details</SectionLabel>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px 16px" }}>
-              {[{k:"name",l:"Project name"},{k:"company",l:"Company"},{k:"contract",l:"Contract / portfolio"}].map(({ k, l }) => (
-                <div key={k} style={k==="contract"?{gridColumn:"span 2"}:{}}>
-                  <Fld label={l}><input value={project[k]||""} onChange={e=>onChange({...project,[k]:e.target.value})} placeholder={l} style={iw}/></Fld>
+              <Fld label="Project name"><input value={project.name||""} onChange={e=>onChange({...project,name:e.target.value})} placeholder="Project name" style={iw}/></Fld>
+              <Fld label="Project ID">
+                <div>
+                  <input value={project.projectId||""} onChange={e=>onChange({...project,projectId:e.target.value})}
+                    placeholder="e.g. PRJ-00123" style={{ ...iw, borderColor:idTaken?T.red:undefined }}/>
+                  {idTaken && <p style={{ fontSize:11, color:T.red, margin:"3px 0 0" }}>ID already used by another project</p>}
                 </div>
-              ))}
+              </Fld>
+              <Fld label="Company"><input value={project.company||""} onChange={e=>onChange({...project,company:e.target.value})} placeholder="Company" style={iw}/></Fld>
+              <Fld label="Contract / portfolio">
+                <input value={project.contract||""} onChange={e=>onChange({...project,contract:e.target.value})}
+                  placeholder="Type or select existing" list="contract-datalist" style={iw}/>
+                <datalist id="contract-datalist">
+                  {existingContracts.map(c=><option key={c} value={c}/>)}
+                </datalist>
+              </Fld>
               <Fld label="Project type">
                 <select value={project.type||""} onChange={e=>onChange({...project,type:e.target.value})} style={iw}>
                   <option value="">Select type</option>{PROJ_TYPES.map(t=><option key={t}>{t}</option>)}
@@ -2149,7 +2252,8 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
             }
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -2158,13 +2262,9 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
 
 // ── Portfolio Overview ────────────────────────────────────────────────────────
 function PortfolioView({ projects, onClose, onSelect }) {
-  const allAspects = projects.flatMap(p => p.aspects||[]);
-  const allOpps    = projects.flatMap(p => p.opps||[]);
-  const totalSig   = allAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
-  const totalWatch = allAspects.filter(a=>calcSig(a)==="WATCH").length;
-  const totalHigh  = allOpps.filter(o=>calcOppScore(o)>=75).length;
+  const [activeContract, setActiveContract] = React.useState("__all__");
 
-  // Group projects by contract name
+  // Build contract list
   const contractMap = {};
   projects.forEach(p => {
     const key = (p.contract||"").trim() || "__none__";
@@ -2175,8 +2275,35 @@ function PortfolioView({ projects, onClose, onSelect }) {
     a==="__none__" ? 1 : b==="__none__" ? -1 : a.localeCompare(b)
   );
 
-  const statC = { "Open":"var(--red-bd)", "In Progress":"var(--amber-bd)", "Closed":"var(--green-bd)" };
-  const statDot = { "Open":"var(--red)", "In Progress":"var(--amber)", "Closed":"var(--green)" };
+  const visibleProjects = activeContract==="__all__" ? projects
+    : projects.filter(p => (activeContract==="__none__" ? !(p.contract||"").trim() : (p.contract||"").trim()===activeContract));
+  const visAspects = visibleProjects.flatMap(p=>p.aspects||[]);
+  const visOpps    = visibleProjects.flatMap(p=>p.opps||[]);
+  const visSig     = visAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+  const visWatch   = visAspects.filter(a=>calcSig(a)==="WATCH").length;
+  const visLow     = visAspects.filter(a=>calcSig(a)==="Low").length;
+  const visHigh    = visOpps.filter(o=>calcOppScore(o)>=75).length;
+  const openAsp    = visAspects.filter(a=>a.status==="Open").length;
+  const inProgAsp  = visAspects.filter(a=>a.status==="In Progress").length;
+  const closedAsp  = visAspects.filter(a=>a.status==="Closed").length;
+
+  const MiniDonut = ({ segments, size=52, strokeW=9 }) => {
+    const r = (size-strokeW)/2; const circ = 2*Math.PI*r;
+    const total = segments.reduce((s,g)=>s+g.v,0)||1;
+    let offset = 0;
+    return (
+      <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={strokeW}/>
+        {segments.map((g,i) => {
+          const len = (g.v/total)*circ;
+          const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
+            stroke={g.c} strokeWidth={strokeW} strokeDasharray={len+" "+(circ-len)}
+            strokeDashoffset={-offset} strokeLinecap="butt"/>;
+          offset += len; return el;
+        })}
+      </svg>
+    );
+  };
 
   const ProjectCard = ({ p }) => {
     const asp   = p.aspects||[];
@@ -2184,94 +2311,90 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const sig   = asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
     const watch = asp.filter(a=>calcSig(a)==="WATCH").length;
     const low   = asp.filter(a=>calcSig(a)==="Low").length;
+    const openN = asp.filter(a=>a.status==="Open").length;
+    const inProg= asp.filter(a=>a.status==="In Progress").length;
+    const closed= asp.filter(a=>a.status==="Closed").length;
     const hi    = opp.filter(o=>calcOppScore(o)>=75).length;
     const tot   = asp.length;
-    const stCounts = ["Open","In Progress","Closed"].map(s => ({ s, n:asp.filter(a=>a.status===s).length }));
     return (
       <div onClick={()=>{ onSelect(p.id); onClose(); }}
         style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10,
-                 padding:"14px 16px", cursor:"pointer", transition:"border-color 0.15s" }}
+                 padding:"14px 16px", cursor:"pointer", transition:"border-color 0.15s",
+                 display:"grid", gridTemplateColumns:"1fr auto", gap:"12px 20px", alignItems:"start" }}
         onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal-bd)"}
         onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
-        <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:10 }}>
-          <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
-            <span style={{ fontSize:14, fontWeight:600, color:"var(--text)" }}>{p.name||"Unnamed project"}</span>
+        {/* Left: text */}
+        <div>
+          <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:8, flexWrap:"wrap" }}>
+            <span style={{ fontSize:14, fontWeight:600, color:"var(--text)" }}>{p.name||"Unnamed"}</span>
+            {p.projectId && <span style={{ fontFamily:"var(--mono,monospace)", fontSize:10, color:"var(--faint)" }}>{p.projectId}</span>}
             {p.company && <span style={{ fontSize:12, color:"var(--muted)" }}>{p.company}</span>}
+            <div style={{ display:"flex", gap:5, marginLeft:"auto" }}>
+              {p.type  && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--slate-bg)", color:"var(--slate)", border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
+              {p.phase && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--blue-bg)", color:"var(--blue)", border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
+            </div>
           </div>
-          <div style={{ display:"flex", gap:6 }}>
-            {p.type  && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--slate-bg)", color:"var(--slate)", border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
-            {p.phase && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--blue-bg)",  color:"var(--blue)",  border:"1px solid var(--blue-bd)"  }}>{p.phase}</span>}
-          </div>
-        </div>
-        <div style={{ display:"flex", gap:"1.5rem", flexWrap:"wrap" }}>
-          <div style={{ flex:1, minWidth:160 }}>
+          {/* Significance bar */}
+          <div style={{ marginBottom:10 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
               <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Significance</span>
-              <span style={{ fontSize:10, color:"var(--faint)" }}>{tot} aspects</span>
+              <span style={{ fontSize:10, color:"var(--faint)" }}>{tot} aspect{tot!==1?"s":""}</span>
             </div>
-            {tot > 0 ? (
-              <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", gap:"1px" }}>
-                {sig   > 0 && <div style={{ flex:sig,   background:"var(--red-bd)",   minWidth:4, borderRadius:2 }} title={"Significant: "+sig}/>}
-                {watch > 0 && <div style={{ flex:watch, background:"var(--amber-bd)", minWidth:4, borderRadius:2 }} title={"Watch: "+watch}/>}
-                {low   > 0 && <div style={{ flex:low,   background:"var(--green-bd)", minWidth:4, borderRadius:2 }} title={"Low: "+low}/>}
-              </div>
-            ) : <div style={{ height:8, borderRadius:4, background:"var(--border)" }}/>}
-            <div style={{ display:"flex", gap:10, marginTop:5 }}>
-              {[
-                {l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
+            {tot>0 ? <div style={{ display:"flex", height:7, borderRadius:4, overflow:"hidden", gap:"1px" }}>
+              {sig   > 0 && <div style={{ flex:sig,   background:"var(--red-bd)",   minWidth:4 }} title={"Significant: "+sig}/>}
+              {watch > 0 && <div style={{ flex:watch, background:"var(--amber-bd)", minWidth:4 }} title={"Watch: "+watch}/>}
+              {low   > 0 && <div style={{ flex:low,   background:"var(--green-bd)", minWidth:4 }} title={"Low: "+low}/>}
+              {(asp.length-sig-watch-low) > 0 && <div style={{ flex:asp.length-sig-watch-low, background:"var(--border)", minWidth:2 }}/>}
+            </div> : <div style={{ height:7, borderRadius:4, background:"var(--border)" }}/>}
+            <div style={{ display:"flex", gap:8, marginTop:5 }}>
+              {[{l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
                 {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
-                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}
-              ].map(({l,v,bg,c,bd}) => (
-                <span key={l} style={{ fontSize:10, display:"inline-flex", alignItems:"center", gap:4,
-                                       padding:"1px 7px", borderRadius:4, fontWeight:500,
-                                       background:bg, color:c, border:"1px solid "+bd }}>
+                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].map(({l,v,bg,c,bd})=>(
+                <span key={l} style={{ fontSize:10, display:"inline-flex", alignItems:"center", gap:3,
+                                       padding:"1px 6px", borderRadius:3, background:bg, color:c, border:"1px solid "+bd }}>
                   {l} <strong style={{ fontWeight:700 }}>{v}</strong>
                 </span>
               ))}
             </div>
           </div>
-          <div style={{ flex:1, minWidth:160 }}>
-            <div style={{ marginBottom:4 }}>
-              <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Status</span>
-            </div>
-            {tot > 0 ? (
-              <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", gap:"1px" }}>
-                {stCounts.map(({s,n}) => n>0 && <div key={s} style={{ flex:n, background:statC[s], minWidth:4, borderRadius:2 }} title={s+": "+n}/>)}
-              </div>
-            ) : <div style={{ height:8, borderRadius:4, background:"var(--border)" }}/>}
-            <div style={{ display:"flex", gap:10, marginTop:5 }}>
-              {stCounts.map(({s,n}) => { const sc = s==="Open"?{bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"}:s==="In Progress"?{bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"}:{bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}; return (
-                <span key={s} style={{ fontSize:10, display:"inline-flex", alignItems:"center", gap:4,
-                                       padding:"1px 7px", borderRadius:4, fontWeight:500,
-                                       background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>
-                  {s} <strong style={{ fontWeight:700 }}>{n}</strong>
-                </span>
-              ); })}
-            </div>
-          </div>
-          <div style={{ minWidth:90 }}>
-            <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500, display:"block", marginBottom:4 }}>Opportunities</span>
-            <div style={{ display:"flex", gap:10 }}>
-              <span style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
-                <span style={{ width:7, height:7, borderRadius:"50%", background:"var(--teal)", display:"inline-block" }}/>
-                High <strong style={{ color:"var(--text)" }}>{hi}</strong>
-              </span>
-              <span style={{ fontSize:10, color:"var(--muted)" }}>
-                Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong>
-              </span>
-            </div>
-          </div>
+          {/* Opportunities row */}
+          {opp.length > 0 && <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Opportunities:</span>
+            <span style={{ fontSize:10, color:"var(--muted)" }}>Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong></span>
+            <span style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
+              <span style={{ width:7, height:7, borderRadius:"50%", background:"var(--teal)", display:"inline-block" }}/>
+              High <strong style={{ color:"var(--text)" }}>{hi}</strong>
+            </span>
+          </div>}
         </div>
+        {/* Right: status donut */}
+        {tot > 0 && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:60 }}>
+            <div style={{ position:"relative" }}>
+              <MiniDonut segments={[
+                {v:openN,  c:"var(--red)"},
+                {v:inProg, c:"var(--amber)"},
+                {v:closed, c:"var(--green)"},
+              ]}/>
+              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center",
+                             justifyContent:"center", flexDirection:"column" }}>
+                <span style={{ fontSize:11, fontWeight:700, color:"var(--text)", lineHeight:1 }}>{tot}</span>
+              </div>
+            </div>
+            <span style={{ fontSize:9, color:"var(--faint)", textAlign:"center" }}>aspects</span>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <div style={{ padding:"1.5rem 1.75rem", background:"var(--bg)", minHeight:"100%", fontFamily:"var(--sans, system-ui)" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.5rem" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
         <div>
           <h1 style={{ margin:"0 0 3px", fontSize:18, fontWeight:700, color:"var(--text)" }}>Portfolio overview</h1>
-          <p style={{ margin:0, fontSize:12, color:"var(--muted)" }}>{projects.length} project{projects.length!==1?"s":""} · {allAspects.length} aspects · {allOpps.length} opportunities</p>
+          <p style={{ margin:0, fontSize:12, color:"var(--muted)" }}>{projects.length} project{projects.length!==1?"s":""} · {visAspects.length} aspects · {visOpps.length} opportunities</p>
         </div>
         <button onClick={onClose}
           style={{ padding:"6px 14px", borderRadius:6, border:"1px solid var(--border)", background:"transparent",
@@ -2280,54 +2403,135 @@ function PortfolioView({ projects, onClose, onSelect }) {
         </button>
       </div>
 
-      {/* Summary stat cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10, marginBottom:"1.75rem" }}>
+      {/* Contract filter tabs */}
+      {contractGroups.length > 1 && (
+        <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:"1.25rem",
+                      borderBottom:"2px solid var(--border)", paddingBottom:0 }}>
+          {[["__all__","All contracts"],...contractGroups.map(([k,ps])=>[k,k==="__none__"?"No contract":k])].map(([key,label])=>(
+            <button key={key} onClick={()=>setActiveContract(key)}
+              style={{ padding:"7px 14px", fontSize:12, fontWeight:500, cursor:"pointer",
+                       border:"none", background:"transparent", fontFamily:"var(--sans,system-ui)",
+                       borderBottom:"2px solid "+(activeContract===key?"var(--teal)":"transparent"),
+                       marginBottom:"-2px", color:activeContract===key?"var(--teal)":"var(--muted)" }}>
+              {label}
+              {key!=="__all__" && <span style={{ marginLeft:6, fontSize:10, color:"var(--faint)" }}>
+                ({(contractMap[key]||[]).length})
+              </span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:10, marginBottom:"1.5rem" }}>
         {[
-          { label:"Projects",      val:projects.length,  bg:"var(--surface)",   c:"var(--text)",   bd:"var(--border)"    },
-          { label:"Total aspects", val:allAspects.length,bg:"var(--surface)",   c:"var(--text)",   bd:"var(--border)"    },
-          { label:"Significant",   val:totalSig,         bg:"var(--red-bg)",    c:"var(--red)",    bd:"var(--red-bd)"    },
-          { label:"Watch",         val:totalWatch,       bg:"var(--amber-bg)",  c:"var(--amber)",  bd:"var(--amber-bd)"  },
-          { label:"Opportunities", val:allOpps.length,   bg:"var(--purple-bg)", c:"var(--purple)", bd:"var(--purple-bd)" },
-          { label:"High priority", val:totalHigh,        bg:"var(--teal-bg)",   c:"var(--teal)",   bd:"var(--teal-bd)"   },
+          { label:"Projects",      val:visibleProjects.length, bg:"var(--surface)",   c:"var(--text)",   bd:"var(--border)"    },
+          { label:"Total aspects", val:visAspects.length,      bg:"var(--surface)",   c:"var(--text)",   bd:"var(--border)"    },
+          { label:"Significant",   val:visSig,                 bg:"var(--red-bg)",    c:"var(--red)",    bd:"var(--red-bd)"    },
+          { label:"Watch",         val:visWatch,               bg:"var(--amber-bg)",  c:"var(--amber)",  bd:"var(--amber-bd)"  },
+          { label:"Open",          val:openAsp,                bg:"var(--red-bg)",    c:"var(--red)",    bd:"var(--red-bd)"    },
+          { label:"Opportunities", val:visOpps.length,         bg:"var(--purple-bg)", c:"var(--purple)", bd:"var(--purple-bd)" },
         ].map(({ label, val, bg, c, bd }) => (
-          <div key={label} style={{ background:bg, borderRadius:8, padding:"12px 14px", border:"1px solid "+bd }}>
-            <p style={{ fontSize:9, fontWeight:600, color:c, margin:"0 0 6px", letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
-            <p style={{ fontSize:22, fontWeight:700, margin:0, color:c, lineHeight:1 }}>{val}</p>
+          <div key={label} style={{ background:bg, borderRadius:8, padding:"10px 12px", border:"1px solid "+bd }}>
+            <p style={{ fontSize:9, fontWeight:600, color:c, margin:"0 0 5px", letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
+            <p style={{ fontSize:20, fontWeight:700, margin:0, color:c, lineHeight:1 }}>{val}</p>
           </div>
         ))}
       </div>
 
-      {/* Projects grouped by contract */}
-      {contractGroups.map(([contract, cProjects]) => (
-        <div key={contract} style={{ marginBottom:"1.75rem" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"0.75rem" }}>
-            {contract !== "__none__" ? (
-              <h2 style={{ fontSize:14, fontWeight:700, margin:0, color:"var(--text)" }}>{contract}</h2>
-            ) : (
-              <h2 style={{ fontSize:14, fontWeight:500, margin:0, color:"var(--faint)", fontStyle:"italic" }}>No contract assigned</h2>
-            )}
-            <span style={{ fontSize:11, color:"var(--faint)", padding:"1px 7px", borderRadius:3,
-                           background:"var(--surface)", border:"1px solid var(--border)" }}>
-              {cProjects.length} project{cProjects.length!==1?"s":""}
-            </span>
+      {/* Portfolio donut row */}
+      {visAspects.length > 0 && (
+        <div style={{ display:"flex", gap:20, flexWrap:"wrap", marginBottom:"1.5rem",
+                      background:"var(--surface)", borderRadius:10, padding:"14px 20px",
+                      border:"1px solid var(--border)", alignItems:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+            <div style={{ position:"relative" }}>
+              <svg width={72} height={72} style={{ transform:"rotate(-90deg)" }}>
+                {(() => {
+                  const r=26; const circ=2*Math.PI*r; const tot=visAspects.length||1;
+                  const segs=[{v:visSig,c:"var(--red-bd)"},{v:visWatch,c:"var(--amber-bd)"},{v:visLow,c:"var(--green-bd)"}];
+                  let off=0; return segs.map((g,i)=>{
+                    const len=(g.v/tot)*circ;
+                    const el=<circle key={i} cx={36} cy={36} r={r} fill="none" stroke={g.c} strokeWidth={12}
+                      strokeDasharray={len+" "+(circ-len)} strokeDashoffset={-off}/>;
+                    off+=len; return el;
+                  });
+                })()}
+                <circle cx={36} cy={36} r={26} fill="none" stroke="var(--border)" strokeWidth={12} opacity={0.3}/>
+              </svg>
+              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column",
+                             alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontSize:14, fontWeight:700, color:"var(--text)", lineHeight:1 }}>{visAspects.length}</span>
+                <span style={{ fontSize:8, color:"var(--faint)" }}>aspects</span>
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+              {[{l:"Significant",v:visSig,c:"var(--red)"},{l:"Watch",v:visWatch,c:"var(--amber)"},{l:"Low",v:visLow,c:"var(--green)"}].map(({l,v,c})=>(
+                <div key={l} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+                  <span style={{ width:8, height:8, borderRadius:"50%", background:c, display:"inline-block", flexShrink:0 }}/>
+                  <span style={{ color:"var(--muted)", minWidth:70 }}>{l}</span>
+                  <strong style={{ color:"var(--text)", minWidth:20, textAlign:"right" }}>{v}</strong>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display:"grid", gap:10 }}>
-            {cProjects.map(p => <ProjectCard key={p.id} p={p}/>)}
+          <div style={{ width:"1px", background:"var(--border)", alignSelf:"stretch", margin:"0 4px" }}/>
+          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+            <div style={{ position:"relative" }}>
+              <svg width={72} height={72} style={{ transform:"rotate(-90deg)" }}>
+                {(() => {
+                  const r=26; const circ=2*Math.PI*r; const tot=visAspects.length||1;
+                  const segs=[{v:openAsp,c:"var(--red-bd)"},{v:inProgAsp,c:"var(--amber-bd)"},{v:closedAsp,c:"var(--green-bd)"}];
+                  let off=0; return segs.map((g,i)=>{
+                    const len=(g.v/tot)*circ;
+                    const el=<circle key={i} cx={36} cy={36} r={r} fill="none" stroke={g.c} strokeWidth={12}
+                      strokeDasharray={len+" "+(circ-len)} strokeDashoffset={-off}/>;
+                    off+=len; return el;
+                  });
+                })()}
+                <circle cx={36} cy={36} r={26} fill="none" stroke="var(--border)" strokeWidth={12} opacity={0.3}/>
+              </svg>
+              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column",
+                             alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontSize:14, fontWeight:700, color:"var(--text)", lineHeight:1 }}>{openAsp}</span>
+                <span style={{ fontSize:8, color:"var(--faint)" }}>open</span>
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+              {[{l:"Open",v:openAsp,c:"var(--red)"},{l:"In Progress",v:inProgAsp,c:"var(--amber)"},{l:"Closed",v:closedAsp,c:"var(--green)"}].map(({l,v,c})=>(
+                <div key={l} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+                  <span style={{ width:8, height:8, borderRadius:"50%", background:c, display:"inline-block", flexShrink:0 }}/>
+                  <span style={{ color:"var(--muted)", minWidth:70 }}>{l}</span>
+                  <strong style={{ color:"var(--text)", minWidth:20, textAlign:"right" }}>{v}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Project cards */}
+      <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.6rem", color:"var(--muted)",
+                   textTransform:"uppercase", letterSpacing:"0.06em" }}>
+        {activeContract==="__all__" ? "All projects" : activeContract==="__none__" ? "No contract assigned" : activeContract}
+        <span style={{ marginLeft:8, fontWeight:400, color:"var(--faint)" }}>({visibleProjects.length})</span>
+      </h2>
+      <div style={{ display:"grid", gap:8, marginBottom:"1.75rem" }}>
+        {visibleProjects.map(p => <ProjectCard key={p.id} p={p}/>)}
+      </div>
 
       {/* Cross-portfolio significant aspects */}
-      {totalSig > 0 && (
+      {visSig > 0 && (
         <div>
-          <h2 style={{ fontSize:14, fontWeight:600, margin:"0 0 0.75rem", color:"var(--text)" }}>
-            All significant aspects ({totalSig})
+          <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.6rem", color:"var(--muted)",
+                       textTransform:"uppercase", letterSpacing:"0.06em" }}>
+            Significant aspects ({visSig})
           </h2>
           <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)", overflow:"hidden" }}>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
               <thead>
                 <tr style={{ background:"var(--surface2)" }}>
-                  {["Contract","Project","Ref","Aspect","Score","Phase","Status"].map(h => (
+                  {["Contract","Project","ID","Ref","Aspect","Score","Phase","Status"].map(h => (
                     <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:9, fontWeight:600,
                                          color:"var(--muted)", borderBottom:"1px solid var(--border)",
                                          textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
@@ -2335,18 +2539,17 @@ function PortfolioView({ projects, onClose, onSelect }) {
                 </tr>
               </thead>
               <tbody>
-                {projects.flatMap(p =>
-                  (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").map(a => ({
-                    ...a, _projName:p.name, _projId:p.id, _contract:p.contract||""
-                  }))
+                {visibleProjects.flatMap(p =>
+                  (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").map(a=>({...a,_proj:p}))
                 ).map((a,i) => {
                   const score = calcScore(a);
                   return (
-                    <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)", borderLeft:"3px solid var(--red)" }}>
-                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--faint)" }}>{a._contract||"—"}</td>
-                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--muted)" }}>{a._projName||"Unnamed"}</td>
+                    <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)", borderLeft:"3px solid var(--red-bd)" }}>
+                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--faint)" }}>{a._proj.contract||"—"}</td>
+                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--muted)" }}>{a._proj.name||"Unnamed"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontFamily:"monospace", fontSize:10, color:"var(--faint)" }}>{a._proj.projectId||"—"}</span></td>
                       <td style={{ padding:"8px 12px" }}><span style={{ fontSize:10, fontWeight:600, color:"var(--teal)" }}>{a.ref}</span></td>
-                      <td style={{ padding:"8px 12px", fontWeight:500, color:"var(--text)", maxWidth:200 }}>
+                      <td style={{ padding:"8px 12px", fontWeight:500, color:"var(--text)", maxWidth:180 }}>
                         <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.aspect}>{a.aspect||"—"}</div>
                       </td>
                       <td style={{ padding:"8px 12px", fontWeight:700, color:"var(--red)", whiteSpace:"nowrap" }}>{score!==null?score:"—"}</td>
@@ -2584,7 +2787,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ flex:1, overflow:"auto" }}>
-              <ProjectView key={active.id} project={active} onChange={updateProject} onDelete={()=>deleteProject(active.id)} initialTab={active.id===newProjectId?"settings":undefined}/>
+              <ProjectView key={active.id} project={active} allProjects={projects} onChange={updateProject} onDelete={()=>deleteProject(active.id)} initialTab={active.id===newProjectId?"settings":undefined}/>
             </div>
           </div>
         )}
