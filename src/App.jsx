@@ -451,7 +451,10 @@ function calcSig(a) {
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
 function calcGhgTotal(o) {
   if (!o.ghgLines || o.calcType==="qualitative") return null;
-  const t = (o.ghgLines||[]).reduce((s,l) => s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0), 0);
+  const t = (o.ghgLines||[]).reduce((s,l) => {
+    // supports both old format (id/qty/cf) and new format (uid/qty/cf)
+    return s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0);
+  }, 0);
   return t > 0 ? t : null;
 }
 
@@ -499,7 +502,7 @@ const emptyOpp = () => ({
   action:"", alignment:"", owner:"", status:"Open", _color:"",
   createdAt:"", updatedAt:"",
   calcType:"qualitative",
-  ghgLines: GHG_LINES.map(l => ({ id:l.id, qty:"", cf:l.cfDefault }))
+  ghgLines: []
 });
 const newProject = () => ({
   id: Date.now().toString(),
@@ -655,40 +658,12 @@ function AspectForm({ aspect, onSave, onCancel }) {
 // ── Opp form ──────────────────────────────────────────────────────────────────
 function OppForm({ opp, aspects, onSave, onCancel }) {
   const base = { ...emptyOpp(), ...opp };
-  // Ensure ghgLines is always a full array (merge saved qtys/cfs into fresh template)
-  const mergeLines = () => GHG_LINES.map(l => {
-    const saved = (base.ghgLines||[]).find(x=>x.id===l.id);
-    return { id:l.id, qty:saved?saved.qty:"", cf:saved&&saved.cf!==""?saved.cf:l.cfDefault };
-  });
-  const [f, setF] = useState({ ...base, ghgLines:mergeLines() });
+  // Preserve saved lines (new uid-format); drop old id-format lines from previous version
+  const [f, setF] = useState({ ...base, ghgLines:(base.ghgLines||[]).filter(l=>!!l.uid) });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
-
-  const setLine = (id, field, val) => setF(p => ({
-    ...p, ghgLines: p.ghgLines.map(l => l.id===id ? {...l,[field]:val} : l)
-  }));
 
   const score = calcOppScore(f);
   const sc = score>=75?{bg:T.tealBg,c:T.tealDark}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
-
-  // GHG calculation
-  const ghgTotal = f.ghgLines.reduce((sum, line) => {
-    const qty = parseFloat(line.qty)||0;
-    const cf  = parseFloat(line.cf)||0;
-    return sum + qty*cf;
-  }, 0);
-  const ghgTonnes = (ghgTotal/1000);
-
-  // Group lines by scope for rendering
-  const scopeGroups = GHG_LINES.reduce((acc, l) => {
-    if (!acc[l.scope]) acc[l.scope] = [];
-    acc[l.scope].push(l);
-    return acc;
-  }, {});
-
-  const thStyle = { padding:"6px 10px", textAlign:"left", fontSize:9, fontWeight:600,
-                    color:T.muted, borderBottom:"1px solid "+T.border,
-                    letterSpacing:"0.07em", textTransform:"uppercase", whiteSpace:"nowrap" };
-  const tdStyle = { padding:"6px 10px", fontSize:12, borderBottom:"1px solid "+T.rowBd };
 
   return (
     <div style={{ maxWidth:860, margin:"0 auto", padding:"1.5rem" }}>
@@ -725,10 +700,10 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
         </div>
       </Card>
 
-      {/* ── Key action section with qualitative / quantitative toggle ── */}
+      {/* ── Savings estimate ── */}
       <Card style={{ marginBottom:"1rem" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
-          <SectionLabel style={{ margin:0 }}>Key action &amp; savings estimate</SectionLabel>
+          <SectionLabel style={{ margin:0 }}>Savings estimate</SectionLabel>
           <div style={{ display:"inline-flex", borderRadius:6, overflow:"hidden", border:"1px solid "+T.border }}>
             {["qualitative","quantitative"].map(v => (
               <button key={v} onClick={()=>set("calcType",v)}
@@ -743,140 +718,212 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
           </div>
         </div>
 
-        {/* Qualitative: just a text description */}
+        {/* Qualitative */}
         {f.calcType === "qualitative" && (
           <div style={{ background:T.slateBg, borderRadius:7, padding:"12px 14px", border:"1px solid "+T.border }}>
             <p style={{ margin:"0 0 8px", fontSize:12, fontWeight:500, color:T.muted }}>Qualitative savings description</p>
-            <textarea value={f.ghgNote||""} onChange={e=>set("ghgNote",e.target.value)} rows={2}
-              placeholder="Describe the expected environmental savings qualitatively (e.g. estimated 15% reduction in diesel consumption during commissioning phase)"
+            <textarea value={f.ghgNote||""} onChange={e=>set("ghgNote",e.target.value)} rows={3}
+              placeholder="Describe expected savings — e.g. estimated 15% reduction in diesel consumption during commissioning; zero flaring during start-up avoids approx. 200 t CO₂e"
               style={{ ...iw, resize:"vertical", fontSize:12 }}/>
           </div>
         )}
 
-        {/* Quantitative: GHG calculator */}
-        {f.calcType === "quantitative" && (
-          <div>
-            {/* Total banner — always visible, updates live */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                          background:T.tealBg, border:"1px solid "+T.tealBd,
-                          borderRadius:8, padding:"12px 16px", marginBottom:"1rem" }}>
-              <div>
-                <p style={{ margin:"0 0 2px", fontSize:11, fontWeight:600, color:T.teal,
-                             letterSpacing:"0.06em", textTransform:"uppercase" }}>Total GHG saving</p>
-                <p style={{ margin:0, fontSize:11, color:T.muted }}>Sum of all scopes below</p>
-              </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontFamily:T.mono, fontSize:22, fontWeight:700, color:T.teal, lineHeight:1 }}>
-                  {ghgTonnes >= 1 ? ghgTonnes.toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e"
-                                  : ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e"}
-                </div>
-                {ghgTonnes >= 1 && <div style={{ fontFamily:T.mono, fontSize:10, color:T.muted, marginTop:2 }}>
-                  = {ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:0})} kg CO₂e
-                </div>}
-              </div>
-            </div>
+        {/* Quantitative: dynamic add-line GHG calculator */}
+        {f.calcType === "quantitative" && (() => {
+          const SCOPE_OPTS = ["Scope 1","Scope 2","Scope 3 Cat 1","Scope 3 Cat 4","Custom"];
+          const SCOPE_META = {
+            "Scope 1":      {c:T.red,    bd:T.redBd,    bg:T.redBg,    desc:"Direct emissions to air"},
+            "Scope 2":      {c:T.blue,   bd:T.blueBd,   bg:T.blueBg,   desc:"Energy consumption"},
+            "Scope 3 Cat 1":{c:T.teal,   bd:T.tealBd,   bg:T.tealBg,   desc:"Upstream materials"},
+            "Scope 3 Cat 4":{c:T.purple, bd:T.purpleBd, bg:T.purpleBg, desc:"Transportation"},
+            "Custom":       {c:T.slate,  bd:T.slateBd,  bg:T.slateBg,  desc:"User-defined"},
+          };
+          const typeOptsFor = scope => [
+            ...GHG_LINES.filter(l=>l.scope===scope).map(l=>({ id:l.id, label:l.type, unit:l.unit, cf:l.cfDefault, cfFixed:l.cfFixed })),
+            { id:"custom", label:"Custom / not listed", unit:"", cf:"", cfFixed:false },
+          ];
+          const addLine = () => {
+            const uid = "u"+Date.now();
+            setF(p=>({ ...p, ghgLines:[...p.ghgLines,
+              { uid, scope:"Scope 1", typeId:"", customType:"", unit:"kg", qty:"", cf:"", cfFixed:false, ref:"" }
+            ]}));
+          };
+          const delLine = uid => setF(p=>({ ...p, ghgLines:p.ghgLines.filter(l=>l.uid!==uid) }));
+          const setLF = (uid,k,v) => setF(p=>({ ...p, ghgLines:p.ghgLines.map(l=>l.uid===uid?{...l,[k]:v}:l) }));
+          const onTypeChange = (uid, typeId, scope) => {
+            const opt = typeOptsFor(scope).find(o=>o.id===typeId);
+            setF(p=>({ ...p, ghgLines:p.ghgLines.map(l=>l.uid===uid
+              ? {...l, typeId, unit:opt?opt.unit:"", cf:opt?opt.cf:"", cfFixed:opt?opt.cfFixed:false, customType:""}
+              : l
+            )}));
+          };
+          const onScopeChange = (uid, scope) => {
+            setF(p=>({ ...p, ghgLines:p.ghgLines.map(l=>l.uid===uid
+              ? {...l, scope, typeId:"", customType:"", unit:"", cf:"", cfFixed:false}
+              : l
+            )}));
+          };
+          const lines = f.ghgLines.filter(l=>l.uid); // only new-format lines
+          const grandTotal = lines.reduce((s,l)=>(s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0)),0);
+          const grandTonnes = grandTotal/1000;
 
-            {/* Scope sections */}
-            {Object.entries(scopeGroups).map(([scope, lines]) => {
-              const scopeColors = {
-                "Scope 1":      {bg:T.redBg,    c:T.red,    bd:T.redBd,    label:"Direct emissions to air"},
-                "Scope 2":      {bg:T.blueBg,   c:T.blue,   bd:T.blueBd,   label:"Energy consumption"},
-                "Scope 3 Cat 1":{bg:T.tealBg,   c:T.teal,   bd:T.tealBd,   label:"Upstream materials"},
-                "Scope 3 Cat 4":{bg:T.purpleBg, c:T.purple, bd:T.purpleBd, label:"Transportation"},
-              };
-              const sc2 = scopeColors[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd,label:""};
-              const scopeTotal = lines.reduce((s,l) => {
-                const ln = f.ghgLines.find(x=>x.id===l.id)||{qty:"",cf:l.cfDefault};
-                return s+(parseFloat(ln.qty)||0)*(parseFloat(ln.cf)||0);
-              }, 0);
-              return (
-                <div key={scope} style={{ marginBottom:"0.75rem", borderRadius:8,
-                                          border:"1px solid "+sc2.bd, overflow:"hidden" }}>
-                  {/* Scope header */}
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                                padding:"8px 14px", background:sc2.bg }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                      <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:sc2.c,
-                                     padding:"2px 8px", borderRadius:3,
-                                     background:sc2.c+"22", border:"1px solid "+sc2.bd }}>{scope}</span>
-                      <span style={{ fontSize:12, color:sc2.c, fontWeight:500 }}>{sc2.label}</span>
-                    </div>
-                    {scopeTotal > 0 && (
-                      <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:600, color:sc2.c }}>
-                        {scopeTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg CO₂e
-                      </span>
-                    )}
-                  </div>
-                  {/* Lines */}
-                  <div style={{ background:T.surface }}>
-                    {/* Column labels — only once per scope */}
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 60px 100px 50px 100px",
-                                  gap:0, padding:"4px 14px",
-                                  borderBottom:"1px solid "+T.rowBd, background:T.surface2 }}>
-                      {["Emission / reduction type","Unit","Your reduction qty","CF","Saving (kg CO₂e)"].map(h=>(
-                        <span key={h} style={{ fontSize:9, fontWeight:600, color:T.faint,
-                                               letterSpacing:"0.07em", textTransform:"uppercase",
-                                               textAlign:h!=="Emission / reduction type"?"right":"left" }}>{h}</span>
-                      ))}
-                    </div>
-                    {lines.map(l => {
-                      const line = f.ghgLines.find(x=>x.id===l.id)||{qty:"",cf:l.cfDefault};
-                      const qty  = parseFloat(line.qty)||0;
-                      const cf   = parseFloat(line.cf)||0;
-                      const saving = qty && cf ? qty*cf : null;
-                      return (
-                        <div key={l.id} style={{ display:"grid",
-                                                  gridTemplateColumns:"1fr 60px 100px 50px 100px",
-                                                  gap:0, padding:"7px 14px",
-                                                  borderBottom:"1px solid "+T.rowBd,
-                                                  alignItems:"center" }}>
-                          {/* Type */}
-                          <span style={{ fontSize:12, fontWeight:500, color:T.text }}>{l.type}</span>
-                          {/* Unit */}
-                          <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint,
-                                         textAlign:"right" }}>{l.unit}</span>
-                          {/* Qty input */}
-                          <div style={{ textAlign:"right" }}>
-                            <input type="number" min={0} value={line.qty}
-                              onChange={e=>setLine(l.id,"qty",e.target.value)}
-                              placeholder="—"
-                              style={{ width:88, textAlign:"right", padding:"4px 8px",
-                                       fontSize:12, border:"1px solid "+(qty>0?sc2.bd:T.border),
-                                       borderRadius:5, background:qty>0?sc2.bg:T.surface,
-                                       color:qty>0?sc2.c:T.text, fontFamily:T.mono }}/>
-                          </div>
-                          {/* CF */}
-                          <div style={{ textAlign:"right" }}>
-                            {l.cfFixed ? (
-                              <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>{l.cfDefault}</span>
-                            ) : (
-                              <input type="number" min={0} value={line.cf}
-                                onChange={e=>setLine(l.id,"cf",e.target.value)}
-                                placeholder="?"
-                                style={{ width:44, textAlign:"right", padding:"4px 6px",
-                                         fontSize:11, border:"1px solid "+T.amberBd,
-                                         borderRadius:5, background:T.amberBg, color:T.amber,
-                                         fontFamily:T.mono }}/>
-                            )}
-                          </div>
-                          {/* Saving */}
-                          <div style={{ textAlign:"right", fontFamily:T.mono, fontSize:12,
-                                        fontWeight:saving?700:400, color:saving?T.teal:T.faint }}>
-                            {saving!=null ? saving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+          return (
+            <div>
+              {/* Live total banner */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                            background:grandTotal>0?T.tealBg:T.slateBg,
+                            border:"1px solid "+(grandTotal>0?T.tealBd:T.border),
+                            borderRadius:8, padding:"12px 16px", marginBottom:"1rem",
+                            transition:"background 0.2s" }}>
+                <div>
+                  <p style={{ margin:"0 0 2px", fontSize:11, fontWeight:600,
+                               color:grandTotal>0?T.teal:T.faint,
+                               letterSpacing:"0.06em", textTransform:"uppercase" }}>Total GHG saving</p>
+                  <p style={{ margin:0, fontSize:11, color:T.muted }}>
+                    {lines.length===0?"Add saving lines below to calculate":"Calculated from "+lines.length+" line"+(lines.length!==1?"s":"")}
+                  </p>
                 </div>
-              );
-            })}
-            <p style={{ fontSize:11, color:T.faint, margin:"0.5rem 0 0" }}>
-              Fixed CFs: CO₂ = 1, NOₓ = 296, CH₄ = 28 kg CO₂e/kg · Electricity = 0.57 kg CO₂e/kWh · Steel = 2, Other material = 1.5 kg CO₂e/kg.
-              Amber fields = enter your own conversion factor.
-            </p>
-          </div>
-        )}
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontFamily:T.mono, fontSize:22, fontWeight:700,
+                                 color:grandTotal>0?T.teal:T.faint, lineHeight:1 }}>
+                    {grandTonnes>=1
+                      ? grandTonnes.toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e"
+                      : grandTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e"}
+                  </div>
+                  {grandTonnes>=1 && (
+                    <div style={{ fontFamily:T.mono, fontSize:10, color:T.muted, marginTop:2 }}>
+                      = {grandTotal.toLocaleString("nb-NO",{maximumFractionDigits:0})} kg CO₂e
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Saving lines */}
+              {lines.length===0 && (
+                <div style={{ textAlign:"center", padding:"1.5rem", borderRadius:8,
+                              border:"1px dashed "+T.border, color:T.faint, fontSize:12,
+                              marginBottom:"0.75rem" }}>
+                  No saving lines yet — click "+ Add saving line" to start
+                </div>
+              )}
+              {lines.map((l, idx) => {
+                const sm   = SCOPE_META[l.scope]||SCOPE_META["Custom"];
+                const qty  = parseFloat(l.qty)||0;
+                const cf   = parseFloat(l.cf)||0;
+                const saving = qty && cf ? qty*cf : null;
+                const typeOpts = typeOptsFor(l.scope);
+                return (
+                  <div key={l.uid} style={{ marginBottom:8, borderRadius:8,
+                                             border:"1px solid "+sm.bd, overflow:"hidden" }}>
+                    {/* Line header: scope badge + saving result + delete */}
+                    <div style={{ display:"flex", alignItems:"center", gap:8,
+                                   padding:"7px 12px", background:sm.bg,
+                                   borderBottom:"1px solid "+sm.bd }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:sm.c }}>#{idx+1}</span>
+                      <select value={l.scope} onChange={e=>onScopeChange(l.uid,e.target.value)}
+                        style={{ fontSize:11, fontWeight:600, color:sm.c, background:"transparent",
+                                 border:"1px solid "+sm.bd, borderRadius:4, padding:"2px 6px",
+                                 cursor:"pointer" }}>
+                        {SCOPE_OPTS.map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <span style={{ fontSize:10, color:sm.c, opacity:0.7 }}>{sm.desc}</span>
+                      <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:10 }}>
+                        {saving!=null && (
+                          <span style={{ fontFamily:T.mono, fontSize:12, fontWeight:700, color:T.teal }}>
+                            {saving.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg CO₂e
+                          </span>
+                        )}
+                        <button onClick={()=>delLine(l.uid)}
+                          style={{ fontSize:12, color:T.red, background:"transparent",
+                                   border:"none", cursor:"pointer", padding:"0 4px",
+                                   lineHeight:1 }}>✕</button>
+                      </div>
+                    </div>
+                    {/* Line body */}
+                    <div style={{ padding:"10px 12px", background:T.surface,
+                                   display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px 12px" }}>
+                      {/* Row 1: Type + Qty */}
+                      <div>
+                        <p style={{ margin:"0 0 4px", fontSize:10, fontWeight:600, color:T.faint,
+                                     letterSpacing:"0.07em", textTransform:"uppercase" }}>Emission / reduction type</p>
+                        <select value={l.typeId} onChange={e=>onTypeChange(l.uid,e.target.value,l.scope)}
+                          style={{ ...iw, fontSize:12 }}>
+                          <option value="">Select type...</option>
+                          {typeOpts.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
+                        </select>
+                        {l.typeId==="custom" && (
+                          <input value={l.customType||""} onChange={e=>setLF(l.uid,"customType",e.target.value)}
+                            placeholder="Describe the emission/reduction type"
+                            style={{ ...iw, fontSize:12, marginTop:6 }}/>
+                        )}
+                      </div>
+                      <div>
+                        <p style={{ margin:"0 0 4px", fontSize:10, fontWeight:600, color:T.faint,
+                                     letterSpacing:"0.07em", textTransform:"uppercase" }}>
+                          Reduction quantity{l.unit ? " ("+l.unit+")" : ""}
+                        </p>
+                        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                          <input type="number" min={0} value={l.qty}
+                            onChange={e=>setLF(l.uid,"qty",e.target.value)}
+                            placeholder="Enter quantity"
+                            style={{ ...iw, fontFamily:T.mono, fontSize:13 }}/>
+                          {(l.typeId==="custom"||!l.unit) && (
+                            <input value={l.unit||""} onChange={e=>setLF(l.uid,"unit",e.target.value)}
+                              placeholder="unit"
+                              style={{ width:60, padding:"6px 8px", fontSize:12, border:"1px solid "+T.border,
+                                       borderRadius:5, background:T.surface, color:T.muted }}/>
+                          )}
+                        </div>
+                      </div>
+                      {/* Row 2: CF + Reference */}
+                      <div>
+                        <p style={{ margin:"0 0 4px", fontSize:10, fontWeight:600, color:T.faint,
+                                     letterSpacing:"0.07em", textTransform:"uppercase" }}>
+                          Conversion factor (kg CO₂e / {l.unit||"unit"})
+                        </p>
+                        {l.cfFixed ? (
+                          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
+                                        background:T.surface2, borderRadius:5, border:"1px solid "+T.border }}>
+                            <span style={{ fontFamily:T.mono, fontSize:13, fontWeight:600, color:T.text }}>{l.cf}</span>
+                            <span style={{ fontSize:11, color:T.faint }}>fixed — standard value</span>
+                          </div>
+                        ) : (
+                          <input type="number" min={0} value={l.cf}
+                            onChange={e=>setLF(l.uid,"cf",e.target.value)}
+                            placeholder="Enter conversion factor"
+                            style={{ ...iw, fontFamily:T.mono, fontSize:13,
+                                     border:"1px solid "+T.amberBd,
+                                     background:T.amberBg, color:T.amber }}/>
+                        )}
+                      </div>
+                      <div>
+                        <p style={{ margin:"0 0 4px", fontSize:10, fontWeight:600, color:T.faint,
+                                     letterSpacing:"0.07em", textTransform:"uppercase" }}>Reference / source</p>
+                        <input value={l.ref||""} onChange={e=>setLF(l.uid,"ref",e.target.value)}
+                          placeholder="e.g. Enova report 2024, IPCC AR6, project estimate"
+                          style={{ ...iw, fontSize:12 }}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <button onClick={addLine}
+                style={{ width:"100%", padding:"8px", borderRadius:7,
+                          border:"1px dashed "+T.tealBd, background:"transparent",
+                          color:T.teal, fontSize:12, fontWeight:500,
+                          cursor:"pointer", marginTop:4 }}
+                onMouseEnter={e=>{e.currentTarget.style.background=T.tealBg;}}
+                onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                + Add saving line
+              </button>
+              <p style={{ fontSize:11, color:T.faint, margin:"0.75rem 0 0" }}>
+                Standard conversion factors are pre-filled for known types. Amber fields require your own CF.
+                Custom type lets you add anything not in the list — enter the type name, unit, CF and reference.
+              </p>
+            </div>
+          );
+        })()}
       </Card>
 
       {/* ── Admin ── */}
