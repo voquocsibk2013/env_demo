@@ -298,9 +298,9 @@ const THEMES = {
     "--red":         "#A32D2D",
     "--red-bg":      "#FCEBEB",
     "--red-bd":      "#F09595",
-    "--amber":       "#633806",
-    "--amber-bg":    "#FAEEDA",
-    "--amber-bd":    "#EF9F27",
+    "--amber":       "#856404",
+    "--amber-bg":    "#FFFBE6",
+    "--amber-bd":    "#FFD700",
     "--green":       "#27500A",
     "--green-bg":    "#EAF3DE",
     "--green-bd":    "#97C459",
@@ -346,9 +346,9 @@ const THEMES = {
     "--red":         "#E24B4A",
     "--red-bg":      "#1A0808",
     "--red-bd":      "#7B2020",
-    "--amber":       "#EF9F27",
-    "--amber-bg":    "#1A1006",
-    "--amber-bd":    "#7A4F0A",
+    "--amber":       "#FFD700",
+    "--amber-bg":    "#1A1800",
+    "--amber-bd":    "#A08000",
     "--green":       "#97C459",
     "--green-bg":    "#0A1505",
     "--green-bd":    "#3B6D11",
@@ -462,13 +462,15 @@ const emptyAspect = () => ({
   impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
   severity:3, probability:3, duration:"Temporary (<1yr)",
   legalThreshold:"N", stakeholderConcern:"N",
-  control:"", legalRef:"", owner:"", status:"Open", _color:""
+  control:"", legalRef:"", owner:"", status:"Open", _color:"",
+  createdAt:"", updatedAt:""
 });
 const emptyOpp = () => ({
   type:"", aspectRef:"", materiality:"Both",
   description:"", envBenefit:"", bizBenefit:"",
   envValue:3, bizValue:3, feasibility:3,
-  action:"", alignment:"", owner:"", status:"Open", _color:""
+  action:"", alignment:"", owner:"", status:"Open", _color:"",
+  createdAt:"", updatedAt:""
 });
 const newProject = () => ({
   id: Date.now().toString(),
@@ -1056,22 +1058,28 @@ function ProjectView({ project, onChange, onDelete }) {
 
   const saveAspect = a => {
     const isEdit = !!a.id;
-    const updated = isEdit ? aspects.map(x=>x.id===a.id?a:x)
-                           : [...aspects,{...a,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
+    const now = new Date().toISOString();
+    const withTs = isEdit ? {...a, updatedAt:now}
+                          : {...a, createdAt:now, updatedAt:now};
+    const updated = isEdit ? aspects.map(x=>x.id===a.id?withTs:x)
+                           : [...aspects,{...withTs,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
     const ref = isEdit ? a.ref : nextRef(aspects,"ASP");
     onChange({ ...project, aspects:updated,
                changelog:logChange(isEdit?"Edited aspect":"Added aspect",
-                 `${ref}: ${(a.aspect||"").slice(0,60)}`) });
+                 `${ref}: ${(withTs.aspect||"").slice(0,60)}`) });
     setEditAspect(null);
   };
   const saveOpp = o => {
     const isEdit = !!o.id;
-    const updated = isEdit ? opps.map(x=>x.id===o.id?o:x)
-                           : [...opps,{...o,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
+    const now = new Date().toISOString();
+    const withTs = isEdit ? {...o, updatedAt:now}
+                          : {...o, createdAt:now, updatedAt:now};
+    const updated = isEdit ? opps.map(x=>x.id===o.id?withTs:x)
+                           : [...opps,{...withTs,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
     const ref = isEdit ? o.ref : nextRef(opps,"OPP");
     onChange({ ...project, opps:updated,
                changelog:logChange(isEdit?"Edited opportunity":"Added opportunity",
-                 `${ref}: ${(o.description||"").slice(0,60)}`) });
+                 `${ref}: ${(withTs.description||"").slice(0,60)}`) });
     setEditOpp(null);
   };
   const deleteAspect = (a) => {
@@ -1188,6 +1196,8 @@ function ProjectView({ project, onChange, onDelete }) {
 
   // Colour helper for rows
   const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
+  // Date display helper
+  const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—";
 
   // Shared aspect table renderer
   const BulkBar = ({ count, onDelete, onStatusChange, statusOptions, accentColor, accentBg, accentBd }) => (
@@ -1253,6 +1263,8 @@ function ProjectView({ project, onChange, onDelete }) {
           <STH col="score" label="Score"/>
           <STH col="sig" label="Significance"/>
           <STH col="status" label="Status"/>
+          <STH col="createdAt" label="Created"/>
+          <STH col="updatedAt" label="Modified"/>
           <PlainTH></PlainTH>
         </tr></thead>
         <tbody>
@@ -1291,6 +1303,12 @@ function ProjectView({ project, onChange, onDelete }) {
                 <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(a.createdAt)}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(a.updatedAt||a.createdAt)}</span>
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
@@ -1338,6 +1356,8 @@ function ProjectView({ project, onChange, onDelete }) {
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority</th>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
           <OSTH col="status" label="Status"/>
+          <OSTH col="createdAt" label="Created"/>
+          <OSTH col="updatedAt" label="Modified"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}></th>
         </tr></thead>
         <tbody>
@@ -1368,6 +1388,12 @@ function ProjectView({ project, onChange, onDelete }) {
                 <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.updatedAt||o.createdAt)}</span>
+                </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
                   <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
@@ -1897,7 +1923,198 @@ function ProjectView({ project, onChange, onDelete }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate }) {
+
+// ── Portfolio Overview ────────────────────────────────────────────────────────
+function PortfolioView({ projects, onClose, onSelect }) {
+  const total       = projects.length;
+  const allAspects  = projects.flatMap(p => p.aspects||[]);
+  const allOpps     = projects.flatMap(p => p.opps||[]);
+  const totalSig    = allAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+  const totalWatch  = allAspects.filter(a=>calcSig(a)==="WATCH").length;
+  const totalLow    = allAspects.filter(a=>calcSig(a)==="Low").length;
+  const totalHigh   = allOpps.filter(o=>calcOppScore(o)>=75).length;
+
+  const BAR_W = 220;
+
+  return (
+    <div style={{ padding:"1.5rem 1.75rem", background:"var(--bg)", minHeight:"100%", fontFamily:"var(--sans, system-ui)" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.5rem" }}>
+        <div>
+          <h1 style={{ margin:"0 0 3px", fontSize:18, fontWeight:700, color:"var(--text)" }}>Portfolio overview</h1>
+          <p style={{ margin:0, fontSize:12, color:"var(--muted)" }}>{total} project{total!==1?"s":""} · {allAspects.length} aspects · {allOpps.length} opportunities</p>
+        </div>
+        <button onClick={onClose}
+          style={{ padding:"6px 14px", borderRadius:6, border:"1px solid var(--border)", background:"transparent",
+                   color:"var(--muted)", cursor:"pointer", fontSize:12 }}>
+          ✕ Close
+        </button>
+      </div>
+
+      {/* Portfolio stat cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:"1.5rem" }}>
+        {[
+          { label:"Projects",       val:total,           bg:"var(--surface)",    c:"var(--text)",    bd:"var(--border)" },
+          { label:"Total aspects",  val:allAspects.length,bg:"var(--surface)",   c:"var(--text)",    bd:"var(--border)" },
+          { label:"Significant",    val:totalSig,         bg:"var(--red-bg)",    c:"var(--red)",     bd:"var(--red-bd)" },
+          { label:"Watch",          val:totalWatch,       bg:"var(--amber-bg)",  c:"var(--amber)",   bd:"var(--amber-bd)" },
+          { label:"Opportunities",  val:allOpps.length,   bg:"var(--purple-bg)", c:"var(--purple)",  bd:"var(--purple-bd)" },
+          { label:"High priority",  val:totalHigh,        bg:"var(--teal-bg)",   c:"var(--teal)",    bd:"var(--teal-bd)" },
+        ].map(({ label, val, bg, c, bd }) => (
+          <div key={label} style={{ background:bg, borderRadius:8, padding:"12px 14px", border:"1px solid "+bd }}>
+            <p style={{ fontSize:9, fontWeight:600, color:c, margin:"0 0 6px", letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
+            <p style={{ fontSize:22, fontWeight:700, margin:0, color:c, lineHeight:1 }}>{val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-project breakdown */}
+      <h2 style={{ fontSize:14, fontWeight:600, margin:"0 0 0.75rem", color:"var(--text)" }}>Projects</h2>
+      <div style={{ display:"grid", gap:10, marginBottom:"1.75rem" }}>
+        {projects.map(p => {
+          const asp   = p.aspects||[];
+          const opp   = p.opps||[];
+          const sig   = asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+          const watch = asp.filter(a=>calcSig(a)==="WATCH").length;
+          const low   = asp.filter(a=>calcSig(a)==="Low").length;
+          const hi    = opp.filter(o=>calcOppScore(o)>=75).length;
+          const total = asp.length;
+          const statColors = { "Open":"var(--red)", "In Progress":"var(--amber)", "Closed":"var(--green)" };
+          const statusCounts = ["Open","In Progress","Closed"].map(s => ({
+            s, n: asp.filter(a=>a.status===s).length
+          }));
+          return (
+            <div key={p.id} onClick={() => { onSelect(p.id); onClose(); }}
+              style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10,
+                       padding:"14px 16px", cursor:"pointer", transition:"border-color 0.15s" }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal-bd)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+              {/* Project title row */}
+              <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:10 }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+                  <span style={{ fontSize:14, fontWeight:600, color:"var(--text)" }}>{p.name||"Unnamed project"}</span>
+                  {p.company && <span style={{ fontSize:12, color:"var(--muted)" }}>{p.company}</span>}
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  {p.type  && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--slate-bg)", color:"var(--slate)", border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
+                  {p.phase && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--blue-bg)", color:"var(--blue)", border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
+                </div>
+              </div>
+
+              <div style={{ display:"flex", gap:"1.5rem", flexWrap:"wrap" }}>
+                {/* Significance mini bar */}
+                <div style={{ flex:1, minWidth:180 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Significance</span>
+                    <span style={{ fontSize:10, color:"var(--faint)" }}>{total} aspects</span>
+                  </div>
+                  {total > 0 ? (
+                    <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", gap:"1px" }}>
+                      {sig   > 0 && <div style={{ flex:sig,   background:"var(--red)",   minWidth:4 }} title={"Significant: "+sig}/>}
+                      {watch > 0 && <div style={{ flex:watch, background:"var(--amber)", minWidth:4 }} title={"Watch: "+watch}/>}
+                      {low   > 0 && <div style={{ flex:low,   background:"var(--green)", minWidth:4 }} title={"Low: "+low}/>}
+                    </div>
+                  ) : (
+                    <div style={{ height:8, borderRadius:4, background:"var(--border)" }}/>
+                  )}
+                  <div style={{ display:"flex", gap:10, marginTop:5 }}>
+                    {[{l:"Sig",v:sig,c:"var(--red)"},{l:"Watch",v:watch,c:"var(--amber)"},{l:"Low",v:low,c:"var(--green)"}].map(({l,v,c}) => (
+                      <span key={l} style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
+                        <span style={{ width:7, height:7, borderRadius:"50%", background:c, display:"inline-block" }}/>
+                        {l} <strong style={{ color:"var(--text)" }}>{v}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status mini bar */}
+                <div style={{ flex:1, minWidth:180 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Status</span>
+                  </div>
+                  {total > 0 ? (
+                    <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", gap:"1px" }}>
+                      {statusCounts.map(({s,n}) => n>0 && (
+                        <div key={s} style={{ flex:n, background:statColors[s], minWidth:4 }} title={s+": "+n}/>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ height:8, borderRadius:4, background:"var(--border)" }}/>
+                  )}
+                  <div style={{ display:"flex", gap:10, marginTop:5 }}>
+                    {statusCounts.map(({s,n}) => (
+                      <span key={s} style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
+                        <span style={{ width:7, height:7, borderRadius:"50%", background:statColors[s], display:"inline-block" }}/>
+                        {s} <strong style={{ color:"var(--text)" }}>{n}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Opportunities column */}
+                <div style={{ minWidth:100 }}>
+                  <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500, display:"block", marginBottom:4 }}>Opportunities</span>
+                  <div style={{ display:"flex", gap:10 }}>
+                    <span style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
+                      <span style={{ width:7, height:7, borderRadius:"50%", background:"var(--teal)", display:"inline-block" }}/>
+                      High <strong style={{ color:"var(--text)" }}>{hi}</strong>
+                    </span>
+                    <span style={{ fontSize:10, color:"var(--muted)" }}>
+                      Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cross-project significant aspects */}
+      {totalSig > 0 && (
+        <div>
+          <h2 style={{ fontSize:14, fontWeight:600, margin:"0 0 0.75rem", color:"var(--text)" }}>
+            All significant aspects ({totalSig})
+          </h2>
+          <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)", overflow:"hidden" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ background:"var(--surface2)" }}>
+                  {["Project","Ref","Aspect","Score","Phase","Status"].map(h => (
+                    <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:9, fontWeight:600,
+                                         color:"var(--muted)", borderBottom:"1px solid var(--border)",
+                                         textTransform:"uppercase", letterSpacing:"0.07em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {projects.flatMap(p =>
+                  (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").map(a => ({ ...a, _projName:p.name, _projId:p.id }))
+                ).map((a,i) => {
+                  const score = calcScore(a);
+                  return (
+                    <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)", borderLeft:"3px solid var(--red)" }}>
+                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--muted)" }}>{a._projName||"Unnamed"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:10, fontWeight:600, color:"var(--teal)" }}>{a.ref}</span></td>
+                      <td style={{ padding:"8px 12px", fontWeight:500, color:"var(--text)", maxWidth:220 }}>
+                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.aspect}>{a.aspect||"—"}</div>
+                      </td>
+                      <td style={{ padding:"8px 12px", fontWeight:700, color:"var(--red)" }}>{score!==null?score:"—"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9, padding:"2px 5px", borderRadius:3, background:"var(--slate-bg)", color:"var(--slate)" }}>{a.phase||"—"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9, padding:"2px 5px", borderRadius:3, background:"var(--red-bg)", color:"var(--red)" }}>{a.status||"Open"}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate, onPortfolio, portfolioActive }) {
   return (
     <div style={{ width:215, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
       <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid "+T.sbBd }}>
@@ -1958,14 +2175,24 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
         })}
       </div>
       <div style={{ padding:"8px", borderTop:"1px solid "+T.sbBd }}>
-        <button onClick={onNew}
-          style={{ width:"100%", padding:"7px", borderRadius:6, border:"1px dashed "+T.sbBd,
-                   background:"transparent", color:T.sbFaint, fontFamily:T.mono, fontSize:11, cursor:"pointer",
-                   marginBottom:6 }}
-          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.color=T.teal;}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--sb-bd)";e.currentTarget.style.color="var(--sb-faint)";}}>
-          + New project
-        </button>
+        <div style={{ display:"flex", gap:4, marginBottom:6 }}>
+          <button onClick={onNew}
+            style={{ flex:1, padding:"7px", borderRadius:6, border:"1px dashed "+T.sbBd,
+                     background:"transparent", color:T.sbFaint, fontFamily:T.mono, fontSize:11, cursor:"pointer" }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.color=T.teal;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--sb-bd)";e.currentTarget.style.color="var(--sb-faint)";}}>
+            + New project
+          </button>
+          <button onClick={onPortfolio} title="Portfolio overview"
+            style={{ padding:"7px 10px", borderRadius:6, border:"1px solid "+T.sbBd,
+                     background:portfolioActive?"var(--teal)":"transparent",
+                     color:portfolioActive?"#fff":"var(--sb-muted)", fontFamily:T.mono, fontSize:11, cursor:"pointer" }}
+            onMouseEnter={e=>{if(!portfolioActive){e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.color=T.teal;}}}
+            onMouseLeave={e=>{if(!portfolioActive){e.currentTarget.style.borderColor="var(--sb-bd)";e.currentTarget.style.color="var(--sb-muted)";}}}
+            >
+            ◫
+          </button>
+        </div>
         <div style={{ display:"flex", gap:4 }}>
           {[[0.88,"A−"],[1.0,"A"],[1.15,"A+"]].map(([val,label]) => (
             <button key={val} onClick={()=>onZoom(val)}
@@ -1990,6 +2217,7 @@ export default function App() {
   const [loaded,   setLoaded]   = useState(false);
   const [isDark,   setIsDark]   = useState(false);
   const [zoom,    setZoom]    = useState(() => parseFloat(localStorage.getItem("env-zoom")||"1"));
+  const [showPortfolio, setShowPortfolio] = useState(false);
 
   useEffect(() => {
     applyTheme("light");
@@ -2067,9 +2295,14 @@ export default function App() {
   return (
     <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
-               isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}/>
+               isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}
+               onPortfolio={()=>setShowPortfolio(v=>!v)} portfolioActive={showPortfolio}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
-        {!active ? (
+        {showPortfolio ? (
+          <div style={{ flex:1, overflow:"auto" }}>
+            <PortfolioView projects={projects} onClose={()=>setShowPortfolio(false)} onSelect={setActiveId}/>
+          </div>
+        ) : !active ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
                         flex:1, gap:14, padding:"2rem" }}>
             <div style={{ width:48, height:48, background:T.teal, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
