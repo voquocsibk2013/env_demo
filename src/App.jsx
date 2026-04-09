@@ -449,6 +449,11 @@ function calcSig(a) {
   return "Low";
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
+function calcGhgTotal(o) {
+  if (!o.ghgLines || o.calcType==="qualitative") return null;
+  const t = (o.ghgLines||[]).reduce((s,l) => s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0), 0);
+  return t > 0 ? t : null;
+}
 
 function inferOppType(oppText) {
   if (!oppText) return "";
@@ -465,12 +470,36 @@ const emptyAspect = () => ({
   control:"", legalRef:"", owner:"", status:"Open", _color:"",
   createdAt:"", updatedAt:""
 });
+// ── GHG saving calculation lines (based on Norwegian EPCIC calculation framework) ─
+const GHG_LINES = [
+  // Scope 1 — Direct emissions to air
+  { id:"s1_co2",   scope:"Scope 1", group:"Direct emission to air",   type:"CO2",                           unit:"kg",  cfDefault:1,    cfFixed:true  },
+  { id:"s1_nox",   scope:"Scope 1", group:"Direct emission to air",   type:"NOx",                           unit:"kg",  cfDefault:296,  cfFixed:true  },
+  { id:"s1_ch4",   scope:"Scope 1", group:"Direct emission to air",   type:"CH4",                           unit:"kg",  cfDefault:28,   cfFixed:true  },
+  { id:"s1_nmvoc", scope:"Scope 1", group:"Direct emission to air",   type:"nmVOC",                         unit:"kg",  cfDefault:"",   cfFixed:false },
+  { id:"s1_chem",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. chemicals)",        unit:"kg",  cfDefault:"",   cfFixed:false },
+  { id:"s1_refr",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. refrigerants)",     unit:"kWh", cfDefault:"",   cfFixed:false },
+  { id:"s1_other", scope:"Scope 1", group:"Direct emission to air",   type:"Other",                         unit:"kg",  cfDefault:"",   cfFixed:false },
+  // Scope 2 — Energy
+  { id:"s2_elec",  scope:"Scope 2", group:"Reduction energy consumption", type:"Reduction in energy consumption", unit:"kWh", cfDefault:0.57, cfFixed:true },
+  // Scope 3 Cat 1 — Material
+  { id:"s3_steel_reuse",   scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Reuse of material (Steel)",                 unit:"kg", cfDefault:2,   cfFixed:true  },
+  { id:"s3_other_simp",    scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Simplified design (other material)",         unit:"kg", cfDefault:1.5, cfFixed:true  },
+  { id:"s3_other_reuse",   scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Reuse of material (other material)",         unit:"kg", cfDefault:1.5, cfFixed:true  },
+  { id:"s3_steel_simp",    scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Simplified design (Steel)",                  unit:"kg", cfDefault:2,   cfFixed:true  },
+  // Scope 3 Cat 4 — Transport
+  { id:"s3t_mat",   scope:"Scope 3 Cat 4", group:"Transportation", type:"Material",                         unit:"kg",  cfDefault:"",  cfFixed:false },
+  { id:"s3t_add",   scope:"Scope 3 Cat 4", group:"Transportation", type:"Added / modified systems needed",  unit:"",    cfDefault:"",  cfFixed:false },
+];
+
 const emptyOpp = () => ({
   type:"", aspectRef:"", materiality:"Both",
   description:"", envBenefit:"", bizBenefit:"",
   envValue:3, bizValue:3, feasibility:3,
   action:"", alignment:"", owner:"", status:"Open", _color:"",
-  createdAt:"", updatedAt:""
+  createdAt:"", updatedAt:"",
+  calcType:"qualitative",
+  ghgLines: GHG_LINES.map(l => ({ id:l.id, qty:"", cf:l.cfDefault }))
 });
 const newProject = () => ({
   id: Date.now().toString(),
@@ -625,17 +654,51 @@ function AspectForm({ aspect, onSave, onCancel }) {
 
 // ── Opp form ──────────────────────────────────────────────────────────────────
 function OppForm({ opp, aspects, onSave, onCancel }) {
-  const [f, setF] = useState({ ...emptyOpp(), ...opp });
+  const base = { ...emptyOpp(), ...opp };
+  // Ensure ghgLines is always a full array (merge saved qtys/cfs into fresh template)
+  const mergeLines = () => GHG_LINES.map(l => {
+    const saved = (base.ghgLines||[]).find(x=>x.id===l.id);
+    return { id:l.id, qty:saved?saved.qty:"", cf:saved&&saved.cf!==""?saved.cf:l.cfDefault };
+  });
+  const [f, setF] = useState({ ...base, ghgLines:mergeLines() });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
+
+  const setLine = (id, field, val) => setF(p => ({
+    ...p, ghgLines: p.ghgLines.map(l => l.id===id ? {...l,[field]:val} : l)
+  }));
+
   const score = calcOppScore(f);
-  const sc = score>=75?{bg:"var(--teal-bg)",c:"var(--teal-dk)"}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+  const sc = score>=75?{bg:T.tealBg,c:T.tealDark}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+
+  // GHG calculation
+  const ghgTotal = f.ghgLines.reduce((sum, line) => {
+    const qty = parseFloat(line.qty)||0;
+    const cf  = parseFloat(line.cf)||0;
+    return sum + qty*cf;
+  }, 0);
+  const ghgTonnes = (ghgTotal/1000);
+
+  // Group lines by scope for rendering
+  const scopeGroups = GHG_LINES.reduce((acc, l) => {
+    if (!acc[l.scope]) acc[l.scope] = [];
+    acc[l.scope].push(l);
+    return acc;
+  }, {});
+
+  const thStyle = { padding:"6px 10px", textAlign:"left", fontSize:9, fontWeight:600,
+                    color:T.muted, borderBottom:"1px solid "+T.border,
+                    letterSpacing:"0.07em", textTransform:"uppercase", whiteSpace:"nowrap" };
+  const tdStyle = { padding:"6px 10px", fontSize:12, borderBottom:"1px solid "+T.rowBd };
+
   return (
-    <div style={{ maxWidth:800, margin:"0 auto", padding:"1.5rem" }}>
+    <div style={{ maxWidth:860, margin:"0 auto", padding:"1.5rem" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
                     paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
         <Btn onClick={onCancel} variant="ghost">Back</Btn>
         <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans }}>{opp.id?"Edit opportunity":"New opportunity"}</h2>
       </div>
+
+      {/* ── Description ── */}
       <Card style={{ marginBottom:"1rem" }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
           <Fld label="Opportunity type"><select value={f.type} onChange={e=>set("type",e.target.value)} style={iw}><option value="">Select type</option>{OPP_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fld>
@@ -646,11 +709,13 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
           <Fld label="Business / strategic benefit"><textarea value={f.bizBenefit} onChange={e=>set("bizBenefit",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
         </div>
       </Card>
+
+      {/* ── Priority score ── */}
       <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
-        <SectionLabel>Priority score = env value x business value x feasibility (max 27)</SectionLabel>
+        <SectionLabel>Priority score = env value x business value x feasibility (max 125)</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px" }}>
-          {[{k:"envValue",l:"Env value (1-3)"},{k:"bizValue",l:"Business value (1-3)"},{k:"feasibility",l:"Feasibility (1-3)"}].map(({ k, l }) => (
-            <Fld key={k} label={l}><input type="number" min={1} max={3} value={f[k]} onChange={e=>set(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          {[{k:"envValue",l:"Env value (1-5)"},{k:"bizValue",l:"Business value (1-5)"},{k:"feasibility",l:"Feasibility (1-5)"}].map(({ k, l }) => (
+            <Fld key={k} label={l}><input type="number" min={1} max={5} value={f[k]} onChange={e=>set(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
           ))}
         </div>
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd, display:"flex", alignItems:"center", gap:12 }}>
@@ -659,14 +724,148 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
           <span style={{ fontSize:12, color:T.muted }}>{score>=75?"High priority - act now":score>=30?"Medium priority":"Low priority"}</span>
         </div>
       </Card>
+
+      {/* ── Key action section with qualitative / quantitative toggle ── */}
+      <Card style={{ marginBottom:"1rem" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
+          <SectionLabel style={{ margin:0 }}>Key action &amp; savings estimate</SectionLabel>
+          <div style={{ display:"inline-flex", borderRadius:6, overflow:"hidden", border:"1px solid "+T.border }}>
+            {["qualitative","quantitative"].map(v => (
+              <button key={v} onClick={()=>set("calcType",v)}
+                style={{ padding:"5px 14px", fontSize:11, fontWeight:500, cursor:"pointer",
+                         fontFamily:T.sans, border:"none",
+                         background: f.calcType===v ? T.teal : T.surface,
+                         color: f.calcType===v ? "#fff" : T.muted,
+                         borderRight: v==="qualitative" ? "1px solid "+T.border : "none" }}>
+                {v.charAt(0).toUpperCase()+v.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px", marginBottom:"1rem" }}>
+          <Fld label="Key action" wide><textarea value={f.action} onChange={e=>set("action",e.target.value)} rows={2} placeholder="Describe the implementation action" style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="ESRS / framework alignment"><input value={f.alignment} onChange={e=>set("alignment",e.target.value)} placeholder="e.g. ESRS E1, EU Taxonomy, SBTi" style={iw}/></Fld>
+        </div>
+
+        {/* Qualitative: just a text description */}
+        {f.calcType === "qualitative" && (
+          <div style={{ background:T.slateBg, borderRadius:7, padding:"12px 14px", border:"1px solid "+T.border }}>
+            <p style={{ margin:"0 0 8px", fontSize:12, fontWeight:500, color:T.muted }}>Qualitative savings description</p>
+            <textarea value={f.ghgNote||""} onChange={e=>set("ghgNote",e.target.value)} rows={2}
+              placeholder="Describe the expected environmental savings qualitatively (e.g. estimated 15% reduction in diesel consumption during commissioning phase)"
+              style={{ ...iw, resize:"vertical", fontSize:12 }}/>
+          </div>
+        )}
+
+        {/* Quantitative: GHG calculator table */}
+        {f.calcType === "quantitative" && (
+          <div>
+            <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, marginBottom:"0.75rem" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
+                <thead>
+                  <tr style={{ background:T.surface2 }}>
+                    <th style={thStyle}>Scope</th>
+                    <th style={thStyle}>Group description</th>
+                    <th style={thStyle}>Type description</th>
+                    <th style={thStyle}>Unit</th>
+                    <th style={{ ...thStyle, textAlign:"right" }}>Reduction qty</th>
+                    <th style={{ ...thStyle, textAlign:"right" }}>Conversion factor (kg CO₂e)</th>
+                    <th style={{ ...thStyle, textAlign:"right" }}>Saving (kg CO₂e)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(scopeGroups).map(([scope, lines]) =>
+                    lines.map((l, li) => {
+                      const line = f.ghgLines.find(x=>x.id===l.id)||{qty:"",cf:l.cfDefault};
+                      const qty = parseFloat(line.qty)||0;
+                      const cf  = parseFloat(line.cf)||0;
+                      const saving = qty && cf ? qty*cf : null;
+                      const isFirst = li===0;
+                      const scopeColors = {
+                        "Scope 1":{bg:"var(--red-bg)",c:"var(--red)"},
+                        "Scope 2":{bg:"var(--blue-bg)",c:"var(--blue)"},
+                        "Scope 3 Cat 1":{bg:"var(--teal-bg)",c:"var(--teal)"},
+                        "Scope 3 Cat 4":{bg:"var(--purple-bg)",c:"var(--purple)"},
+                      };
+                      const sc2 = scopeColors[scope]||{bg:T.slateBg,c:T.slate};
+                      return (
+                        <tr key={l.id} style={{ borderBottom:"1px solid "+T.rowBd }}>
+                          {isFirst && (
+                            <td rowSpan={lines.length}
+                              style={{ ...tdStyle, verticalAlign:"top", paddingTop:10,
+                                       borderRight:"1px solid "+T.border, width:90 }}>
+                              <span style={{ fontSize:10, fontWeight:600, padding:"2px 7px", borderRadius:3,
+                                             background:sc2.bg, color:sc2.c, display:"inline-block",
+                                             whiteSpace:"nowrap" }}>{scope}</span>
+                            </td>
+                          )}
+                          <td style={{ ...tdStyle, color:T.muted, fontSize:11 }}>{l.group}</td>
+                          <td style={{ ...tdStyle, fontWeight:500, color:T.text }}>{l.type}</td>
+                          <td style={{ ...tdStyle, fontFamily:T.mono, fontSize:10, color:T.faint }}>{l.unit}</td>
+                          <td style={{ ...tdStyle, textAlign:"right", padding:"4px 8px" }}>
+                            <input type="number" min={0} value={line.qty}
+                              onChange={e=>setLine(l.id,"qty",e.target.value)}
+                              placeholder="0"
+                              style={{ width:90, textAlign:"right", padding:"3px 6px",
+                                       fontSize:12, border:"1px solid "+T.border,
+                                       borderRadius:4, background:T.surface, color:T.text }}/>
+                          </td>
+                          <td style={{ ...tdStyle, textAlign:"right", padding:"4px 8px" }}>
+                            {l.cfFixed ? (
+                              <span style={{ fontFamily:T.mono, fontSize:12, color:T.muted }}>{l.cfDefault}</span>
+                            ) : (
+                              <input type="number" min={0} value={line.cf}
+                                onChange={e=>setLine(l.id,"cf",e.target.value)}
+                                placeholder="CF"
+                                style={{ width:70, textAlign:"right", padding:"3px 6px",
+                                         fontSize:12, border:"1px solid "+T.amberBd,
+                                         borderRadius:4, background:T.amberBg, color:T.amber }}/>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign:"right", fontFamily:T.mono,
+                                       fontWeight:saving?600:400,
+                                       color:saving?T.teal:T.faint }}>
+                            {saving!=null ? saving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background:T.tealBg, borderTop:"2px solid "+T.tealBd }}>
+                    <td colSpan={6} style={{ padding:"8px 10px", fontWeight:600, fontSize:12, color:T.teal }}>
+                      Total GHG saving
+                    </td>
+                    <td style={{ padding:"8px 10px", textAlign:"right" }}>
+                      <div style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.teal }}>
+                        {ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg CO₂e
+                      </div>
+                      <div style={{ fontFamily:T.mono, fontSize:10, color:T.muted, marginTop:2 }}>
+                        = {ghgTonnes.toLocaleString("nb-NO",{maximumFractionDigits:3})} t CO₂e
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <p style={{ fontSize:11, color:T.faint, margin:0 }}>
+              Conversion factors: CO₂=1, NOx=296, CH₄=28, Energy=0.57 kg CO₂e/kWh, Steel reuse/simplified design=2 or 1.5 kg CO₂e/kg.
+              Enter your own CF for blank fields. Qty in kg or kWh as indicated.
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Admin ── */}
       <Card style={{ marginBottom:"1.5rem" }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-          <Fld label="Key action" wide><textarea value={f.action} onChange={e=>set("action",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
-          <Fld label="ESRS / framework alignment"><input value={f.alignment} onChange={e=>set("alignment",e.target.value)} placeholder="e.g. ESRS E1, EU Taxonomy, SBTi" style={iw}/></Fld>
           <Fld label="Owner"><input value={f.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
           <Fld label="Status"><select value={f.status} onChange={e=>set("status",e.target.value)} style={iw}>{OPP_STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
         </div>
       </Card>
+
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
         <Btn onClick={onCancel}>Cancel</Btn>
         <Btn variant="primary" onClick={()=>onSave(f)}>{opp.id?"Save changes":"Add opportunity"}</Btn>
@@ -1374,6 +1573,7 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Linked</th>
           <OSTH col="score" label="Score"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority</th>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>GHG saving</th>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
           <OSTH col="status" label="Status"/>
           <OSTH col="createdAt" label="Created"/>
@@ -1406,6 +1606,7 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                 <td style={{ padding:"9px 12px" }}>{o.aspectRef?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
                 <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
@@ -1473,12 +1674,16 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                 ))}
               </div>
               <div style={{ display:"flex", gap:12, marginTop:7, flexWrap:"wrap" }}>
-                {STATUSES.map(s => statusCounts[s] > 0 && (
-                  <span key={s} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:T.muted }}>
-                    <span style={{ width:8, height:8, borderRadius:"50%", background:statusColors[s], flexShrink:0, display:"inline-block" }}/>
-                    {s} <strong style={{ color:T.text, fontWeight:600 }}>{statusCounts[s]}</strong>
-                  </span>
-                ))}
+                {STATUSES.map(s => statusCounts[s] > 0 && (() => {
+                  const sc = s==="Open"?{bg:T.redBg,c:T.red,bd:T.redBd}:s==="In Progress"?{bg:T.amberBg,c:T.amber,bd:T.amberBd}:{bg:T.greenBg,c:T.green,bd:T.greenBd};
+                  return (
+                    <span key={s} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
+                                           padding:"2px 8px", borderRadius:4, fontWeight:500,
+                                           background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>
+                      {s} <strong style={{ fontWeight:700 }}>{statusCounts[s]}</strong>
+                    </span>
+                  );
+                })())}
               </div>
             </div>
           )}
@@ -1681,11 +1886,11 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                                           title={(a.ref||"")+" — "+(a.aspect||"")+" ["+sig+"]"}
                                           onClick={() => setEditAspect(a)}
                                           style={{ width:16, height:16, borderRadius:"50%",
-                                                   background: rc ? rc.head : (sig==="SIGNIFICANT"?T.red:sig==="WATCH"?T.amber:T.teal),
-                                                   border:"2px solid rgba(255,255,255,0.7)",
+                                                   background: rc ? rc.head : (sig==="SIGNIFICANT"?T.redBg:sig==="WATCH"?T.amberBg:T.greenBg),
+                                                   border: rc ? "2px solid rgba(255,255,255,0.7)" : "2px solid "+(sig==="SIGNIFICANT"?T.redBd:sig==="WATCH"?T.amberBd:T.greenBd),
                                                    cursor:"pointer", flexShrink:0,
                                                    display:"flex", alignItems:"center", justifyContent:"center",
-                                                   fontSize:8, fontWeight:700, color:"#fff" }}>
+                                                   fontSize:8, fontWeight:700, color:rc?"#fff":(sig==="SIGNIFICANT"?T.red:sig==="WATCH"?T.amber:T.green) }}>
                                           {items.length>1 && i===0 ? items.length : ""}
                                         </div>
                                       );
@@ -1722,16 +1927,13 @@ function ProjectView({ project, onChange, onDelete, initialTab }) {
                     </span>
                   ))}
                   <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
-                    <span style={{ width:14, height:14, borderRadius:"50%", background:T.red, border:"2px solid rgba(255,255,255,0.7)", flexShrink:0, display:"inline-block" }}/>
-                    Significant
+  <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, fontWeight:500, background:T.redBg, color:T.red, border:"1px solid "+T.redBd }}>Significant</span>
                   </span>
                   <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
-                    <span style={{ width:14, height:14, borderRadius:"50%", background:T.amber, border:"2px solid rgba(255,255,255,0.7)", flexShrink:0, display:"inline-block" }}/>
-                    Watch
+  <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, fontWeight:500, background:T.amberBg, color:T.amber, border:"1px solid "+T.amberBd }}>Watch</span>
                   </span>
                   <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
-                    <span style={{ width:14, height:14, borderRadius:"50%", background:T.teal, border:"2px solid rgba(255,255,255,0.7)", flexShrink:0, display:"inline-block" }}/>
-                    Low
+  <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, fontWeight:500, background:T.greenBg, color:T.green, border:"1px solid "+T.greenBd }}>Low</span>
                   </span>
                   <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click any dot to edit aspect</span>
                 </div>
@@ -2005,10 +2207,15 @@ function PortfolioView({ projects, onClose, onSelect }) {
               </div>
             ) : <div style={{ height:8, borderRadius:4, background:"var(--border)" }}/>}
             <div style={{ display:"flex", gap:10, marginTop:5 }}>
-              {[{l:"Sig",v:sig,c:"var(--red)"},{l:"Watch",v:watch,c:"var(--amber)"},{l:"Low",v:low,c:"var(--green)"}].map(({l,v,c}) => (
-                <span key={l} style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
-                  <span style={{ width:7, height:7, borderRadius:"50%", background:c, display:"inline-block" }}/>
-                  {l} <strong style={{ color:"var(--text)" }}>{v}</strong>
+              {[
+                {l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
+                {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}
+              ].map(({l,v,bg,c,bd}) => (
+                <span key={l} style={{ fontSize:10, display:"inline-flex", alignItems:"center", gap:4,
+                                       padding:"1px 7px", borderRadius:4, fontWeight:500,
+                                       background:bg, color:c, border:"1px solid "+bd }}>
+                  {l} <strong style={{ fontWeight:700 }}>{v}</strong>
                 </span>
               ))}
             </div>
@@ -2023,12 +2230,13 @@ function PortfolioView({ projects, onClose, onSelect }) {
               </div>
             ) : <div style={{ height:8, borderRadius:4, background:"var(--border)" }}/>}
             <div style={{ display:"flex", gap:10, marginTop:5 }}>
-              {stCounts.map(({s,n}) => (
-                <span key={s} style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
-                  <span style={{ width:7, height:7, borderRadius:"50%", background:statDot[s], display:"inline-block" }}/>
-                  {s} <strong style={{ color:"var(--text)" }}>{n}</strong>
+              {stCounts.map(({s,n}) => { const sc = s==="Open"?{bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"}:s==="In Progress"?{bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"}:{bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}; return (
+                <span key={s} style={{ fontSize:10, display:"inline-flex", alignItems:"center", gap:4,
+                                       padding:"1px 7px", borderRadius:4, fontWeight:500,
+                                       background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>
+                  {s} <strong style={{ fontWeight:700 }}>{n}</strong>
                 </span>
-              ))}
+              ); })}
             </div>
           </div>
           <div style={{ minWidth:90 }}>
