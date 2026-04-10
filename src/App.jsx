@@ -952,10 +952,10 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const snaps = f.ghgSnapshots||[];
   const safeIdx = Math.min(activeSnapIdx, snaps.length-1);
   const activeSnap = snaps[safeIdx]||null;
-  // Latest phase is editable (and deletable).
-  // Phase directly before it is also editable so you can correct previous data.
-  const isActive = (si) => si >= snaps.length-2 && si >= 0;
+  // Only the latest (last) phase is editable and deletable.
+  // Deleting the latest makes the previous one the new latest.
   const isLatest = (si) => si === snaps.length-1;
+  const isActive = isLatest; // alias — only latest is editable
 
   // Snapshot updater targeting a specific index
   const updateSnap = (si, updater) => setF(p=>{
@@ -973,12 +973,13 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     const prev = snaps[snaps.length-1]||null;
     const n = snaps.length+1;
     setF(p=>({...p,ghgSnapshots:[...p.ghgSnapshots,emptySnapshot("Phase "+n,prev)]}));
-    setActiveSnapIdx(n-1);
+    setActiveSnapIdx(n-1); // jump to new latest
   };
   const deleteLatestPhase = () => {
-    if (snaps.length < 2) return; // never delete the only phase
+    if (snaps.length < 2) return;
     setF(p=>({...p,ghgSnapshots:p.ghgSnapshots.slice(0,-1)}));
-    setActiveSnapIdx(prev=>Math.max(0,prev-1));
+    // After delete, newest = length-2; switch view to it
+    setActiveSnapIdx(Math.max(0, snaps.length-2));
   };
 
   const toggleQuantitative = () => {
@@ -1165,61 +1166,96 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           </div>
         </div>
 
-        {/* Qualitative — own phase list, independent of quantitative phases */}
+        {/* Qualitative — own phase list, mirrors quantitative structure */}
         {f.showQualitative && (() => {
           const qp = f.qualPhases||[];
-          const lastQP = qp.length-1;
-          const addQualPhase = () => set("qualPhases",[...qp,{id:"qp_"+Date.now(),label:"Phase "+(qp.length+1),date:new Date().toISOString(),note:""}]);
+          const [activeQIdx, setActiveQIdx] = useState(()=>Math.max(0,qp.length-1));
+          const safeQIdx = Math.min(activeQIdx, qp.length-1);
+          const isQLatest = (qi) => qi === qp.length-1;
+          const addQualPhase = () => {
+            const n = qp.length+1;
+            set("qualPhases",[...qp,{id:"qp_"+Date.now(),label:"Phase "+n,date:new Date().toISOString(),note:""}]);
+            setActiveQIdx(n-1);
+          };
+          const delQualPhase = () => {
+            if (qp.length < 2) return;
+            set("qualPhases", qp.slice(0,-1));
+            setActiveQIdx(Math.max(0, qp.length-2));
+          };
           const setQualPhase = (qi,k,v) => set("qualPhases",qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
+          const activeQP = qp[safeQIdx]||null;
+
           return(
             <div style={{marginBottom:f.showQuantitative?"1rem":0}}>
+              {/* Phase pill tabs — same layout as quantitative */}
+              <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
+                {qp.length===0 ? (
+                  <span style={{fontSize:11,color:T.faint,fontStyle:"italic"}}>No phases yet</span>
+                ) : qp.map((qph,qi)=>{
+                  const active=qi===safeQIdx;
+                  const latest=isQLatest(qi);
+                  return(
+                    <div key={qph.id} style={{display:"flex",alignItems:"center",
+                      borderRadius:20,border:"1px solid "+(active?T.slate:T.border),
+                      overflow:"hidden",background:active?T.slate:"transparent"}}>
+                      <button onClick={()=>setActiveQIdx(qi)}
+                        style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
+                               fontFamily:T.sans,background:"transparent",border:"none",
+                               color:active?"#fff":T.muted}}>
+                        {qph.label}
+                        {qph.note&&<span style={{marginLeft:4,fontSize:9,opacity:0.6}}>●</span>}
+                      </button>
+                      {latest&&qp.length>1&&(
+                        <button onClick={delQualPhase} title="Delete this phase"
+                          style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
+                                 fontFamily:T.sans,background:"transparent",border:"none",
+                                 color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
+                          onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
+                          onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button onClick={addQualPhase}
+                  style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                         fontFamily:T.sans,background:"transparent",color:T.slate,
+                         border:"1px solid "+T.slateBd}}>
+                  + Add phase
+                </button>
+              </div>
+
+              {/* Active phase note */}
               {qp.length===0 ? (
-                <div>
-                  <textarea value={f.qualNote||""} onChange={e=>set("qualNote",e.target.value)} rows={3}
-                    placeholder="Describe expected savings qualitatively"
-                    style={{...iw,resize:"vertical",fontSize:12,marginBottom:8}}/>
-                  <button onClick={addQualPhase}
-                    style={{fontSize:11,color:T.slate,background:"transparent",border:"1px solid "+T.border,
-                      borderRadius:5,cursor:"pointer",padding:"3px 10px",fontFamily:T.sans}}>
-                    + Add phase note
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
-                    {qp.map((qph,qi)=>(
-                      <div key={qph.id} style={{borderRadius:7,
-                        border:"1px solid "+(qi===lastQP?T.slateBd:T.border),overflow:"hidden"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
-                          background:qi===lastQP?T.slateBg:T.surface2}}>
-                          {qi===lastQP
-                            ?<input value={qph.label} onChange={e=>setQualPhase(qi,"label",e.target.value)}
-                                style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.slate,
-                                  border:"1px solid "+T.slateBd,borderRadius:4,background:"transparent"}}/>
-                            :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{qph.label}</span>}
-                          <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
-                            {new Date(qph.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                          </span>
-                        </div>
-                        <div style={{padding:"8px 12px",background:T.surface}}>
-                          {qi===lastQP
-                            ?<textarea value={qph.note||""} onChange={e=>setQualPhase(qi,"note",e.target.value)} rows={2}
-                                placeholder="Qualitative description for this phase"
-                                style={{...iw,resize:"vertical",fontSize:12}}/>
-                            :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.6}}>
-                               {qph.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note</span>}
-                             </p>}
-                        </div>
-                      </div>
-                    ))}
+                <textarea value={f.qualNote||""} onChange={e=>set("qualNote",e.target.value)} rows={3}
+                  placeholder="Describe expected savings qualitatively — or add a phase above"
+                  style={{...iw,resize:"vertical",fontSize:12}}/>
+              ) : activeQP ? (
+                <div style={{borderRadius:7,border:"1px solid "+(isQLatest(safeQIdx)?T.slateBd:T.border),overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
+                    background:isQLatest(safeQIdx)?T.slateBg:T.surface2}}>
+                    {isQLatest(safeQIdx)
+                      ?<input value={activeQP.label} onChange={e=>setQualPhase(safeQIdx,"label",e.target.value)}
+                          style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.slate,
+                            border:"1px solid "+T.slateBd,borderRadius:4,background:"transparent"}}/>
+                      :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
+                    <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+                      {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                    </span>
+                    {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
                   </div>
-                  <button onClick={addQualPhase}
-                    style={{fontSize:11,color:T.slate,background:"transparent",border:"1px solid "+T.slateBd,
-                      borderRadius:5,cursor:"pointer",padding:"3px 10px",fontFamily:T.sans}}>
-                    + Add phase note
-                  </button>
+                  <div style={{padding:"8px 12px",background:T.surface}}>
+                    {isQLatest(safeQIdx)
+                      ?<textarea value={activeQP.note||""} onChange={e=>setQualPhase(safeQIdx,"note",e.target.value)} rows={3}
+                          placeholder="Describe expected savings for this phase"
+                          style={{...iw,resize:"vertical",fontSize:12}}/>
+                      :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
+                         {activeQP.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note recorded</span>}
+                       </p>}
+                  </div>
                 </div>
-              )}
+              ) : null}
             </div>
           );
         })()}
@@ -1279,13 +1315,11 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
             {/* Table header: snapshot label + date, editable if active */}
             {activeSnap && (
               <div style={{marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
-                <input value={activeSnap.label} onChange={e=>setSnapField(safeIdx,"label",e.target.value)}
-                      style={{padding:"3px 8px",fontSize:13,fontWeight:700,
-                        color:isLatest(safeIdx)?T.teal:T.slate,
-                        border:"1px solid "+(isLatest(safeIdx)?T.tealBd:T.slateBd),
-                        borderRadius:5,background:"transparent",
-                        pointerEvents:isActive(safeIdx)?"auto":"none",
-                        opacity:isActive(safeIdx)?1:0.5}}/>
+                {isLatest(safeIdx)
+                  ? <input value={activeSnap.label} onChange={e=>setSnapField(safeIdx,"label",e.target.value)}
+                      style={{padding:"3px 8px",fontSize:13,fontWeight:700,color:T.teal,
+                        border:"1px solid "+T.tealBd,borderRadius:5,background:"transparent"}}/>
+                  : <span style={{fontSize:13,fontWeight:600,color:T.muted}}>{activeSnap.label}</span>}
                 <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
                   {new Date(activeSnap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
                 </span>
