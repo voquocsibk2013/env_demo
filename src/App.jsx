@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -740,33 +740,40 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
           const setLine = (id, field, val) => setF(p => ({
             ...p, ghgLines: p.ghgLines.map(l => l.id===id ? {...l,[field]:val} : l)
           }));
+          const addCustomRow = (scope) => setF(p => ({ ...p, customGhgRows:[
+            ...(p.customGhgRows||[]),
+            { uid:"c"+Date.now(), scope, type:"", unit:"kg", qty:"", baseline:"", cf:"", ref:"", savingType:"identified" }
+          ]}));
+          const delCustomRow = (uid) => setF(p => ({ ...p, customGhgRows:(p.customGhgRows||[]).filter(r=>r.uid!==uid) }));
+          const setCustomRow = (uid,k,v) => setF(p => ({ ...p, customGhgRows:(p.customGhgRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r) }));
           const lines = GHG_LINES.map(l => {
             const saved = (f.ghgLines||[]).find(x=>x.id===l.id);
             return { ...l, qty:saved?saved.qty:"", baseline:saved?saved.baseline||"":"", cf:(saved&&saved.cf!=="")?saved.cf:l.cfDefault, ref:saved?saved.ref||"":"", savingType:saved?saved.savingType||"identified":"identified" };
           });
           const allLines = [...lines, ...(f.customGhgRows||[])];
-          const identifiedTotal = allLines.reduce((s,l)=>l.savingType!=="actual"?s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0):s, 0);
-          const actualTotal     = allLines.reduce((s,l)=>l.savingType==="actual"?s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0):s, 0);
+          const identifiedTotal = allLines.filter(l=>l.savingType==="identified").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
+          const actualTotal     = allLines.filter(l=>l.savingType==="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
           const hasActual       = allLines.some(l=>l.savingType==="actual" && parseFloat(l.qty)>0);
+          const SCOPES = ["Scope 1","Scope 2","Scope 3 Cat 1","Scope 3 Cat 4"];
           const scopeColors = {
             "Scope 1":      {bg:T.redBg,    c:T.red,    bd:T.redBd},
             "Scope 2":      {bg:T.blueBg,   c:T.blue,   bd:T.blueBd},
             "Scope 3 Cat 1":{bg:T.tealBg,   c:T.teal,   bd:T.tealBd},
             "Scope 3 Cat 4":{bg:T.purpleBg, c:T.purple, bd:T.purpleBd},
           };
-          const scopeGroups = GHG_LINES.reduce((acc,l) => {
-            if(!acc[l.scope]) acc[l.scope]=[];
-            acc[l.scope].push(l); return acc;
-          }, {});
-          const thS = { padding:"6px 10px", textAlign:"left", fontSize:9, fontWeight:600,
-                        color:T.muted, borderBottom:"1px solid "+T.border,
-                        letterSpacing:"0.07em", textTransform:"uppercase", whiteSpace:"nowrap" };
-          const tdS = (extra) => ({ padding:"6px 8px", fontSize:12, borderBottom:"1px solid "+T.rowBd, ...(extra||{}) });
-          const fmt = (v) => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e"
-                                     :v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
+          const fmt = v => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e"
+                                   :v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
+          const thS = { padding:"6px 10px", textAlign:"left", fontSize:9, fontWeight:600, color:T.muted,
+                        borderBottom:"1px solid "+T.border, letterSpacing:"0.07em", textTransform:"uppercase", whiteSpace:"nowrap" };
+          const tdS = (ex) => ({ padding:"6px 8px", fontSize:12, borderBottom:"1px solid "+T.rowBd, ...(ex||{}) });
+          const typeSelectStyle = v => ({
+            fontSize:10, padding:"3px 6px", borderRadius:4, cursor:"pointer", width:"100%", fontWeight:500,
+            border:"1px solid "+(v==="actual"?T.tealBd:v==="superseded"?T.border:T.blueBd),
+            background:v==="actual"?T.tealBg:v==="superseded"?T.slateBg:T.blueBg,
+            color:v==="actual"?T.teal:v==="superseded"?T.faint:T.blue,
+          });
           return (
             <div>
-              {/* Split total banner: Identified vs Actual */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:"1rem" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
                               background:identifiedTotal>0?T.blueBg:T.slateBg,
@@ -775,7 +782,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                   <div>
                     <p style={{ margin:"0 0 2px", fontSize:10, fontWeight:700, color:identifiedTotal>0?T.blue:T.faint,
                                  letterSpacing:"0.06em", textTransform:"uppercase" }}>Identified saving</p>
-                    <p style={{ margin:0, fontSize:10, color:T.muted }}>Estimated — not yet verified</p>
+                    <p style={{ margin:0, fontSize:10, color:T.muted }}>Estimated, not yet verified</p>
                   </div>
                   <div style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:identifiedTotal>0?T.blue:T.faint }}>
                     {identifiedTotal>0?fmt(identifiedTotal):"—"}
@@ -798,215 +805,169 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
               {hasActual && identifiedTotal>0 && (
                 <div style={{ background:T.amberBg, border:"1px solid "+T.amberBd, borderRadius:6,
                                padding:"7px 12px", marginBottom:"0.75rem", fontSize:11, color:T.amber }}>
-                  ⚠ Both identified and actual savings are present. The totals above are shown separately — do not add them together to avoid double-reporting.
+                  Both identified and actual savings present — do not add them together to avoid double-reporting.
                 </div>
               )}
-
-              {/* Table */}
               <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border }}>
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
                   <thead>
                     <tr style={{ background:T.surface2 }}>
-                      <th style={thS}>Scope</th>
-                      <th style={thS}>Type</th>
-                      <th style={{ ...thS, textAlign:"right" }}>Unit</th>
-                      <th style={{ ...thS, textAlign:"right" }}>Baseline qty</th>
-                      <th style={{ ...thS, textAlign:"right" }}>Reduction qty</th>
-                      <th style={{ ...thS, textAlign:"right" }}>CF (kg CO₂e)</th>
-                      <th style={{ ...thS, textAlign:"right" }}>Saving (kg CO₂e)</th>
-                      <th style={thS}>Type</th>
-                      <th style={thS}>Reference / source</th>
+                      {["Scope","Type","Unit","Baseline qty","Reduction qty","CF (kg CO₂e)","Saving (kg CO₂e)","Saving type","Reference / source"].map(h => (
+                        <th key={h} style={{ ...thS, textAlign:["Baseline qty","Reduction qty","CF (kg CO₂e)","Saving (kg CO₂e)"].includes(h)?"right":"left" }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(scopeGroups).map(([scope, slines]) => {
-                      const sc2 = scopeColors[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
-                      const customForScope = (f.customGhgRows||[]).filter(r=>r.scope===scope);
-                      const addCustomRow = () => setF(p=>({ ...p, customGhgRows:[
-                        ...(p.customGhgRows||[]),
-                        { uid:"c"+Date.now(), scope, type:"", unit:"kg", qty:"", baseline:"", cf:"", ref:"", savingType:"identified" }
-                      ]}));
-                      const delCustomRow = uid => setF(p=>({ ...p, customGhgRows:(p.customGhgRows||[]).filter(r=>r.uid!==uid) }));
-                      const setCustomRow = (uid,k,v) => setF(p=>({ ...p, customGhgRows:(p.customGhgRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r) }));
-                      const totalRows = slines.length + customForScope.length + 1; // +1 for add-row button row
-                      return [
-                        ...slines.map((l, li) => {
-                          const line   = lines.find(x=>x.id===l.id);
-                          const qty    = parseFloat(line.qty)||0;
-                          const cf     = parseFloat(line.cf)||0;
-                          const saving = qty && cf ? qty*cf : null;
-                          return (
-                            <tr key={l.id} style={{ borderBottom:"1px solid "+T.rowBd,
-                                                     background:qty>0?sc2.bg+"55":undefined }}>
-                              {li===0 && (
-                                <td rowSpan={totalRows}
-                                  style={{ ...tdS(), verticalAlign:"top", paddingTop:10,
-                                           borderRight:"1px solid "+T.border, width:90 }}>
-                                  <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:3,
-                                                 background:sc2.bg, color:sc2.c, border:"1px solid "+sc2.bd,
-                                                 display:"inline-block", whiteSpace:"nowrap" }}>{scope}</span>
-                                </td>
-                              )}
-                              <td style={{ ...tdS(), fontWeight:500, color:T.text,
-                                                   textDecoration:line.savingType==="superseded"?"line-through":undefined,
-                                                   opacity:line.savingType==="superseded"?0.4:1 }}>{l.type}</td>
-                              <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono, fontSize:10, color:T.faint }}>{l.unit}</td>
-                              {/* Baseline qty */}
-                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                                <input type="number" min={0} value={line.baseline}
-                                  onChange={e=>setLine(l.id,"baseline",e.target.value)} placeholder="—"
-                                  style={{ width:72, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
-                                           fontSize:12, border:"1px solid "+T.border,
-                                           borderRadius:5, background:T.surface, color:T.muted }}/>
-                              </td>
-                              {/* Reduction qty */}
-                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                                <input type="number" min={0} value={line.qty}
-                                  onChange={e=>setLine(l.id,"qty",e.target.value)} placeholder="0"
-                                  style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono,
-                                           fontSize:12, border:"1px solid "+(qty>0?sc2.bd:T.border),
-                                           borderRadius:5, background:qty>0?sc2.bg:T.surface, color:qty>0?sc2.c:T.text }}/>
-                              </td>
-                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                                {l.cfFixed ? (
-                                  <span style={{ fontFamily:T.mono, fontSize:12, color:T.muted }}>{l.cfDefault}</span>
-                                ) : (
-                                  <input type="number" min={0} value={line.cf}
-                                    onChange={e=>setLine(l.id,"cf",e.target.value)} placeholder="CF"
-                                    style={{ width:56, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
-                                             fontSize:12, border:"1px solid "+T.amberBd,
-                                             borderRadius:5, background:T.amberBg, color:T.amber }}/>
+                    {SCOPES.map(scope => {
+                      const sc2        = scopeColors[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                      const scopeLines = lines.filter(l=>l.scope===scope);
+                      const customRows = (f.customGhgRows||[]).filter(r=>r.scope===scope);
+                      const totalRows  = scopeLines.length + customRows.length + 1;
+                      return (
+                        <React.Fragment key={scope}>
+                          {scopeLines.map((line, li) => {
+                            const qty  = parseFloat(line.qty)||0;
+                            const cf   = parseFloat(line.cf)||0;
+                            const sav  = qty && cf ? qty*cf : null;
+                            const sup  = line.savingType==="superseded";
+                            return (
+                              <tr key={line.id} style={{ borderBottom:"1px solid "+T.rowBd,
+                                                         opacity:sup?0.4:1,
+                                                         background:sup?"transparent":qty>0?sc2.bg+"44":undefined }}>
+                                {li===0 && (
+                                  <td rowSpan={totalRows} style={{ ...tdS(), verticalAlign:"top", paddingTop:10,
+                                                                    borderRight:"1px solid "+T.border, width:88 }}>
+                                    <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:3,
+                                                   background:sc2.bg, color:sc2.c, border:"1px solid "+sc2.bd,
+                                                   display:"inline-block", whiteSpace:"nowrap" }}>{scope}</span>
+                                  </td>
                                 )}
-                              </td>
-                              <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono,
-                                           fontWeight:saving?700:400, color:saving?T.teal:T.faint }}>
-                                {saving!=null ? saving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
-                              </td>
-                              {/* Saving type */}
-                              <td style={{ ...tdS({ padding:"3px 5px" }) }}>
-                                <select value={line.savingType} onChange={e=>setLine(l.id,"savingType",e.target.value)}
-                                  style={{ fontSize:10, padding:"3px 6px", borderRadius:4,
-                                           border:"1px solid "+(line.savingType==="actual"?T.tealBd:line.savingType==="superseded"?T.border:T.blueBd),
-                                           background:line.savingType==="actual"?T.tealBg:line.savingType==="superseded"?T.slateBg:T.blueBg,
-                                           color:line.savingType==="actual"?T.teal:line.savingType==="superseded"?T.faint:T.blue,
-                                           fontWeight:500, cursor:"pointer", width:"100%" }}>
-                                  <option value="identified">Identified</option>
-                                  <option value="actual">Actual</option>
-                                  <option value="superseded">Superseded</option>
-                                </select>
-                              </td>
-                              <td style={{ ...tdS({ padding:"4px 6px" }) }}>
-                                <input value={line.ref} onChange={e=>setLine(l.id,"ref",e.target.value)}
-                                  placeholder="Source / note"
-                                  style={{ width:"100%", minWidth:100, padding:"3px 6px", fontSize:11,
-                                           border:"1px solid "+T.border, borderRadius:4,
-                                           background:"transparent", color:T.muted }}/>
-                              </td>
-                            </tr>
-                          );
-                        }),
-                        ...customForScope.map(cr => {
-                          const cqty = parseFloat(cr.qty)||0;
-                          const ccf  = parseFloat(cr.cf)||0;
-                          const csaving = cqty && ccf ? cqty*ccf : null;
-                          return (
-                            <tr key={cr.uid} style={{ borderBottom:"1px solid "+T.rowBd,
-                                                       background:cqty>0?sc2.bg+"55":T.amberBg+"33" }}>
-                              <td style={{ ...tdS({ padding:"4px 6px" }) }}>
-                                <input value={cr.type} onChange={e=>setCustomRow(cr.uid,"type",e.target.value)}
-                                  placeholder="Custom type description"
-                                  style={{ width:"100%", padding:"3px 6px", fontSize:12,
-                                           border:"1px solid "+T.amberBd, borderRadius:4,
-                                           background:T.amberBg, color:T.amber }}/>
-                              </td>
-                              <td style={{ ...tdS({ padding:"4px 6px", textAlign:"right" }) }}>
-                                <input value={cr.unit} onChange={e=>setCustomRow(cr.uid,"unit",e.target.value)}
-                                  placeholder="kg"
-                                  style={{ width:44, textAlign:"right", padding:"3px 5px", fontSize:11,
-                                           border:"1px solid "+T.border, borderRadius:4,
-                                           background:T.surface, color:T.muted }}/>
-                              </td>
-                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                                <input type="number" min={0} value={cr.baseline||""}
-                                  onChange={e=>setCustomRow(cr.uid,"baseline",e.target.value)} placeholder="—"
-                                  style={{ width:72, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
-                                           fontSize:12, border:"1px solid "+T.border,
-                                           borderRadius:5, background:T.surface, color:T.muted }}/>
-                              </td>
-                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                                <input type="number" min={0} value={cr.qty}
-                                  onChange={e=>setCustomRow(cr.uid,"qty",e.target.value)} placeholder="0"
-                                  style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono,
-                                           fontSize:12, border:"1px solid "+(cqty>0?sc2.bd:T.border),
-                                           borderRadius:5, background:cqty>0?sc2.bg:T.surface, color:cqty>0?sc2.c:T.text }}/>
-                              </td>
-                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
-                                <input type="number" min={0} value={cr.cf}
-                                  onChange={e=>setCustomRow(cr.uid,"cf",e.target.value)} placeholder="CF"
-                                  style={{ width:56, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
-                                           fontSize:12, border:"1px solid "+T.amberBd,
-                                           borderRadius:5, background:T.amberBg, color:T.amber }}/>
-                              </td>
-                              <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono,
-                                           fontWeight:csaving?700:400, color:csaving?T.teal:T.faint }}>
-                                {csaving!=null ? csaving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
-                              </td>
-                              <td style={{ ...tdS({ padding:"3px 5px" }) }}>
-                                <select value={cr.savingType||"identified"} onChange={e=>setCustomRow(cr.uid,"savingType",e.target.value)}
-                                  style={{ fontSize:10, padding:"3px 6px", borderRadius:4,
-                                           border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:(cr.savingType||"identified")==="superseded"?T.border:T.blueBd),
-                                           background:(cr.savingType||"identified")==="actual"?T.tealBg:(cr.savingType||"identified")==="superseded"?T.slateBg:T.blueBg,
-                                           color:(cr.savingType||"identified")==="actual"?T.teal:(cr.savingType||"identified")==="superseded"?T.faint:T.blue,
-                                           fontWeight:500, cursor:"pointer", width:"100%" }}>
-                                  <option value="identified">Identified</option>
-                                  <option value="actual">Actual</option>
-                                  <option value="superseded">Superseded</option>
-                                </select>
-                              </td>
-                              <td style={{ ...tdS({ padding:"4px 6px" }) }}>
-                                <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                                  <input value={cr.ref} onChange={e=>setCustomRow(cr.uid,"ref",e.target.value)}
-                                    placeholder="Source / note"
-                                    style={{ flex:1, minWidth:80, padding:"3px 6px", fontSize:11,
-                                             border:"1px solid "+T.border, borderRadius:4,
-                                             background:"transparent", color:T.muted }}/>
-                                  <button onClick={()=>delCustomRow(cr.uid)}
-                                    style={{ fontSize:11, color:T.red, background:"transparent",
-                                             border:"none", cursor:"pointer", padding:"0 2px", flexShrink:0 }}>✕</button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }),
-                        <tr key={"add-"+scope}>
-                          <td colSpan={8} style={{ padding:"4px 8px", borderBottom:"1px solid "+T.rowBd }}>
-                            <button onClick={addCustomRow}
-                              style={{ fontSize:11, color:sc2.c, background:"transparent",
-                                       border:"none", cursor:"pointer", padding:"2px 4px",
-                                       fontFamily:T.sans, fontWeight:500 }}>
-                              + Add custom row
-                            </button>
-                          </td>
-                        </tr>
-                      ];
+                                <td style={{ ...tdS(), fontWeight:500, color:T.text, textDecoration:sup?"line-through":undefined }}>{line.type}</td>
+                                <td style={{ ...tdS({textAlign:"right"}), fontFamily:T.mono, fontSize:10, color:T.faint }}>{line.unit}</td>
+                                <td style={{ ...tdS({textAlign:"right", padding:"4px 6px"}) }}>
+                                  <input type="number" min={0} value={line.baseline}
+                                    onChange={e=>setLine(line.id,"baseline",e.target.value)} placeholder="—"
+                                    style={{ width:72, textAlign:"right", padding:"4px 6px", fontFamily:T.mono, fontSize:12,
+                                             border:"1px solid "+T.border, borderRadius:5, background:T.surface, color:T.muted }}/>
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right", padding:"4px 6px"}) }}>
+                                  <input type="number" min={0} value={line.qty}
+                                    onChange={e=>setLine(line.id,"qty",e.target.value)} placeholder="0"
+                                    style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono, fontSize:12,
+                                             border:"1px solid "+(qty>0?sc2.bd:T.border), borderRadius:5,
+                                             background:qty>0?sc2.bg:T.surface, color:qty>0?sc2.c:T.text }}/>
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right", padding:"4px 6px"}) }}>
+                                  {line.cfFixed
+                                    ? <span style={{ fontFamily:T.mono, fontSize:12, color:T.muted }}>{line.cfDefault}</span>
+                                    : <input type="number" min={0} value={line.cf}
+                                        onChange={e=>setLine(line.id,"cf",e.target.value)} placeholder="CF"
+                                        style={{ width:56, textAlign:"right", padding:"4px 6px", fontFamily:T.mono, fontSize:12,
+                                                 border:"1px solid "+T.amberBd, borderRadius:5, background:T.amberBg, color:T.amber }}/>
+                                  }
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right"}), fontFamily:T.mono, fontWeight:sav?700:400, color:sav?T.teal:T.faint }}>
+                                  {sav!=null ? sav.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
+                                </td>
+                                <td style={{ ...tdS({padding:"3px 5px"}) }}>
+                                  <select value={line.savingType} onChange={e=>setLine(line.id,"savingType",e.target.value)} style={typeSelectStyle(line.savingType)}>
+                                    <option value="identified">Identified</option>
+                                    <option value="actual">Actual</option>
+                                    <option value="superseded">Superseded</option>
+                                  </select>
+                                </td>
+                                <td style={{ ...tdS({padding:"4px 6px"}) }}>
+                                  <input value={line.ref} onChange={e=>setLine(line.id,"ref",e.target.value)} placeholder="Source / note"
+                                    style={{ width:"100%", minWidth:90, padding:"3px 6px", fontSize:11,
+                                             border:"1px solid "+T.border, borderRadius:4, background:"transparent", color:T.muted }}/>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {customRows.map(cr => {
+                            const cqty = parseFloat(cr.qty)||0;
+                            const ccf  = parseFloat(cr.cf)||0;
+                            const csav = cqty && ccf ? cqty*ccf : null;
+                            const csup = cr.savingType==="superseded";
+                            return (
+                              <tr key={cr.uid} style={{ borderBottom:"1px solid "+T.rowBd,
+                                                         opacity:csup?0.4:1,
+                                                         background:csup?"transparent":cqty>0?sc2.bg+"44":T.amberBg+"22" }}>
+                                <td style={{ ...tdS({padding:"4px 6px"}) }}>
+                                  <input value={cr.type} onChange={e=>setCustomRow(cr.uid,"type",e.target.value)} placeholder="Custom type"
+                                    style={{ width:"100%", padding:"3px 6px", fontSize:12, border:"1px solid "+T.amberBd,
+                                             borderRadius:4, background:T.amberBg, color:T.amber }}/>
+                                </td>
+                                <td style={{ ...tdS({padding:"4px 6px", textAlign:"right"}) }}>
+                                  <input value={cr.unit} onChange={e=>setCustomRow(cr.uid,"unit",e.target.value)} placeholder="kg"
+                                    style={{ width:44, textAlign:"right", padding:"3px 5px", fontSize:11,
+                                             border:"1px solid "+T.border, borderRadius:4, background:T.surface, color:T.muted }}/>
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right", padding:"4px 6px"}) }}>
+                                  <input type="number" min={0} value={cr.baseline||""} onChange={e=>setCustomRow(cr.uid,"baseline",e.target.value)} placeholder="—"
+                                    style={{ width:72, textAlign:"right", padding:"4px 6px", fontFamily:T.mono, fontSize:12,
+                                             border:"1px solid "+T.border, borderRadius:5, background:T.surface, color:T.muted }}/>
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right", padding:"4px 6px"}) }}>
+                                  <input type="number" min={0} value={cr.qty} onChange={e=>setCustomRow(cr.uid,"qty",e.target.value)} placeholder="0"
+                                    style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono, fontSize:12,
+                                             border:"1px solid "+(cqty>0?sc2.bd:T.border), borderRadius:5,
+                                             background:cqty>0?sc2.bg:T.surface, color:cqty>0?sc2.c:T.text }}/>
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right", padding:"4px 6px"}) }}>
+                                  <input type="number" min={0} value={cr.cf} onChange={e=>setCustomRow(cr.uid,"cf",e.target.value)} placeholder="CF"
+                                    style={{ width:56, textAlign:"right", padding:"4px 6px", fontFamily:T.mono, fontSize:12,
+                                             border:"1px solid "+T.amberBd, borderRadius:5, background:T.amberBg, color:T.amber }}/>
+                                </td>
+                                <td style={{ ...tdS({textAlign:"right"}), fontFamily:T.mono, fontWeight:csav?700:400, color:csav?T.teal:T.faint }}>
+                                  {csav!=null ? csav.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
+                                </td>
+                                <td style={{ ...tdS({padding:"3px 5px"}) }}>
+                                  <select value={cr.savingType||"identified"} onChange={e=>setCustomRow(cr.uid,"savingType",e.target.value)} style={typeSelectStyle(cr.savingType||"identified")}>
+                                    <option value="identified">Identified</option>
+                                    <option value="actual">Actual</option>
+                                    <option value="superseded">Superseded</option>
+                                  </select>
+                                </td>
+                                <td style={{ ...tdS({padding:"4px 6px"}) }}>
+                                  <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                                    <input value={cr.ref} onChange={e=>setCustomRow(cr.uid,"ref",e.target.value)} placeholder="Source / note"
+                                      style={{ flex:1, minWidth:80, padding:"3px 6px", fontSize:11,
+                                               border:"1px solid "+T.border, borderRadius:4, background:"transparent", color:T.muted }}/>
+                                    <button onClick={()=>delCustomRow(cr.uid)}
+                                      style={{ fontSize:11, color:T.red, background:"transparent", border:"none", cursor:"pointer", padding:"0 2px" }}>✕</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr>
+                            <td colSpan={8} style={{ padding:"4px 8px", borderBottom:"1px solid "+T.rowBd }}>
+                              <button onClick={()=>addCustomRow(scope)}
+                                style={{ fontSize:11, color:sc2.c, background:"transparent", border:"none",
+                                         cursor:"pointer", padding:"2px 4px", fontFamily:T.sans, fontWeight:500 }}>
+                                + Add custom row
+                              </button>
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      );
                     })}
                   </tbody>
                   <tfoot>
                     <tr style={{ background:T.tealBg, borderTop:"2px solid "+T.tealBd }}>
-                      <td colSpan={7} style={{ padding:"8px 10px", fontWeight:600, fontSize:12, color:T.teal }}>Total — see split above</td>
-                      <td style={{ padding:"8px 10px", textAlign:"right", fontFamily:T.mono, fontSize:14, fontWeight:700, color:T.teal }}>
-                        {ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})}
-                      </td>
-                      <td style={{ padding:"8px 10px", fontSize:11, color:T.muted }}>
-                        = {ghgTonnes.toLocaleString("nb-NO",{maximumFractionDigits:3})} t CO₂e
+                      <td colSpan={7} style={{ padding:"8px 10px", fontWeight:600, fontSize:12, color:T.teal }}>Totals (see split above)</td>
+                      <td colSpan={2} style={{ padding:"8px 10px", textAlign:"right", fontSize:11, color:T.teal }}>
+                        {identifiedTotal>0 && <div style={{ color:T.blue }}>Identified: {fmt(identifiedTotal)}</div>}
+                        {actualTotal>0     && <div style={{ color:T.teal, fontWeight:700 }}>Actual: {fmt(actualTotal)}</div>}
                       </td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
               <p style={{ fontSize:11, color:T.faint, margin:"0.5rem 0 0" }}>
-                Fixed CFs: CO₂ = 1, NOₓ = 296, CH₄ = 28 · Energy = 0.57 kg CO₂e/kWh · Steel = 2, other material = 1.5 kg CO₂e/kg.
-                Amber CF fields = enter your own conversion factor. Baseline qty = reference quantity before reduction. Saving type: Identified = estimated not yet verified · Actual = verified/as-built · Superseded = replaced by a newer figure (excluded from totals and shown greyed out).
+                Fixed CFs: CO₂=1 · NOₓ=296 · CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2 · other material=1.5 kg CO₂e/kg.
+                Amber CF = enter your own factor. Baseline = reference qty before reduction. Superseded rows excluded from totals and greyed out.
               </p>
             </div>
           );
