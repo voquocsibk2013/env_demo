@@ -1900,361 +1900,307 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
 
       {tab === "matrix" && (() => {
-        // ── Shared helpers ────────────────────────────────────────────────────────
-        const CELL = 80;
-        const YLAB = 120; // wide enough for text anchors
-        const XLAB = 40;
+        // ─── Shared constants ──────────────────────────────────────────────────────
+        const CELL = 80;       // px per grid cell
+        const YLAB = 130;      // total width of Y-axis (rotated label + descriptors)
+        const XLAB = 44;       // height of X-axis header row
 
-        // Significance colours — matches calcSig thresholds (R≥13 = SIGNIFICANT, 8-12 = WATCH)
+        // ─── Shared sub-components ────────────────────────────────────────────────
+        // Axis descriptor column (left side, shared layout)
+        const YAxis = ({ title, labels }) => (
+          <div style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+            {/* Rotated title */}
+            <div style={{ width:20, marginTop:XLAB, height:CELL*5,
+                           display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                             whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>
+                {title}
+              </span>
+            </div>
+            {/* Row labels */}
+            <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
+              {[5,4,3,2,1].map(v => (
+                <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
+                                       justifyContent:"flex-end", paddingRight:10 }}>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{v}</div>
+                    {(labels[v]||"").split("|").map((ln,i) => (
+                      <div key={i} style={{ fontSize:9, color:T.faint, lineHeight:1.35 }}>{ln}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+        // X-axis header row (column descriptors)
+        const XAxis = ({ labels, footerLabel }) => (
+          <>
+            <div style={{ display:"flex", height:XLAB, alignItems:"flex-end", paddingBottom:6 }}>
+              {[1,2,3,4,5].map(v => (
+                <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{v}</div>
+                  <div style={{ fontSize:9, color:T.faint, lineHeight:1.35 }}>{labels[v]||""}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ paddingTop:6, fontSize:10, fontWeight:700, color:T.muted,
+                           letterSpacing:"0.07em", textTransform:"uppercase" }}>
+              {footerLabel}
+            </div>
+          </>
+        );
+
+        // Unified legend block — used by both matrices
+        const LegendBlock = ({ groups }) => (
+          <div style={{ marginTop:"1.25rem", padding:"12px 16px",
+                         background:T.surface, border:"1px solid "+T.border,
+                         borderRadius:8, display:"flex", gap:24, flexWrap:"wrap",
+                         alignItems:"flex-start" }}>
+            {groups.map((g, gi) => (
+              <div key={gi} style={{ minWidth:0 }}>
+                <p style={{ margin:"0 0 7px", fontSize:9, fontWeight:700, color:T.faint,
+                             letterSpacing:"0.09em", textTransform:"uppercase" }}>{g.title}</p>
+                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                  {g.items.map((item, ii) => (
+                    <span key={ii} style={{ display:"flex", alignItems:"center", gap:8,
+                                            fontSize:11, color:T.text, whiteSpace:"nowrap" }}>
+                      <span style={{ width:item.sw||14, height:item.sh||14, borderRadius:item.br||"50%",
+                                     background:item.bg, border:item.bd||"none",
+                                     flexShrink:0, display:"inline-block" }}/>
+                      <span>{item.label}{item.sub && <span style={{ color:T.faint }}> — {item.sub}</span>}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <span style={{ marginLeft:"auto", fontSize:11, color:T.faint, alignSelf:"flex-end" }}>
+              Click any dot to edit
+            </span>
+          </div>
+        );
+
+        // Shared section header
+        const MatrixHeader = ({ title, subtitle, isFirst }) => (
+          <div style={{ marginBottom:"1rem",
+                         paddingTop: isFirst ? 0 : "1.75rem",
+                         borderTop: isFirst ? "none" : "2px solid "+T.border }}>
+            <h3 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>{title}</h3>
+            <p style={{ margin:0, fontSize:12, color:T.muted }}>{subtitle}</p>
+          </div>
+        );
+
+        // ─── Risk matrix data + rendering ─────────────────────────────────────────
+        const CON_LABELS  = { 1:"Negligible", 2:"Minor", 3:"Moderate", 4:"Major", 5:"Catastrophic" };
+        const PROB_LABELS = { 1:"Very unlikely|(< 1%)", 2:"Unlikely|(1–5%)", 3:"Possible|(5–25%)", 4:"Likely|(25–50%)", 5:"Very likely|(> 50%)" };
+
         const sigCell = (sv, pb) => {
           const r = sv*pb;
-          if (r >= 13) return { bg:"#FFEBEE", border:"#EF9A9A", zone:"SIGNIFICANT" };
-          if (r >= 8)  return { bg:"#FFF8E1", border:"#FFE082", zone:"WATCH"       };
-          return             { bg:"#E8F5E9", border:"#A5D6A7", zone:"Low"          };
+          if (r >= 13) return { bg:"#FFEBEE", bd:"#EF9A9A", zone:"SIGNIFICANT" };
+          if (r >= 8)  return { bg:"#FFF8E1", bd:"#FFE082", zone:"WATCH"       };
+          return             { bg:"#E8F5E9", bd:"#A5D6A7", zone:"Low"          };
         };
+        const zoneTextC = { SIGNIFICANT:T.redBd, WATCH:T.amberBd, Low:T.greenBd };
 
-        // Axis descriptor labels
-        const CON_LABELS = ["","Negligible","Minor","Moderate","Major","Catastrophic"];
-        const PROB_LABELS = ["","Very unlikely
-(<1%)","Unlikely
-(1–5%)","Possible
-(5–25%)","Likely
-(25–50%)","Very likely
-(>50%)"];
+        const riskGrid = {};
+        aspects.forEach(a => {
+          if (!a.severity || !a.probability) return;
+          const sv = Math.min(5,Math.max(1,parseInt(a.severity)));
+          const pb = Math.min(5,Math.max(1,parseInt(a.probability)));
+          const k  = sv+","+pb;
+          if (!riskGrid[k]) riskGrid[k] = [];
+          riskGrid[k].push(a);
+        });
+        const unplotted = aspects.filter(a => !a.severity || !a.probability);
 
-        const RiskMatrix = () => {
-          const grid = {};
-          aspects.forEach(a => {
-            if (!a.severity || !a.probability) return;
-            const sv = Math.min(5, Math.max(1, parseInt(a.severity)));
-            const pb = Math.min(5, Math.max(1, parseInt(a.probability)));
-            const k  = sv+","+pb;
-            if (!grid[k]) grid[k] = [];
-            grid[k].push(a);
-          });
-          const unplotted = aspects.filter(a => !a.severity || !a.probability);
-          return (
-            <div>
-              <div style={{ display:"flex", alignItems:"flex-start" }}>
-                {/* Y-axis rotated label */}
-                <div style={{ width:20, flexShrink:0, marginTop:XLAB,
-                               height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
-                                 whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>
-                    Probability of occurrence →
-                  </span>
-                </div>
-                {/* Y-axis descriptors */}
-                <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
-                  {[5,4,3,2,1].map(pb => (
-                    <div key={pb} style={{ height:CELL, display:"flex", alignItems:"center",
-                                           paddingRight:8, justifyContent:"flex-end" }}>
-                      <div style={{ textAlign:"right" }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{pb}</div>
-                        {PROB_LABELS[pb].split("\n").map((ln,i)=>(
-                          <div key={i} style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{ln}</div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {/* Grid + X-axis */}
-                <div style={{ overflowX:"auto" }}>
-                  {/* X-axis label */}
-                  <div style={{ height:XLAB, display:"flex", alignItems:"flex-end", paddingBottom:6,
-                                 paddingLeft:4, gap:0 }}>
-                    {[1,2,3,4,5].map(sv => (
-                      <div key={sv} style={{ width:CELL, textAlign:"center" }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{sv}</div>
-                        <div style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{CON_LABELS[sv]}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Cells */}
-                  {[5,4,3,2,1].map(pb => (
-                    <div key={pb} style={{ display:"flex" }}>
-                      {[1,2,3,4,5].map(sv => {
-                        const c     = sigCell(sv, pb);
-                        const items = grid[sv+","+pb] || [];
-                        return (
-                          <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
-                                                 background:c.bg, border:"1px solid "+c.border,
-                                                 display:"flex", flexWrap:"wrap",
-                                                 alignContent:"center", justifyContent:"center",
-                                                 gap:4, padding:5, position:"relative" }}>
-                            {/* Score label in empty cells */}
-                            {items.length === 0 && (
-                              <span style={{ fontSize:10, fontWeight:600,
-                                             color: c.zone==="SIGNIFICANT"?T.redBd:c.zone==="WATCH"?T.amberBd:T.greenBd,
-                                             opacity:0.6 }}>{sv*pb}</span>
-                            )}
-                            {items.map((a, i) => {
-                              const sig  = calcSig(a);
-                              // Fill = significance (what IS the risk)
-                              // Border thickness/style = status (how IS it managed)
-                              const fill = sig==="SIGNIFICANT" ? T.redBg   : sig==="WATCH" ? T.amberBg   : T.greenBg;
-                              const fillC= sig==="SIGNIFICANT" ? T.red     : sig==="WATCH" ? T.amber     : T.green;
-                              const fillBd=sig==="SIGNIFICANT"? T.redBd   : sig==="WATCH" ? T.amberBd   : T.greenBd;
-                              const statusBorder = a.status==="Closed"      ? "2px solid "+T.green
-                                                 : a.status==="In Progress" ? "2px dashed "+T.amber
-                                                 :                             "3px solid "+T.red;
-                              return (
-                                <div key={i}
-                                  title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"
-Consequence: "+a.severity+" · Probability: "+a.probability+" · Score: "+sv*pb}
-                                  onClick={() => setEditAspect(a)}
-                                  style={{ width:18, height:18, borderRadius:"50%",
-                                           background:fill, border:statusBorder,
-                                           cursor:"pointer", flexShrink:0,
-                                           display:"flex", alignItems:"center", justifyContent:"center",
-                                           fontSize:8, fontWeight:700, color:fillC }}>
-                                  {items.length > 1 && i === 0 ? items.length : ""}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                  {/* X-axis footer label */}
-                  <div style={{ paddingTop:6, paddingLeft:4, fontSize:10, fontWeight:700,
-                                 color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
-                    Consequence / severity →
-                  </div>
-                </div>
-              </div>
-
-              {/* Legend */}
-              <div style={{ display:"flex", gap:20, marginTop:"1.25rem", flexWrap:"wrap", alignItems:"flex-start" }}>
-                <div>
-                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
-                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Risk zone (cell colour)</p>
-                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                    {[{bg:"#FFEBEE",bd:"#EF9A9A",label:"SIGNIFICANT (R ≥ 13)"},
-                      {bg:"#FFF8E1",bd:"#FFE082",label:"WATCH (R 8–12)"},
-                      {bg:"#E8F5E9",bd:"#A5D6A7",label:"Low (R ≤ 7)"}].map(({bg,bd,label})=>(
-                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
-                        <span style={{ width:14, height:14, borderRadius:3, background:bg,
-                                       border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                        {label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
-                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Dot fill = significance level</p>
-                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                    {[{bg:T.redBg,bd:T.redBd,label:"SIGNIFICANT"},{bg:T.amberBg,bd:T.amberBd,label:"WATCH"},{bg:T.greenBg,bd:T.greenBd,label:"Low"}].map(({bg,bd,label})=>(
-                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
-                        <span style={{ width:14, height:14, borderRadius:"50%", background:bg,
-                                       border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                        {label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
-                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Dot border = management status</p>
-                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                    {[{bd:"3px solid "+T.red,label:"Open"},
-                      {bd:"2px dashed "+T.amber,label:"In Progress"},
-                      {bd:"2px solid "+T.green,label:"Closed"}].map(({bd,label})=>(
-                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
-                        <span style={{ width:14, height:14, borderRadius:"50%", background:T.slateBg,
-                                       border:bd, flexShrink:0, display:"inline-block" }}/>
-                        {label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <span style={{ marginLeft:"auto", fontSize:11, color:T.faint, alignSelf:"flex-end" }}>
-                  Click any dot to edit aspect
-                </span>
-              </div>
-
-              {unplotted.length > 0 && (
-                <p style={{ fontSize:11, color:T.faint, marginTop:"0.75rem" }}>
-                  {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted — severity or probability not set.
-                </p>
-              )}
-            </div>
-          );
-        };
-
-        // ── Opportunity matrix ─────────────────────────────────────────────────────
-        // Axes: Environmental benefit (X) × Feasibility (Y) — both from existing fields
-        // Dot size = business value (bigger = higher strategic value)
-        // Four named quadrants following ISO 14001 Cl.6.1.2 prioritisation logic
-        const OPP_AX_LABELS = ["","Negligible","Minor","Moderate","Significant","Major"];
-        const OPP_FEA_LABELS = ["","Very difficult","Difficult","Moderate","Achievable","Easy"];
+        // ─── Opportunity matrix data + rendering ──────────────────────────────────
+        const OPP_ENV_LABELS  = { 1:"Negligible", 2:"Minor", 3:"Moderate", 4:"Significant", 5:"Major" };
+        const OPP_FEAS_LABELS = { 1:"Very difficult", 2:"Difficult", 3:"Moderate", 4:"Achievable", 5:"Easy" };
 
         const oppQuadrant = (ev, feas) => {
-          const highE = ev   >= 4;
-          const highF = feas >= 4;
-          if (highE && highF)  return { bg:T.tealBg,   border:T.tealBd,   label:"Pursue",        labelC:T.teal   };
-          if (highE && !highF) return { bg:T.blueBg,   border:T.blueBd,   label:"Plan",           labelC:T.blue   };
-          if (!highE && highF) return { bg:T.purpleBg, border:T.purpleBd, label:"Quick win",      labelC:T.purple };
-          return                      { bg:T.slateBg,  border:T.slateBd,  label:"Deprioritise",   labelC:T.slate  };
+          const hE = ev>=4, hF = feas>=4;
+          if  (hE && hF)  return { bg:T.tealBg,   bd:T.tealBd,   label:"Pursue",       c:T.teal   };
+          if  (hE && !hF) return { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",          c:T.blue   };
+          if  (!hE && hF) return { bg:T.purpleBg, bd:T.purpleBd, label:"Quick win",     c:T.purple };
+          return                  { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritise",  c:T.slate  };
         };
 
-        const OppMatrix = () => {
-          const oppGrid = {};
-          opps.forEach(o => {
-            const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
-            const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
-            const k    = ev+","+feas;
-            if (!oppGrid[k]) oppGrid[k] = [];
-            oppGrid[k].push(o);
-          });
-          return (
-            <div>
-              <div style={{ display:"flex", alignItems:"flex-start" }}>
-                <div style={{ width:20, flexShrink:0, marginTop:XLAB,
-                               height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
-                                 whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>
-                    Implementation feasibility →
-                  </span>
-                </div>
-                <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
-                  {[5,4,3,2,1].map(feas => (
-                    <div key={feas} style={{ height:CELL, display:"flex", alignItems:"center",
-                                             paddingRight:8, justifyContent:"flex-end" }}>
-                      <div style={{ textAlign:"right" }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{feas}</div>
-                        <div style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{OPP_FEA_LABELS[feas]}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ overflowX:"auto" }}>
-                  <div style={{ height:XLAB, display:"flex", alignItems:"flex-end", paddingBottom:6,
-                                 paddingLeft:4 }}>
-                    {[1,2,3,4,5].map(ev => (
-                      <div key={ev} style={{ width:CELL, textAlign:"center" }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{ev}</div>
-                        <div style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{OPP_AX_LABELS[ev]}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {[5,4,3,2,1].map(feas => (
-                    <div key={feas} style={{ display:"flex" }}>
-                      {[1,2,3,4,5].map(ev => {
-                        const q     = oppQuadrant(ev, feas);
-                        const items = oppGrid[ev+","+feas] || [];
-                        return (
-                          <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
-                                                 background:q.bg, border:"1px solid "+q.border,
-                                                 display:"flex", flexWrap:"wrap",
-                                                 alignContent:"center", justifyContent:"center",
-                                                 gap:4, padding:5, position:"relative" }}>
-                            {items.length === 0 && (ev===4||ev===5) && (feas===4||feas===5) && ev+feas===8 && (
-                              <span style={{ fontSize:8, color:q.labelC, opacity:0.4, textAlign:"center",
-                                             fontWeight:600 }}>{q.label}</span>
-                            )}
-                            {items.map((o,i) => {
-                              // Dot size = business value (1=10px, 5=18px)
-                              const sz = 10 + (Math.min(5,Math.max(1,parseInt(o.bizValue)||1))-1)*2;
-                              const oC = o.status==="Closed"      ? {bg:T.greenBg,bd:T.greenBd}
-                                       : o.status==="In Progress" ? {bg:T.amberBg,bd:T.amberBd}
-                                       :                             {bg:T.purpleBg,bd:T.purpleBd};
-                              return (
-                                <div key={i}
-                                  title={(o.ref||"")+" — "+(o.description||"").slice(0,60)
-                                    +"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility
-                                    +" · Business value: "+o.bizValue+" · "+o.status}
-                                  onClick={() => setEditOpp(o)}
-                                  style={{ width:sz, height:sz, borderRadius:"50%",
-                                           background:oC.bg, border:"2px solid "+oC.bd,
-                                           cursor:"pointer", flexShrink:0 }}>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                  <div style={{ paddingTop:6, paddingLeft:4, fontSize:10, fontWeight:700,
-                                 color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
-                    Environmental benefit / magnitude →
-                  </div>
-                </div>
-              </div>
+        // Quadrant corner cell: top-right cell of each quadrant region
+        const isQuadrantCorner = (ev, feas) =>
+          (ev===5 && feas===5) || (ev===3 && feas===5) || (ev===5 && feas===3) || (ev===3 && feas===3);
 
-              {/* Quadrant legend + dot legend */}
-              <div style={{ display:"flex", gap:20, marginTop:"1.25rem", flexWrap:"wrap", alignItems:"flex-start" }}>
-                <div>
-                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
-                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority quadrants</p>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
-                    {[{bg:T.tealBg,bd:T.tealBd,c:T.teal,label:"Pursue",sub:"High benefit + easy"},
-                      {bg:T.blueBg,bd:T.blueBd,c:T.blue,label:"Plan",sub:"High benefit, harder"},
-                      {bg:T.purpleBg,bd:T.purpleBd,c:T.purple,label:"Quick win",sub:"Easy, lower impact"},
-                      {bg:T.slateBg,bd:T.slateBd,c:T.slate,label:"Deprioritise",sub:"Low benefit + hard"}].map(({bg,bd,c,label,sub})=>(
-                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
-                        <span style={{ width:12, height:12, borderRadius:2, background:bg,
-                                       border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                        <span><strong>{label}</strong> <span style={{ color:T.faint }}>— {sub}</span></span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
-                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Dot colour = status · Size = business value</p>
-                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                    {[{bg:T.purpleBg,bd:T.purpleBd,l:"Open"},{bg:T.amberBg,bd:T.amberBd,l:"In Progress"},{bg:T.greenBg,bd:T.greenBd,l:"Closed"}].map(({bg,bd,l})=>(
-                      <span key={l} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
-                        <span style={{ width:12, height:12, borderRadius:"50%", background:bg,
-                                       border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                        {l}
-                      </span>
-                    ))}
-                    <span style={{ fontSize:11, color:T.faint }}>· Larger dot = higher business value</span>
-                  </div>
-                </div>
-                <span style={{ marginLeft:"auto", fontSize:11, color:T.faint, alignSelf:"flex-end" }}>
-                  Click any dot to edit opportunity
-                </span>
-              </div>
-            </div>
-          );
-        };
+        const oppGrid = {};
+        opps.forEach(o => {
+          const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+          const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
+          const k    = ev+","+feas;
+          if (!oppGrid[k]) oppGrid[k] = [];
+          oppGrid[k].push(o);
+        });
 
         return (
           <div>
-            {/* ── Risk matrix ── */}
-            <div style={{ marginBottom:"0.5rem" }}>
-              <h3 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700 }}>Environmental risk matrix</h3>
-              <p style={{ margin:0, fontSize:12, color:T.muted }}>
-                Consequence × Probability per NORSOK S-003 / ISO 14001. Significance thresholds: R ≥ 13 = SIGNIFICANT, R 8–12 = WATCH, R ≤ 7 = Low.
-              </p>
-            </div>
+            {/* ══ Risk matrix ══════════════════════════════════════════════════════════ */}
+            <MatrixHeader isFirst title="Environmental risk matrix"
+              subtitle="Consequence × Probability per NORSOK S-003 / ISO 14001 · R ≥ 13 = SIGNIFICANT · R 8–12 = WATCH · R ≤ 7 = Low"/>
+
             {aspects.length === 0
-              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8,
-                               border:"1px solid "+T.border, color:T.faint, fontSize:12, marginBottom:"2rem" }}>
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
+                               borderRadius:8, border:"1px solid "+T.border, color:T.faint,
+                               fontSize:12, marginBottom:"2rem" }}>
                   No aspects yet — use the Screening tab to get started.
                 </div>
-              : <div style={{ marginBottom:"2.5rem" }}><RiskMatrix/></div>
+              : <>
+                  <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
+                    <YAxis title="Probability of occurrence →" labels={PROB_LABELS}/>
+                    <div>
+                      <XAxis labels={CON_LABELS} footerLabel="Consequence / severity →"/>
+                      {[5,4,3,2,1].map(pb => (
+                        <div key={pb} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(sv => {
+                            const c     = sigCell(sv,pb);
+                            const items = riskGrid[sv+","+pb]||[];
+                            return (
+                              <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                     background:c.bg, border:"1px solid "+c.bd,
+                                                     display:"flex", flexWrap:"wrap",
+                                                     alignContent:"center", justifyContent:"center",
+                                                     gap:4, padding:5, boxSizing:"border-box" }}>
+                                {items.length===0 && (
+                                  <span style={{ fontSize:10, fontWeight:700,
+                                                 color:zoneTextC[c.zone], opacity:0.5 }}>{sv*pb}</span>
+                                )}
+                                {items.map((a,i) => {
+                                  const sig = calcSig(a);
+                                  const fill  = sig==="SIGNIFICANT"?T.redBg   :sig==="WATCH"?T.amberBg  :T.greenBg;
+                                  const fillC = sig==="SIGNIFICANT"?T.red     :sig==="WATCH"?T.amber    :T.green;
+                                  const fillBd= sig==="SIGNIFICANT"?T.redBd   :sig==="WATCH"?T.amberBd  :T.greenBd;
+                                  const bdr   = a.status==="Closed"      ?"2px solid "+T.green
+                                              : a.status==="In Progress" ?"2px dashed "+T.amber
+                                              :                            "3px solid "+T.red;
+                                  return (
+                                    <div key={i}
+                                      title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"
+Consequence: "+a.severity+" · Probability: "+a.probability+" · Score: "+sv*pb}
+                                      onClick={()=>setEditAspect(a)}
+                                      style={{ width:18, height:18, borderRadius:"50%",
+                                               background:fill, border:bdr,
+                                               cursor:"pointer", flexShrink:0,
+                                               display:"flex", alignItems:"center", justifyContent:"center",
+                                               fontSize:8, fontWeight:700, color:fillC }}>
+                                      {items.length>1&&i===0?items.length:""}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <LegendBlock groups={[
+                    { title:"Cell colour — risk zone", items:[
+                        { bg:"#FFEBEE", bd:"1px solid #EF9A9A", br:"3px", sw:14, sh:14, label:"SIGNIFICANT", sub:"R ≥ 13" },
+                        { bg:"#FFF8E1", bd:"1px solid #FFE082", br:"3px", sw:14, sh:14, label:"WATCH",        sub:"R 8–12" },
+                        { bg:"#E8F5E9", bd:"1px solid #A5D6A7", br:"3px", sw:14, sh:14, label:"Low",          sub:"R ≤ 7"  },
+                    ]},
+                    { title:"Dot fill — significance", items:[
+                        { bg:T.redBg,   bd:"2px solid "+T.redBd,   label:"SIGNIFICANT" },
+                        { bg:T.amberBg, bd:"2px solid "+T.amberBd, label:"WATCH"       },
+                        { bg:T.greenBg, bd:"2px solid "+T.greenBd, label:"Low"         },
+                    ]},
+                    { title:"Dot border — management status", items:[
+                        { bg:T.slateBg, bd:"3px solid "+T.red,          label:"Open"        },
+                        { bg:T.slateBg, bd:"2px dashed "+T.amber,       label:"In Progress" },
+                        { bg:T.slateBg, bd:"2px solid "+T.green,        label:"Closed"      },
+                    ]},
+                  ]}/>
+                  {unplotted.length>0 && (
+                    <p style={{ fontSize:11, color:T.faint, marginTop:"0.5rem" }}>
+                      {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted — consequence or probability not set.
+                    </p>
+                  )}
+                </>
             }
 
-            {/* ── Opportunity matrix ── */}
-            <div style={{ borderTop:"1px solid "+T.border, paddingTop:"1.5rem", marginBottom:"0.5rem" }}>
-              <h3 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700 }}>Opportunity priority matrix</h3>
-              <p style={{ margin:0, fontSize:12, color:T.muted }}>
-                Environmental benefit × Feasibility, per ISO 14001:2015 Cl.6.1.2. Dot size = business value. Quadrants guide prioritisation.
-              </p>
-            </div>
+            {/* ══ Opportunity matrix ═══════════════════════════════════════════════════ */}
+            <MatrixHeader title="Opportunity priority matrix"
+              subtitle="Environmental benefit × Feasibility per ISO 14001:2015 Cl.6.1.2 · Dot size = business value · Quadrants guide prioritisation"/>
+
             {opps.length === 0
-              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8,
-                               border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
+                               borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
                   No opportunities yet.
                 </div>
-              : <OppMatrix/>
+              : <>
+                  <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
+                    <YAxis title="Implementation feasibility →" labels={OPP_FEAS_LABELS}/>
+                    <div>
+                      <XAxis labels={OPP_ENV_LABELS} footerLabel="Environmental benefit / magnitude →"/>
+                      {[5,4,3,2,1].map(feas => (
+                        <div key={feas} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(ev => {
+                            const q     = oppQuadrant(ev,feas);
+                            const items = oppGrid[ev+","+feas]||[];
+                            const isCorner = isQuadrantCorner(ev,feas);
+                            return (
+                              <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                     background:q.bg, border:"1px solid "+q.bd,
+                                                     display:"flex", flexWrap:"wrap",
+                                                     alignContent:"center", justifyContent:"center",
+                                                     gap:4, padding:5, boxSizing:"border-box",
+                                                     position:"relative" }}>
+                                {/* Quadrant label in top-right corner cell of each quadrant */}
+                                {items.length===0 && isCorner && (
+                                  <span style={{ fontSize:9, fontWeight:700, color:q.c,
+                                                 opacity:0.55, textAlign:"center",
+                                                 lineHeight:1.3, padding:2 }}>{q.label}</span>
+                                )}
+                                {items.map((o,i) => {
+                                  const sz  = 10+(Math.min(5,Math.max(1,parseInt(o.bizValue)||1))-1)*2;
+                                  const oC  = o.status==="Closed"      ?{bg:T.greenBg,bd:T.greenBd}
+                                            : o.status==="In Progress" ?{bg:T.amberBg,bd:T.amberBd}
+                                            :                            {bg:T.purpleBg,bd:T.purpleBd};
+                                  return (
+                                    <div key={i}
+                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)
+                                        +"
+Env benefit: "+o.envValue+" · Feasibility: "+o.feasibility
+                                        +" · Business value: "+o.bizValue+" · "+o.status}
+                                      onClick={()=>setEditOpp(o)}
+                                      style={{ width:sz, height:sz, borderRadius:"50%",
+                                               background:oC.bg, border:"2px solid "+oC.bd,
+                                               cursor:"pointer", flexShrink:0 }}/>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <LegendBlock groups={[
+                    { title:"Cell colour — priority quadrant", items:[
+                        { bg:T.tealBg,   bd:"1px solid "+T.tealBd,   br:"3px", sw:14, sh:14, label:"Pursue",       sub:"High benefit + easy"        },
+                        { bg:T.blueBg,   bd:"1px solid "+T.blueBd,   br:"3px", sw:14, sh:14, label:"Plan",          sub:"High benefit, harder"        },
+                        { bg:T.purpleBg, bd:"1px solid "+T.purpleBd, br:"3px", sw:14, sh:14, label:"Quick win",     sub:"Easy, lower impact"          },
+                        { bg:T.slateBg,  bd:"1px solid "+T.slateBd,  br:"3px", sw:14, sh:14, label:"Deprioritise",  sub:"Low benefit + hard"          },
+                    ]},
+                    { title:"Dot colour — status", items:[
+                        { bg:T.purpleBg, bd:"2px solid "+T.purpleBd, label:"Open"        },
+                        { bg:T.amberBg,  bd:"2px solid "+T.amberBd,  label:"In Progress" },
+                        { bg:T.greenBg,  bd:"2px solid "+T.greenBd,  label:"Closed"      },
+                    ]},
+                    { title:"Dot size — business value", items:[
+                        { bg:T.muted, bd:"none", sw:10, sh:10, label:"1 — Low"  },
+                        { bg:T.muted, bd:"none", sw:14, sh:14, label:"3 — Medium" },
+                        { bg:T.muted, bd:"none", sw:18, sh:18, label:"5 — High" },
+                    ]},
+                  ]}/>
+                </>
             }
           </div>
         );
