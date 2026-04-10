@@ -2164,10 +2164,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                                             :                            {bg:T.purpleBg,bd:T.purpleBd};
                                   return (
                                     <div key={i}
-                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)
-                                        +"
-Env benefit: "+o.envValue+" · Feasibility: "+o.feasibility
-                                        +" · Business value: "+o.bizValue+" · "+o.status}
+                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility+" · Business value: "+o.bizValue+" · "+o.status}
                                       onClick={()=>setEditOpp(o)}
                                       style={{ width:sz, height:sz, borderRadius:"50%",
                                                background:oC.bg, border:"2px solid "+oC.bd,
