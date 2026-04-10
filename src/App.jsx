@@ -746,65 +746,71 @@ function AspectForm({ aspect, onSave, onCancel }) {
   );
 }
 
-// ── Opp form ──────────────────────────────────────────────────────────────────
-function OppForm({ opp, onSave, onCancel }) {
-  const base = { ...emptyOpp(), ...opp };
-  const [f, setF] = useState({
-    ...base,
-    showQualitative: base.showQualitative ?? !!(base.ghgNote||(base.calcType==="qualitative")),
-    showQuantitative: base.showQuantitative ?? (base.calcType==="quantitative"),
-    ghgSnapshots: migrateOppSnaps(base),
-    prefillGhgIds: base.prefillGhgIds||[],
-  });
+// ── Shared opp helpers ───────────────────────────────────────────────────────
+
+// Determine which GHG lines are relevant based on type / prefillGhgIds
+function relevantLines(type, prefillIds) {
+  if (prefillIds && prefillIds.length > 0) {
+    return GHG_LINES.filter(l => prefillIds.includes(l.id));
+  }
+  if ((type||"").startsWith("Scope 1")) return GHG_LINES.filter(l=>l.scope==="Scope 1");
+  if ((type||"").startsWith("Scope 2")) return GHG_LINES.filter(l=>l.scope==="Scope 2");
+  if ((type||"").startsWith("Scope 3")) return GHG_LINES.filter(l=>l.scope==="Scope 3 Cat 1"||l.scope==="Scope 3 Cat 4");
+  return GHG_LINES; // all
+}
+
+// ── Shared OppFormBody — used identically from OppForm and ScreeningTab ───────
+function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const [activeSnapIdx, setActiveSnapIdx] = useState(
+    () => Math.max(0,(f.ghgSnapshots||[]).length-1)
+  );
 
   const score = calcOppScore(f);
   const prioLabel = score>=75?"High priority":score>=30?"Medium priority":"Low priority";
   const sc = score>=75?{bg:T.tealBg,c:T.tealDark}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
 
-  // ── Snapshot helpers ──────────────────────────────────────────────────────────
-  const activeSnap  = f.ghgSnapshots[f.ghgSnapshots.length-1] || null;
-  const prevSnaps   = f.ghgSnapshots.slice(0,-1);
+  // Keep activeSnapIdx in bounds
+  const snaps = f.ghgSnapshots||[];
+  const safeIdx = Math.min(activeSnapIdx, snaps.length-1);
+  const activeSnap = snaps[safeIdx]||null;
+  const isActive = (si) => si===snaps.length-1; // only last snapshot is editable
 
-  const updateActive = (updater) => setF(p => {
-    const snaps = [...(p.ghgSnapshots||[])];
-    if (!snaps.length) return p;
-    snaps[snaps.length-1] = updater(snaps[snaps.length-1]);
-    return {...p, ghgSnapshots:snaps};
+  // Snapshot updater targeting a specific index
+  const updateSnap = (si, updater) => setF(p=>{
+    const s=[...(p.ghgSnapshots||[])];
+    s[si]=updater(s[si]); return {...p,ghgSnapshots:s};
   });
-  const setSnapField = (k,v) => updateActive(s=>({...s,[k]:v}));
-  const setLine = (id,k,v) => updateActive(s=>({...s, lines:s.lines.map(l=>l.id===id?{...l,[k]:v}:l)}));
-  const addCustomRow = (scope) => updateActive(s=>({...s, customRows:[...(s.customRows||[]),
+  const setSnapField = (si,k,v) => updateSnap(si,s=>({...s,[k]:v}));
+  const setLine      = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
+  const addCustomRow = (si,scope) => updateSnap(si,s=>({...s,customRows:[...(s.customRows||[]),
     {uid:"c"+Date.now(),scope,type:"",unit:"kg",qty:"",baseline:"",cf:"",ref:"",savingType:"identified"}]}));
-  const delCustomRow = (uid) => updateActive(s=>({...s,customRows:(s.customRows||[]).filter(r=>r.uid!==uid)}));
-  const setCustomRow = (uid,k,v) => updateActive(s=>({...s,customRows:(s.customRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r)}));
+  const delCustomRow = (si,uid) => updateSnap(si,s=>({...s,customRows:(s.customRows||[]).filter(r=>r.uid!==uid)}));
+  const setCustomRow = (si,uid,k,v) => updateSnap(si,s=>({...s,customRows:(s.customRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r)}));
 
   const addPhaseSnapshot = () => {
-    const prev = f.ghgSnapshots[f.ghgSnapshots.length-1];
-    const n = f.ghgSnapshots.length+1;
-    setF(p=>({...p, ghgSnapshots:[...p.ghgSnapshots, emptySnapshot("Phase "+n, prev)]}));
+    const prev = snaps[snaps.length-1]||null;
+    const n = snaps.length+1;
+    setF(p=>({...p,ghgSnapshots:[...p.ghgSnapshots,emptySnapshot("Phase "+n,prev)]}));
+    setActiveSnapIdx(n-1);
   };
 
-  // Ensure first snapshot created when quantitative is toggled on
   const toggleQuantitative = () => {
     const next = !f.showQuantitative;
-    setF(p => {
-      const snaps = (p.ghgSnapshots||[]);
-      const newSnaps = next && snaps.length===0
-        ? [emptySnapshot("Phase 1", null)]
-        : snaps;
-      return {...p, showQuantitative:next, ghgSnapshots:newSnaps};
+    setF(p=>{
+      const s=p.ghgSnapshots||[];
+      return {...p,showQuantitative:next,ghgSnapshots:next&&s.length===0?[emptySnapshot("Phase 1",null)]:s};
     });
+    if(!f.showQuantitative) setActiveSnapIdx(0);
   };
 
-  // ── GHG snapshot table renderer ───────────────────────────────────────────────
   const snapTotal = (snap) => {
-    if (!snap) return 0;
-    const l1 = (snap.lines||[]).reduce((s,l)=>(l.savingType==="actual"?0:s)+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-    const l2 = (snap.customRows||[]).reduce((s,r)=>(r.savingType==="actual"?0:s)+(parseFloat(r.qty)||0)*(parseFloat(r.cf)||0),0);
-    const a1 = (snap.lines||[]).reduce((s,l)=>(l.savingType==="actual"?s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0):s),0);
-    const a2 = (snap.customRows||[]).reduce((s,r)=>(r.savingType==="actual"?s+(parseFloat(r.qty)||0)*(parseFloat(r.cf)||0):s),0);
-    return {identified:l1+l2, actual:a1+a2};
+    if(!snap) return {identified:0,actual:0};
+    const all=[...(snap.lines||[]),...(snap.customRows||[])];
+    return {
+      identified:all.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
+      actual:    all.filter(l=>l.savingType==="actual" ).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
+    };
   };
   const fmt = v => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e":v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
 
@@ -814,131 +820,133 @@ function OppForm({ opp, onSave, onCancel }) {
     "Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},
     "Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd},
   };
-  const thS = {padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,
-               borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
-  const tdS = (ex) => ({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
+  const thS={padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,
+             borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
+  const tdS=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
 
-  const SnapTable = ({ snap, isActive }) => {
-    const lines = GHG_LINES.map(l=>{
+  const SnapTable = ({snap, si}) => {
+    const editable = isActive(si);
+    const prefillIds = f.prefillGhgIds||[];
+    const visibleLines = relevantLines(f.type, prefillIds);
+    const visibleScopes = [...new Set(visibleLines.map(l=>l.scope))];
+    const mergedLines = visibleLines.map(l=>{
       const s=(snap.lines||[]).find(x=>x.id===l.id);
       return{...l,qty:s?s.qty:"",baseline:s?s.baseline||"":"",
              cf:(s&&s.cf!=="")?s.cf:l.cfDefault,ref:s?s.ref||"":"",savingType:s?s.savingType:"identified"};
     });
-    const scopeGroups = GHG_LINES.reduce((acc,l)=>{if(!acc[l.scope])acc[l.scope]=[];acc[l.scope].push(l);return acc;},{});
-    const highlight = f.prefillGhgIds||[];
+    const scopeGroups = visibleScopes.reduce((acc,sc)=>{
+      acc[sc]=mergedLines.filter(l=>l.scope===sc); return acc;
+    },{});
+    const customForScope = snap.customRows||[];
+    const t = snapTotal(snap);
     return (
       <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:T.sans}}>
           <thead>
             <tr style={{background:T.surface2}}>
-              {["Scope","Emission / reduction type","Unit","Baseline qty","Reduction qty","CF","Saving (kg CO₂e)","Type","Reference"].map(h=>(
+              {visibleScopes.length>1&&<th style={thS}>Scope</th>}
+              {["Emission / reduction type","Unit","Baseline qty","Reduction qty","CF","Saving (kg CO₂e)","Type","Reference"].map(h=>(
                 <th key={h} style={{...thS,textAlign:["Baseline qty","Reduction qty","CF","Saving (kg CO₂e)"].includes(h)?"right":"left"}}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {Object.entries(scopeGroups).map(([scope,slines])=>{
+            {visibleScopes.flatMap(scope=>{
               const sc2=SCOPE_COLORS[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
-              const custom=(snap.customRows||[]).filter(r=>r.scope===scope);
-              const totalRows=slines.length+custom.length+1;
+              const slines=scopeGroups[scope]||[];
+              const crows=customForScope.filter(r=>r.scope===scope);
+              const totalRows=slines.length+crows.length+1;
               return [
                 ...slines.map((l,li)=>{
-                  const line=lines.find(x=>x.id===l.id);
-                  const qty=parseFloat(line.qty)||0;
-                  const cf=parseFloat(line.cf)||0;
+                  const qty=parseFloat(l.qty)||0,cf=parseFloat(l.cf)||0;
                   const sav=qty&&cf?qty*cf:null;
-                  const isPrefill=highlight.includes(l.id);
-                  const bg=isPrefill?(sc2.bg+"99"):qty>0?(sc2.bg+"44"):undefined;
-                  return (
-                    <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,background:bg}}>
-                      {li===0&&<td rowSpan={totalRows} style={{...tdS(),verticalAlign:"top",paddingTop:8,
-                        borderRight:"1px solid "+T.border,width:82}}>
+                  return(
+                    <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,
+                      background:qty>0?sc2.bg+"44":undefined}}>
+                      {visibleScopes.length>1&&li===0&&<td rowSpan={totalRows}
+                        style={{...tdS(),verticalAlign:"top",paddingTop:8,borderRight:"1px solid "+T.border,width:82}}>
                         <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,
                           background:sc2.bg,color:sc2.c,border:"1px solid "+sc2.bd,display:"inline-block",whiteSpace:"nowrap"}}>{scope}</span>
                       </td>}
-                      <td style={{...tdS(),fontWeight:isPrefill?600:400,color:T.text}}>{l.type}</td>
+                      <td style={{...tdS(),color:T.text,fontWeight:500}}>{l.type}</td>
                       <td style={{...tdS({textAlign:"right"}),fontFamily:T.mono,fontSize:10,color:T.faint}}>{l.unit}</td>
                       <td style={{...tdS({textAlign:"right",padding:"3px 6px"})}}>
-                        {isActive?<input type="number" min={0} value={line.baseline}
-                          onChange={e=>setLine(l.id,"baseline",e.target.value)} placeholder="—"
-                          style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
+                        {editable?<input type="number" min={0} value={l.baseline} onChange={e=>setLine(si,l.id,"baseline",e.target.value)}
+                          placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
                             border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{line.baseline||"—"}</span>}
+                          :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.baseline||"—"}</span>}
                       </td>
                       <td style={{...tdS({textAlign:"right",padding:"3px 6px"})}}>
-                        {isActive?<input type="number" min={0} value={line.qty}
-                          onChange={e=>setLine(l.id,"qty",e.target.value)} placeholder="0"
-                          style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
+                        {editable?<input type="number" min={0} value={l.qty} onChange={e=>setLine(si,l.id,"qty",e.target.value)}
+                          placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
                             border:"1px solid "+(qty>0?sc2.bd:T.border),borderRadius:4,
                             background:qty>0?sc2.bg:T.surface,color:qty>0?sc2.c:T.text}}/>
                           :<span style={{fontFamily:T.mono,fontSize:12,fontWeight:qty>0?600:400,color:qty>0?sc2.c:T.faint}}>{qty||"—"}</span>}
                       </td>
                       <td style={{...tdS({textAlign:"right",padding:"3px 6px"})}}>
                         {l.cfFixed?<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.cfDefault}</span>
-                          :isActive?<input type="number" min={0} value={line.cf}
-                            onChange={e=>setLine(l.id,"cf",e.target.value)} placeholder="CF"
-                            style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
+                          :editable?<input type="number" min={0} value={l.cf} onChange={e=>setLine(si,l.id,"cf",e.target.value)}
+                            placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
                               border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
-                            :<span style={{fontFamily:T.mono,fontSize:11,color:line.cf?T.muted:T.faint}}>{line.cf||"—"}</span>}
+                            :<span style={{fontFamily:T.mono,fontSize:11,color:l.cf?T.muted:T.faint}}>{l.cf||"—"}</span>}
                       </td>
                       <td style={{...tdS({textAlign:"right"}),fontFamily:T.mono,fontWeight:sav?700:400,color:sav?T.teal:T.faint}}>
                         {sav!=null?sav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
                       </td>
                       <td style={{...tdS({padding:"2px 5px"})}}>
-                        {isActive?<select value={line.savingType}
-                          onChange={e=>setLine(l.id,"savingType",e.target.value)}
+                        {editable?<select value={l.savingType} onChange={e=>setLine(si,l.id,"savingType",e.target.value)}
                           style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
-                            border:"1px solid "+(line.savingType==="actual"?T.tealBd:T.blueBd),
-                            background:line.savingType==="actual"?T.tealBg:T.blueBg,
-                            color:line.savingType==="actual"?T.teal:T.blue}}>
+                            border:"1px solid "+(l.savingType==="actual"?T.tealBd:T.blueBd),
+                            background:l.savingType==="actual"?T.tealBg:T.blueBg,
+                            color:l.savingType==="actual"?T.teal:T.blue}}>
                           <option value="identified">Identified</option>
                           <option value="actual">Actual</option>
                         </select>:<span style={{fontSize:10,padding:"2px 6px",borderRadius:3,fontWeight:500,
-                          background:line.savingType==="actual"?T.tealBg:T.blueBg,
-                          color:line.savingType==="actual"?T.teal:T.blue}}>{line.savingType}</span>}
+                          background:l.savingType==="actual"?T.tealBg:T.blueBg,
+                          color:l.savingType==="actual"?T.teal:T.blue}}>{l.savingType}</span>}
                       </td>
                       <td style={{...tdS({padding:"3px 5px"})}}>
-                        {isActive?<input value={line.ref} onChange={e=>setLine(l.id,"ref",e.target.value)}
-                          placeholder="Source"
-                          style={{width:"100%",minWidth:80,padding:"2px 5px",fontSize:10,
+                        {editable?<input value={l.ref} onChange={e=>setLine(si,l.id,"ref",e.target.value)}
+                          placeholder="Source" style={{width:"100%",minWidth:80,padding:"2px 5px",fontSize:10,
                             border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                          :<span style={{fontSize:10,color:T.faint}}>{line.ref||"—"}</span>}
+                          :<span style={{fontSize:10,color:T.faint}}>{l.ref||"—"}</span>}
                       </td>
                     </tr>
                   );
                 }),
-                ...custom.map(cr=>{
+                ...crows.map(cr=>{
                   const cqty=parseFloat(cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
                   const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
                   return(
                     <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg+"22"}}>
-                      {isActive?<td style={{...tdS({padding:"3px 5px"})}}>
-                        <input value={cr.type} onChange={e=>setCustomRow(cr.uid,"type",e.target.value)}
-                          placeholder="Custom type"
-                          style={{width:"100%",padding:"2px 5px",fontSize:11,border:"1px solid "+T.amberBd,
-                            borderRadius:3,background:T.amberBg,color:T.amber}}/>
-                      </td>:<td style={tdS()}><span style={{fontSize:11,color:T.amber}}>{cr.type||"—"}</span></td>}
+                      {visibleScopes.length>1&&<td style={tdS()}/>}
+                      <td style={{...tdS({padding:"3px 5px"})}}>
+                        {editable?<input value={cr.type} onChange={e=>setCustomRow(si,cr.uid,"type",e.target.value)}
+                          placeholder="Custom type" style={{width:"100%",padding:"2px 5px",fontSize:11,
+                            border:"1px solid "+T.amberBd,borderRadius:3,background:T.amberBg,color:T.amber}}/>
+                          :<span style={{fontSize:11,color:T.amber}}>{cr.type||"—"}</span>}
+                      </td>
                       <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {isActive?<input value={cr.unit} onChange={e=>setCustomRow(cr.uid,"unit",e.target.value)}
+                        {editable?<input value={cr.unit} onChange={e=>setCustomRow(si,cr.uid,"unit",e.target.value)}
                           placeholder="kg" style={{width:40,textAlign:"right",padding:"2px 4px",fontSize:10,
                             border:"1px solid "+T.border,borderRadius:3,background:T.surface,color:T.muted}}/>
                           :<span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>{cr.unit||"—"}</span>}
                       </td>
                       <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {isActive?<input type="number" min={0} value={cr.baseline||""} onChange={e=>setCustomRow(cr.uid,"baseline",e.target.value)}
+                        {editable?<input type="number" min={0} value={cr.baseline||""} onChange={e=>setCustomRow(si,cr.uid,"baseline",e.target.value)}
                           placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
                             border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
                           :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{cr.baseline||"—"}</span>}
                       </td>
                       <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {isActive?<input type="number" min={0} value={cr.qty} onChange={e=>setCustomRow(cr.uid,"qty",e.target.value)}
+                        {editable?<input type="number" min={0} value={cr.qty} onChange={e=>setCustomRow(si,cr.uid,"qty",e.target.value)}
                           placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
                             border:"1px solid "+(cqty>0?sc2c.bd:T.border),borderRadius:4,
                             background:cqty>0?sc2c.bg:T.surface,color:cqty>0?sc2c.c:T.text}}/>
                           :<span style={{fontFamily:T.mono,fontSize:12,color:cqty>0?sc2c.c:T.faint}}>{cqty||"—"}</span>}
                       </td>
                       <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {isActive?<input type="number" min={0} value={cr.cf} onChange={e=>setCustomRow(cr.uid,"cf",e.target.value)}
+                        {editable?<input type="number" min={0} value={cr.cf} onChange={e=>setCustomRow(si,cr.uid,"cf",e.target.value)}
                           placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
                             border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
                           :<span style={{fontFamily:T.mono,fontSize:11,color:T.amber}}>{cr.cf||"—"}</span>}
@@ -947,7 +955,7 @@ function OppForm({ opp, onSave, onCancel }) {
                         {csav!=null?csav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
                       </td>
                       <td style={{...tdS({padding:"2px 5px"})}}>
-                        {isActive?<select value={cr.savingType||"identified"} onChange={e=>setCustomRow(cr.uid,"savingType",e.target.value)}
+                        {editable?<select value={cr.savingType||"identified"} onChange={e=>setCustomRow(si,cr.uid,"savingType",e.target.value)}
                           style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
                             border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:T.blueBd),
                             background:(cr.savingType||"identified")==="actual"?T.tealBg:T.blueBg,
@@ -957,20 +965,20 @@ function OppForm({ opp, onSave, onCancel }) {
                         </select>:<span style={{fontSize:10,color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>{cr.savingType||"identified"}</span>}
                       </td>
                       <td style={{...tdS({padding:"3px 5px"})}}>
-                        {isActive?<div style={{display:"flex",gap:3,alignItems:"center"}}>
-                          <input value={cr.ref||""} onChange={e=>setCustomRow(cr.uid,"ref",e.target.value)}
+                        {editable?<div style={{display:"flex",gap:3,alignItems:"center"}}>
+                          <input value={cr.ref||""} onChange={e=>setCustomRow(si,cr.uid,"ref",e.target.value)}
                             placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
                               border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                          <button onClick={()=>delCustomRow(cr.uid)}
+                          <button onClick={()=>delCustomRow(si,cr.uid)}
                             style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>✕</button>
                         </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
                       </td>
                     </tr>
                   );
                 }),
-                <tr key={"add_"+scope}>
-                  <td colSpan={8} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
-                    {isActive&&<button onClick={()=>addCustomRow(scope)}
+                <tr key={"add_"+scope+"_"+si}>
+                  <td colSpan={9} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
+                    {editable&&<button onClick={()=>addCustomRow(si,scope)}
                       style={{fontSize:11,color:(SCOPE_COLORS[scope]||{c:T.slate}).c,background:"transparent",
                         border:"none",cursor:"pointer",padding:"2px 4px",fontFamily:T.sans,fontWeight:500}}>
                       + Add custom row
@@ -980,15 +988,15 @@ function OppForm({ opp, onSave, onCancel }) {
               ];
             })}
           </tbody>
-          {(()=>{const t=snapTotal(snap);return(
+          {(()=>{return(
             <>
               {t.actual>0&&<tfoot><tr style={{background:T.tealBg,borderTop:"2px solid "+T.tealBd}}>
-                <td colSpan={6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.teal}}>Actual saving (verified)</td>
+                <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.teal}}>Actual saving</td>
                 <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.teal}}>{t.actual.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
                 <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.actual)}</td>
               </tr></tfoot>}
-              {t.identified>0&&<tfoot><tr style={{background:T.blueBg,borderTop:t.actual>0?"none":"2px solid "+T.tealBd}}>
-                <td colSpan={6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.blue}}>Identified saving (estimated)</td>
+              {t.identified>0&&<tfoot><tr style={{background:T.blueBg,borderTop:t.actual>0?"none":"2px solid "+T.blueBd}}>
+                <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.blue}}>Identified saving</td>
                 <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.blue}}>{t.identified.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
                 <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.identified)}</td>
               </tr></tfoot>}
@@ -999,61 +1007,55 @@ function OppForm({ opp, onSave, onCancel }) {
     );
   };
 
-  // ── Diff between two snapshots ────────────────────────────────────────────────
-  const SnapDiff = ({ prev, curr }) => {
-    const pT=snapTotal(prev), cT=snapTotal(curr);
-    const diffId=cT.identified-pT.identified, diffAct=cT.actual-pT.actual;
-    if(diffId===0&&diffAct===0) return <p style={{fontSize:11,color:T.faint,margin:"4px 0"}}>No change from previous phase.</p>;
-    return(
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",margin:"4px 0"}}>
-        {diffId!==0&&<span style={{fontSize:11,color:diffId>0?T.teal:T.red}}>
-          Identified {diffId>0?"+":""}{fmt(diffId)}</span>}
-        {diffAct!==0&&<span style={{fontSize:11,color:diffAct>0?T.teal:T.red}}>
-          Actual {diffAct>0?"+":""}{fmt(diffAct)}</span>}
-      </div>
-    );
+  const SnapDiff = ({prev,curr}) => {
+    const pT=snapTotal(prev),cT=snapTotal(curr);
+    const dI=cT.identified-pT.identified,dA=cT.actual-pT.actual;
+    if(dI===0&&dA===0) return <span style={{fontSize:11,color:T.faint}}>No change from previous phase.</span>;
+    return(<span style={{fontSize:11}}>
+      {dI!==0&&<span style={{color:dI>0?T.teal:T.red,marginRight:8}}>Identified {dI>0?"+":""}{fmt(dI)}</span>}
+      {dA!==0&&<span style={{color:dA>0?T.teal:T.red}}>Actual {dA>0?"+":""}{fmt(dA)}</span>}
+    </span>);
   };
 
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:"1.5rem"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem",
-                   paddingBottom:"1rem",borderBottom:"1px solid "+T.border}}>
-        <Btn onClick={onCancel} variant="ghost">Back</Btn>
-        <h2 style={{margin:0,fontSize:16,fontWeight:600}}>{opp.id?"Edit opportunity":"New opportunity"}</h2>
-      </div>
-
+    <div>
       {/* ── Description ── */}
       <Card style={{marginBottom:"1rem"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
           <Fld label="Opportunity type">
-            <select value={f.type} onChange={e=>set("type",e.target.value)} style={iw}>
-              <option value="">Select type</option>
-              <optgroup label="Scope 1 — Direct Emissions">
-                <option value="Scope 1 — CO₂">CO₂ reduction</option>
-                <option value="Scope 1 — NOₓ">NOₓ reduction</option>
-                <option value="Scope 1 — CH₄">CH₄ / methane reduction</option>
-                <option value="Scope 1 — GWP gases">GWP gases / refrigerants reduction</option>
-                <option value="Scope 1 — Other">Other direct emission reduction</option>
-              </optgroup>
-              <optgroup label="Scope 2 — Indirect Emissions">
-                <option value="Scope 2 — System optimisation">System / component optimisation</option>
-                <option value="Scope 2 — Design optimisation">Layout, design or location optimisation</option>
-                <option value="Scope 2 — Alternative resources">Alternative resources</option>
-              </optgroup>
-              <optgroup label="Scope 3 — Value Chain">
-                <option value="Scope 3 — Material">Material</option>
-                <option value="Scope 3 — Chemicals">Chemicals</option>
-                <option value="Scope 3 — Lifecycle">Lifecycle</option>
-                <option value="Scope 3 — Re-use">Re-use</option>
-                <option value="Scope 3 — Re-cycle">Re-cycle</option>
-                <option value="Scope 3 — Waste">Waste evaluation</option>
-                <option value="Scope 3 — Transport">Transport</option>
-                <option value="Scope 3 — Remote technology">Remote technology / Automated solutions</option>
-              </optgroup>
-              <optgroup label="Other">
-                {OPP_TYPES.map(t=><option key={t}>{t}</option>)}
-              </optgroup>
-            </select>
+            {f.prefillGhgIds&&f.prefillGhgIds.length>0 ? (
+              <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
+                           border:"1px solid "+T.border,fontSize:12,color:T.text,fontWeight:500}}>
+                {f.type||"—"}
+                <span style={{fontSize:10,color:T.faint,marginLeft:8}}>(pre-filled — locked)</span>
+              </div>
+            ) : (
+              <select value={f.type} onChange={e=>set("type",e.target.value)} style={iw}>
+                <option value="">Select type</option>
+                <optgroup label="Scope 1 — Direct Emissions">
+                  <option value="Scope 1 — CO₂">CO₂ reduction</option>
+                  <option value="Scope 1 — NOₓ">NOₓ reduction</option>
+                  <option value="Scope 1 — CH₄">CH₄ / methane reduction</option>
+                  <option value="Scope 1 — GWP gases">GWP gases / refrigerants reduction</option>
+                  <option value="Scope 1 — Other">Other direct emission reduction</option>
+                </optgroup>
+                <optgroup label="Scope 2 — Indirect Emissions">
+                  <option value="Scope 2 — System optimisation">System / component optimisation</option>
+                  <option value="Scope 2 — Design optimisation">Layout, design or location optimisation</option>
+                  <option value="Scope 2 — Alternative resources">Alternative resources</option>
+                </optgroup>
+                <optgroup label="Scope 3 — Value Chain">
+                  <option value="Scope 3 — Material">Material</option>
+                  <option value="Scope 3 — Chemicals">Chemicals</option>
+                  <option value="Scope 3 — Lifecycle">Lifecycle</option>
+                  <option value="Scope 3 — Re-use">Re-use</option>
+                  <option value="Scope 3 — Re-cycle">Re-cycle</option>
+                  <option value="Scope 3 — Waste">Waste evaluation</option>
+                  <option value="Scope 3 — Transport">Transport</option>
+                  <option value="Scope 3 — Remote technology">Remote technology / Automated solutions</option>
+                </optgroup>
+              </select>
+            )}
           </Fld>
           <Fld label="Materiality (CSRD)">
             <select value={f.materiality} onChange={e=>set("materiality",e.target.value)} style={iw}>
@@ -1127,116 +1129,132 @@ function OppForm({ opp, onSave, onCancel }) {
         {/* Qualitative */}
         {f.showQualitative && (
           <div style={{marginBottom:f.showQuantitative?"1rem":0}}>
-            <p style={{margin:"0 0 6px",fontSize:11,color:T.muted}}>
-              Describe expected savings in qualitative terms. Use the phase snapshots to log how estimates evolve.
-            </p>
-            {f.ghgSnapshots.length === 0 ? (
+            {snaps.length===0 ? (
               <textarea value={f.qualNote||""} onChange={e=>set("qualNote",e.target.value)} rows={3}
-                placeholder="e.g. Estimated 15% reduction in diesel consumption during commissioning phase"
+                placeholder="Describe expected savings qualitatively"
                 style={{...iw,resize:"vertical",fontSize:12}}/>
             ) : (
-              f.ghgSnapshots.map((snap,si)=>(
-                <div key={snap.id} style={{marginBottom:6,borderRadius:7,
-                  border:"1px solid "+(si===f.ghgSnapshots.length-1?T.tealBd:T.border),
-                  overflow:"hidden"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",
-                    background:si===f.ghgSnapshots.length-1?T.tealBg:T.surface2}}>
-                    {si===f.ghgSnapshots.length-1
-                      ?<input value={snap.label} onChange={e=>setSnapField("label",e.target.value)}
-                          style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.teal,
-                            border:"1px solid "+T.tealBd,borderRadius:4,background:"transparent"}}/>
-                      :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{snap.label}</span>}
-                    <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
-                      {new Date(snap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                    </span>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {snaps.map((snap,si)=>(
+                  <div key={snap.id} style={{borderRadius:7,
+                    border:"1px solid "+(isActive(si)?T.tealBd:T.border),overflow:"hidden"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
+                      background:isActive(si)?T.tealBg:T.surface2}}>
+                      {isActive(si)
+                        ?<input value={snap.label} onChange={e=>setSnapField(si,"label",e.target.value)}
+                            style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.teal,
+                              border:"1px solid "+T.tealBd,borderRadius:4,background:"transparent"}}/>
+                        :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{snap.label}</span>}
+                      <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+                        {new Date(snap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                      </span>
+                    </div>
+                    <div style={{padding:"8px 12px",background:T.surface}}>
+                      {isActive(si)
+                        ?<textarea value={snap.note||""} onChange={e=>setSnapField(si,"note",e.target.value)} rows={2}
+                            placeholder="Qualitative description for this phase"
+                            style={{...iw,resize:"vertical",fontSize:12}}/>
+                        :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.6}}>{snap.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note</span>}</p>}
+                    </div>
                   </div>
-                  <div style={{padding:"8px 12px",background:T.surface}}>
-                    {si===f.ghgSnapshots.length-1
-                      ?<textarea value={snap.note||""} onChange={e=>setSnapField("note",e.target.value)} rows={2}
-                          placeholder="Qualitative description for this phase"
-                          style={{...iw,resize:"vertical",fontSize:12}}/>
-                      :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.6}}>{snap.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note</span>}</p>}
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         )}
 
-        {/* Quantitative */}
-        {f.showQuantitative && (() => {
-          const allTotals = f.ghgSnapshots.map(s=>snapTotal(s));
-          return (
-            <div>
-              {/* Phase snapshot list */}
-              {f.ghgSnapshots.map((snap,si)=>{
-                const isActive = si===f.ghgSnapshots.length-1;
-                const t = snapTotal(snap);
-                const prevT = si>0?snapTotal(f.ghgSnapshots[si-1]):null;
+        {/* Quantitative — phase tabs + table */}
+        {f.showQuantitative && snaps.length > 0 && (
+          <div>
+            {/* Phase pill tabs */}
+            <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
+              {snaps.map((snap,si)=>{
+                const t=snapTotal(snap);
+                const hasData=t.identified>0||t.actual>0;
+                const active=si===safeIdx;
                 return(
-                  <div key={snap.id} style={{marginBottom:12,borderRadius:8,
-                    border:"1px solid "+(isActive?T.tealBd:T.border),overflow:"hidden"}}>
-                    {/* Snapshot header */}
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",
-                      background:isActive?T.tealBg:T.surface2}}>
-                      {isActive
-                        ?<input value={snap.label} onChange={e=>setSnapField("label",e.target.value)}
-                            style={{flex:1,padding:"3px 7px",fontSize:13,fontWeight:700,color:T.teal,
-                              border:"1px solid "+T.tealBd,borderRadius:5,background:"transparent"}}/>
-                        :<span style={{fontSize:13,fontWeight:600,color:T.muted,flex:1}}>{snap.label}</span>}
-                      <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
-                        {new Date(snap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                      </span>
-                      {t.actual>0&&<span style={{fontFamily:T.mono,fontSize:11,fontWeight:700,color:T.teal,
-                        background:T.tealBg,border:"1px solid "+T.tealBd,padding:"2px 8px",borderRadius:4}}>
-                        Actual: {fmt(t.actual)}</span>}
-                      {t.identified>0&&<span style={{fontFamily:T.mono,fontSize:11,fontWeight:700,color:T.blue,
-                        background:T.blueBg,border:"1px solid "+T.blueBd,padding:"2px 8px",borderRadius:4}}>
-                        Identified: {fmt(t.identified)}</span>}
-                    </div>
-                    {/* Diff from prev */}
-                    {prevT!==null&&<div style={{padding:"4px 14px",background:T.surface,borderBottom:"1px solid "+T.rowBd}}>
-                      <SnapDiff prev={f.ghgSnapshots[si-1]} curr={snap}/>
-                    </div>}
-                    <SnapTable snap={snap} isActive={isActive}/>
-                  </div>
+                  <button key={snap.id} onClick={()=>setActiveSnapIdx(si)}
+                    style={{padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:500,
+                           cursor:"pointer",fontFamily:T.sans,
+                           background:active?T.teal:"transparent",
+                           color:active?"#fff":T.muted,
+                           border:"1px solid "+(active?T.teal:T.border)}}>
+                    {snap.label}
+                    {hasData&&<span style={{marginLeft:5,fontSize:10,opacity:0.75}}>
+                      {t.actual>0?fmt(t.actual):fmt(t.identified)}
+                    </span>}
+                  </button>
                 );
               })}
-              {/* Add phase snapshot */}
               <button onClick={addPhaseSnapshot}
-                style={{width:"100%",padding:"7px",borderRadius:7,border:"1px dashed "+T.tealBd,
-                  background:"transparent",color:T.teal,fontSize:12,fontWeight:500,cursor:"pointer",marginTop:4}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.tealBg}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                + Add phase snapshot (copies current data to new phase)
+                style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                       fontFamily:T.sans,background:"transparent",color:T.teal,
+                       border:"1px solid "+T.tealBd}}>
+                + Add phase
               </button>
-              {allTotals.length>1&&allTotals.some(t=>t.actual>0&&allTotals.some(t2=>t2.identified>0))&&(
-                <div style={{background:T.amberBg,border:"1px solid "+T.amberBd,borderRadius:6,
-                  padding:"7px 12px",marginTop:"0.75rem",fontSize:11,color:T.amber}}>
-                  ⚠ Both identified and actual savings present across phases — report only the actual figures to avoid double-counting.
-                </div>
-              )}
-              <p style={{fontSize:11,color:T.faint,margin:"0.5rem 0 0"}}>
-                Phase snapshots preserve all historical data. Identified savings are never deleted when actual values are added.
-                Fixed CFs: CO₂=1, NOₓ=296, CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2, other material=1.5 kg CO₂e/kg. Amber fields = enter your own CF.
-              </p>
             </div>
-          );
-        })()}
+            {/* Show diff if not first phase */}
+            {safeIdx > 0 && activeSnap && (
+              <div style={{padding:"5px 10px",borderRadius:5,background:T.slateBg,
+                           border:"1px solid "+T.border,marginBottom:"0.5rem",fontSize:11}}>
+                <span style={{color:T.faint,marginRight:6}}>vs {snaps[safeIdx-1].label}:</span>
+                <SnapDiff prev={snaps[safeIdx-1]} curr={activeSnap}/>
+              </div>
+            )}
+            {/* Table header: snapshot label + date, editable if active */}
+            {activeSnap && (
+              <div style={{marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
+                {isActive(safeIdx)
+                  ?<input value={activeSnap.label} onChange={e=>setSnapField(safeIdx,"label",e.target.value)}
+                      style={{padding:"3px 8px",fontSize:13,fontWeight:700,color:T.teal,
+                        border:"1px solid "+T.tealBd,borderRadius:5,background:"transparent"}}/>
+                  :<span style={{fontSize:13,fontWeight:600,color:T.muted}}>{activeSnap.label}</span>}
+                <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+                  {new Date(activeSnap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                </span>
+                {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only — only the latest phase is editable</span>}
+              </div>
+            )}
+            {activeSnap && <SnapTable snap={activeSnap} si={safeIdx}/>}
+            <p style={{fontSize:11,color:T.faint,margin:"0.5rem 0 0"}}>
+              Phase snapshots preserve all historical data. Identified savings are never deleted when actual values are added.
+              Fixed CFs: CO₂=1, NOₓ=296, CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2, material=1.5 kg CO₂e/kg.
+            </p>
+          </div>
+        )}
       </Card>
 
-      {/* ── Admin ── */}
-      <Card style={{marginBottom:"1.5rem"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
-          <Fld label="Owner"><input value={f.owner||""} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
-          <Fld label="Status"><select value={f.status} onChange={e=>set("status",e.target.value)} style={iw}>{OPP_STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-        </div>
-      </Card>
-
+      {/* ── Actions ── */}
       <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)}>{opp.id?"Save changes":"Add opportunity"}</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)} disabled={!f.description.trim()}>
+          {saveLabel||"Save"}
+        </Btn>
       </div>
+    </div>
+  );
+}
+
+// ── Opp form ──────────────────────────────────────────────────────────────────
+function OppForm({ opp, onSave, onCancel }) {
+  const base = { ...emptyOpp(), ...opp };
+  const [f, setF] = useState({
+    ...base,
+    showQualitative: base.showQualitative ?? !!(base.ghgNote||(base.calcType==="qualitative")),
+    showQuantitative: base.showQuantitative ?? (base.calcType==="quantitative"),
+    ghgSnapshots: migrateOppSnaps(base),
+    prefillGhgIds: base.prefillGhgIds||[],
+  });
+  return (
+    <div style={{maxWidth:900,margin:"0 auto",padding:"1.5rem"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem",
+                   paddingBottom:"1rem",borderBottom:"1px solid "+T.border}}>
+        <Btn onClick={onCancel} variant="ghost">Back</Btn>
+        <h2 style={{margin:0,fontSize:16,fontWeight:600}}>{opp.id?"Edit opportunity":"New opportunity"}</h2>
+        {opp.ref&&<span style={{fontFamily:T.mono,fontSize:11,color:T.purple,fontWeight:500}}>{opp.ref}</span>}
+      </div>
+      <OppFormBody f={f} setF={setF} onSave={onSave} onCancel={onCancel}
+        saveLabel={opp.id?"Save changes":"Add opportunity"}/>
     </div>
   );
 }
@@ -1669,192 +1687,17 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
         {view === "form" && !isRisks && (
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
-              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple }}>
-                Opportunity screening
-              </h3>
+              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple }}>Opportunity screening</h3>
               {noxWarn && (
                 <div style={{ background:T.amberBg, border:"1px solid "+T.amberBd, borderRadius:6,
                                padding:"6px 12px", fontSize:11, color:T.amber, maxWidth:480 }}>
-                  ⚠ NOₓ is a criteria air pollutant, not a GHG. Include in the GHG savings table only where a project-specific CO₂e equivalence factor applies (e.g. under a recognised offset scheme). Otherwise report it separately as an air quality impact.
+                  ⚠ NOₓ is a criteria air pollutant. Include in the GHG table only where a project-specific CO₂e equivalence factor applies.
                 </div>
               )}
             </div>
-            <Card style={{ marginBottom:"1rem" }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-                <Fld label="Opportunity type">
-                  <select value={oppForm.type} onChange={e=>setOF("type",e.target.value)} style={iw}>
-                    <option value="">Select type</option>
-                    <optgroup label="Scope 1"><option value="Scope 1 — CO₂">CO₂</option><option value="Scope 1 — NOₓ">NOₓ</option><option value="Scope 1 — CH₄">CH₄</option><option value="Scope 1 — GWP gases">GWP gases</option><option value="Scope 1 — Other">Other direct</option></optgroup>
-                    <optgroup label="Scope 2"><option value="Scope 2 — System optimisation">System optimisation</option><option value="Scope 2 — Design optimisation">Design optimisation</option><option value="Scope 2 — Alternative resources">Alternative resources</option></optgroup>
-                    <optgroup label="Scope 3"><option value="Scope 3 — Material">Material</option><option value="Scope 3 — Chemicals">Chemicals</option><option value="Scope 3 — Lifecycle">Lifecycle</option><option value="Scope 3 — Re-use">Re-use</option><option value="Scope 3 — Re-cycle">Re-cycle</option><option value="Scope 3 — Waste">Waste evaluation</option><option value="Scope 3 — Transport">Transport</option><option value="Scope 3 — Remote technology">Remote technology</option></optgroup>
-                  </select>
-                </Fld>
-                <Fld label="Materiality (CSRD)">
-                  <select value={oppForm.materiality} onChange={e=>setOF("materiality",e.target.value)} style={iw}>
-                    <option>Inside-out (positive impact on environment)</option>
-                    <option>Outside-in (financial / business benefit)</option>
-                    <option>Both</option>
-                  </select>
-                </Fld>
-                <Fld label="Opportunity description" wide>
-                  <textarea value={oppForm.description} onChange={e=>setOF("description",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/>
-                </Fld>
-              </div>
-            </Card>
-            <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
-              <SectionLabel>Priority score = env value × business value × technical feasibility (max 125)</SectionLabel>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px 14px" }}>
-                {[{k:"envValue",l:"Environmental value (1–5)",bk:"envBenefit",bl:"Environmental benefit"},
-                  {k:"bizValue",l:"Business value (1–5)",bk:"bizBenefit",bl:"Business / strategic benefit"},
-                  {k:"feasibility",l:"Technical feasibility (1–5)",bk:"techBenefit",bl:"Technical feasibility notes"}
-                ].map(({k,l,bk,bl})=>(
-                  <div key={k}>
-                    <Fld label={l}><input type="number" min={1} max={5} value={oppForm[k]}
-                      onChange={e=>setOF(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
-                    <div style={{marginTop:6}}>
-                      <p style={{margin:"0 0 3px",fontSize:10,fontWeight:600,color:T.faint,letterSpacing:"0.07em",textTransform:"uppercase"}}>{bl}</p>
-                      <textarea value={oppForm[bk]||""} onChange={e=>setOF(bk,e.target.value)} rows={2} style={{...iw,resize:"vertical",fontSize:12}}/>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd, display:"flex", alignItems:"center", gap:12 }}>
-                <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>Score:</span>
-                <span style={{ fontFamily:T.mono, fontSize:20, fontWeight:500, padding:"2px 12px", borderRadius:5, background:oppSc.bg, color:oppSc.c }}>{oppScore}</span>
-                <span style={{ fontSize:12, color:T.muted }}>{prioLabel}</span>
-              </div>
-            </Card>
-            {/* Savings estimate — compact in screening view */}
-            <Card style={{ marginBottom:"1rem" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.75rem" }}>
-                <SectionLabel style={{ margin:0 }}>Savings estimate</SectionLabel>
-                <div style={{ display:"flex", gap:6 }}>
-                  <button onClick={()=>setOF("showQualitative",!oppForm.showQualitative)}
-                    style={{ padding:"4px 12px", fontSize:11, fontWeight:500, cursor:"pointer",
-                             fontFamily:T.sans, borderRadius:6,
-                             background:oppForm.showQualitative?T.slate:"transparent",
-                             color:oppForm.showQualitative?"#fff":T.muted,
-                             border:"1px solid "+(oppForm.showQualitative?T.slate:T.border) }}>
-                    Qualitative {oppForm.showQualitative?"▾":"▸"}
-                  </button>
-                  <button onClick={()=>{
-                    const next=!oppForm.showQuantitative;
-                    const snaps=oppForm.ghgSnapshots||[];
-                    setOppForm(p=>({...p,showQuantitative:next,
-                      ghgSnapshots:next&&snaps.length===0?[emptySnapshot("Phase 1",null)]:snaps}));
-                  }}
-                    style={{ padding:"4px 12px", fontSize:11, fontWeight:500, cursor:"pointer",
-                             fontFamily:T.sans, borderRadius:6,
-                             background:oppForm.showQuantitative?T.teal:"transparent",
-                             color:oppForm.showQuantitative?"#fff":T.muted,
-                             border:"1px solid "+(oppForm.showQuantitative?T.teal:T.border) }}>
-                    Quantitative {oppForm.showQuantitative?"▾":"▸"}
-                  </button>
-                </div>
-              </div>
-              {oppForm.showQualitative && (
-                <div style={{ marginBottom: oppForm.showQuantitative?"0.75rem":0 }}>
-                  <textarea value={oppForm.ghgSnapshots.length>0?(oppForm.ghgSnapshots[oppForm.ghgSnapshots.length-1].note||""):oppForm.qualNote||""}
-                    onChange={e=>{
-                      if(oppForm.ghgSnapshots.length>0){
-                        const snaps=[...oppForm.ghgSnapshots];
-                        snaps[snaps.length-1]={...snaps[snaps.length-1],note:e.target.value};
-                        setOppForm(p=>({...p,ghgSnapshots:snaps}));
-                      } else setOF("qualNote",e.target.value);
-                    }}
-                    rows={3} placeholder="Describe expected savings qualitatively"
-                    style={{ ...iw, resize:"vertical", fontSize:12 }}/>
-                </div>
-              )}
-              {oppForm.showQuantitative && oppForm.ghgSnapshots.length > 0 && (
-                <div style={{ overflowX:"auto", borderRadius:7, border:"1px solid "+T.border, maxHeight:320, overflowY:"auto" }}>
-                  <p style={{ padding:"6px 10px", margin:0, fontSize:10, color:T.muted, background:T.surface2, borderBottom:"1px solid "+T.border }}>
-                    Phase 1 snapshot — enter reduction quantities. You can add more phase snapshots after saving.
-                  </p>
-                  {/* Render a simplified version of the GHG table */}
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
-                    <thead>
-                      <tr style={{ background:T.surface2 }}>
-                        {["Scope","Type","Unit","Reduction qty","CF","Saving (kg CO₂e)"].map(h=>(
-                          <th key={h} style={{ padding:"5px 8px", textAlign:"left", fontSize:9, fontWeight:600,
-                                               color:T.muted, borderBottom:"1px solid "+T.border,
-                                               letterSpacing:"0.07em", textTransform:"uppercase" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(()=>{
-                        const snap=oppForm.ghgSnapshots[0];
-                        const prefillIds=oppForm.prefillGhgIds||[];
-                        const SCOPES_ORD=["Scope 1","Scope 2","Scope 3 Cat 1","Scope 3 Cat 4"];
-                        const scopeGroups2=GHG_LINES.reduce((a,l)=>{if(!a[l.scope])a[l.scope]=[];a[l.scope].push(l);return a;},{});
-                        const setLine2=(id,field,val)=>{
-                          const snaps=[...oppForm.ghgSnapshots];
-                          snaps[0]={...snaps[0],lines:(snaps[0].lines||[]).map(ln=>ln.id===id?{...ln,[field]:val}:ln)};
-                          setOppForm(p=>({...p,ghgSnapshots:snaps}));
-                        };
-                        return SCOPES_ORD.flatMap(scope=>{
-                          const slines=(scopeGroups2[scope]||[]);
-                          const sc2={...{bg:T.redBg,c:T.red,bd:T.redBd,...{[scope==="Scope 2"?scope:""]:{}}}};
-                          const scC=scope==="Scope 1"?{bg:T.redBg,c:T.red,bd:T.redBd}
-                            :scope==="Scope 2"?{bg:T.blueBg,c:T.blue,bd:T.blueBd}
-                            :scope==="Scope 3 Cat 1"?{bg:T.tealBg,c:T.teal,bd:T.tealBd}
-                            :{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
-                          return slines.map((l,li)=>{
-                            const saved=(snap.lines||[]).find(x=>x.id===l.id);
-                            const qty=parseFloat(saved?.qty)||0;
-                            const cf=parseFloat(saved?.cf!==""?saved?.cf:l.cfDefault)||0;
-                            const sav=qty&&cf?qty*cf:null;
-                            const isPrefill=prefillIds.includes(l.id);
-                            if(prefillIds.length>0&&!isPrefill&&!qty) return null;
-                            return(
-                              <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,
-                                background:isPrefill?(scC.bg+"99"):qty>0?(scC.bg+"44"):undefined}}>
-                                {li===0&&<td rowSpan={slines.length} style={{padding:"5px 7px",verticalAlign:"top",
-                                  paddingTop:8,borderRight:"1px solid "+T.border,width:80}}>
-                                  <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,
-                                    background:scC.bg,color:scC.c,border:"1px solid "+scC.bd,display:"inline-block"}}>{scope}</span>
-                                </td>}
-                                <td style={{padding:"5px 7px",fontWeight:isPrefill?600:400,color:T.text}}>{l.type}</td>
-                                <td style={{padding:"5px 7px",fontFamily:T.mono,fontSize:10,color:T.faint}}>{l.unit}</td>
-                                <td style={{padding:"3px 5px",textAlign:"right"}}>
-                                  <input type="number" min={0} value={saved?.qty||""}
-                                    onChange={e=>setLine2(l.id,"qty",e.target.value)} placeholder="0"
-                                    style={{width:80,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
-                                      border:"1px solid "+(qty>0?scC.bd:T.border),borderRadius:4,
-                                      background:qty>0?scC.bg:T.surface,color:qty>0?scC.c:T.text}}/>
-                                </td>
-                                <td style={{padding:"5px 7px",textAlign:"right",fontFamily:T.mono,fontSize:11,color:T.muted}}>
-                                  {l.cfFixed?l.cfDefault:"—"}
-                                </td>
-                                <td style={{padding:"5px 7px",textAlign:"right",fontFamily:T.mono,fontWeight:sav?700:400,color:sav?T.teal:T.faint}}>
-                                  {sav?sav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
-                                </td>
-                              </tr>
-                            );
-                          }).filter(Boolean);
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-            <Card style={{ marginBottom:"1.5rem" }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-                <Fld label="Owner"><input value={oppForm.owner} onChange={e=>setOF("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
-                <Fld label="Status"><select value={oppForm.status} onChange={e=>setOF("status",e.target.value)} style={iw}>{OPP_STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-              </div>
-            </Card>
-            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-              <Btn onClick={() => { setOppForm(emptyOpp()); setNoxWarn(false); }}>Clear</Btn>
-              <button onClick={saveOpp} disabled={!oppForm.description.trim()}
-                style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.purple, color:"#fff",
-                         cursor:oppForm.description.trim()?"pointer":"not-allowed", fontSize:12,
-                         fontFamily:T.sans, fontWeight:500, opacity:oppForm.description.trim()?1:0.45 }}>
-                Save to opportunities register
-              </button>
-            </div>
+            <OppFormBody f={oppForm} setF={setOppForm} onSave={saveOpp}
+              onCancel={()=>{setView("guide");setNoxWarn(false);}}
+              saveLabel="Save to opportunities register"/>
           </div>
         )}
 
