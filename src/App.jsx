@@ -937,6 +937,100 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
   );
 }
 
+// ── Qualitative phases section (top-level so useState is valid) ───────────────
+function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases, onSetNote }) {
+  const qp = qualPhases||[];
+  const [activeQIdx, setActiveQIdx] = useState(()=>Math.max(0,qp.length-1));
+  const safeQIdx = Math.min(activeQIdx, Math.max(0,qp.length-1));
+  const isQLatest = (qi) => qi === qp.length-1;
+
+  const addQualPhase = () => {
+    const n = qp.length+1;
+    const next = [...qp, {id:"qp_"+Date.now(), label:"Phase "+n, date:new Date().toISOString(), note:""}];
+    onSetPhases(next);
+    setActiveQIdx(n-1);
+  };
+  const delQualPhase = () => {
+    if (qp.length < 2) return;
+    onSetPhases(qp.slice(0,-1));
+    setActiveQIdx(Math.max(0, qp.length-2));
+  };
+  const setQualPhase = (qi,k,v) => onSetPhases(qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
+  const activeQP = qp[safeQIdx]||null;
+
+  return (
+    <div style={{marginBottom:showQuantitative?"1rem":0}}>
+      {/* Phase pill row */}
+      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.65rem",flexWrap:"wrap"}}>
+        {qp.map((qph,qi)=>{
+          const active=qi===safeQIdx;
+          const latest=isQLatest(qi);
+          return(
+            <div key={qph.id} style={{display:"flex",alignItems:"center",
+              borderRadius:20,border:"1px solid "+(active?T.slate:T.border),
+              overflow:"hidden",background:active?T.slate:"transparent"}}>
+              <button onClick={()=>setActiveQIdx(qi)}
+                style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
+                       fontFamily:T.sans,background:"transparent",border:"none",
+                       color:active?"#fff":T.muted}}>
+                {qph.label}
+                {qph.note&&<span style={{marginLeft:4,fontSize:9,opacity:0.6}}>●</span>}
+              </button>
+              {latest&&qp.length>1&&(
+                <button onClick={delQualPhase} title="Delete this phase"
+                  style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
+                         fontFamily:T.sans,background:"transparent",border:"none",
+                         color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
+                  onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
+                  onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button onClick={addQualPhase}
+          style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                 fontFamily:T.sans,background:"transparent",color:T.slate,
+                 border:"1px solid "+T.slateBd}}>
+          + Add phase
+        </button>
+      </div>
+
+      {/* Active phase content */}
+      {qp.length===0 ? (
+        <textarea value={qualNote} onChange={e=>onSetNote(e.target.value)} rows={3}
+          placeholder="Describe expected savings qualitatively — or add a phase above"
+          style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
+      ) : activeQP ? (
+        <div style={{borderRadius:7,border:"1px solid "+(isQLatest(safeQIdx)?T.slateBd:T.border),overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
+            background:isQLatest(safeQIdx)?T.slateBg:T.surface2}}>
+            {isQLatest(safeQIdx)
+              ?<input value={activeQP.label} onChange={e=>setQualPhase(safeQIdx,"label",e.target.value)}
+                  style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.slate,
+                    border:"1px solid "+T.slateBd,borderRadius:4,background:"transparent"}}/>
+              :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
+            <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+              {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+            </span>
+            {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
+          </div>
+          <div style={{padding:"8px 12px",background:T.surface}}>
+            {isQLatest(safeQIdx)
+              ?<textarea value={activeQP.note||""} onChange={e=>setQualPhase(safeQIdx,"note",e.target.value)} rows={3}
+                  placeholder="Describe expected savings for this phase"
+                  style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
+              :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
+                 {activeQP.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note recorded</span>}
+               </p>}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── Shared OppFormBody — used identically from OppForm and ScreeningTab ───────
 function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const set = (k,v) => setF(p=>({...p,[k]:v}));
@@ -1166,99 +1260,16 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           </div>
         </div>
 
-        {/* Qualitative — own phase list, mirrors quantitative structure */}
-        {f.showQualitative && (() => {
-          const qp = f.qualPhases||[];
-          const [activeQIdx, setActiveQIdx] = useState(()=>Math.max(0,qp.length-1));
-          const safeQIdx = Math.min(activeQIdx, qp.length-1);
-          const isQLatest = (qi) => qi === qp.length-1;
-          const addQualPhase = () => {
-            const n = qp.length+1;
-            set("qualPhases",[...qp,{id:"qp_"+Date.now(),label:"Phase "+n,date:new Date().toISOString(),note:""}]);
-            setActiveQIdx(n-1);
-          };
-          const delQualPhase = () => {
-            if (qp.length < 2) return;
-            set("qualPhases", qp.slice(0,-1));
-            setActiveQIdx(Math.max(0, qp.length-2));
-          };
-          const setQualPhase = (qi,k,v) => set("qualPhases",qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
-          const activeQP = qp[safeQIdx]||null;
-
-          return(
-            <div style={{marginBottom:f.showQuantitative?"1rem":0}}>
-              {/* Phase pill tabs — same layout as quantitative */}
-              <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
-                {qp.length===0 ? (
-                  <span style={{fontSize:11,color:T.faint,fontStyle:"italic"}}>No phases yet</span>
-                ) : qp.map((qph,qi)=>{
-                  const active=qi===safeQIdx;
-                  const latest=isQLatest(qi);
-                  return(
-                    <div key={qph.id} style={{display:"flex",alignItems:"center",
-                      borderRadius:20,border:"1px solid "+(active?T.slate:T.border),
-                      overflow:"hidden",background:active?T.slate:"transparent"}}>
-                      <button onClick={()=>setActiveQIdx(qi)}
-                        style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
-                               fontFamily:T.sans,background:"transparent",border:"none",
-                               color:active?"#fff":T.muted}}>
-                        {qph.label}
-                        {qph.note&&<span style={{marginLeft:4,fontSize:9,opacity:0.6}}>●</span>}
-                      </button>
-                      {latest&&qp.length>1&&(
-                        <button onClick={delQualPhase} title="Delete this phase"
-                          style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
-                                 fontFamily:T.sans,background:"transparent",border:"none",
-                                 color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
-                          onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
-                          onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-                <button onClick={addQualPhase}
-                  style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
-                         fontFamily:T.sans,background:"transparent",color:T.slate,
-                         border:"1px solid "+T.slateBd}}>
-                  + Add phase
-                </button>
-              </div>
-
-              {/* Active phase note */}
-              {qp.length===0 ? (
-                <textarea value={f.qualNote||""} onChange={e=>set("qualNote",e.target.value)} rows={3}
-                  placeholder="Describe expected savings qualitatively — or add a phase above"
-                  style={{...iw,resize:"vertical",fontSize:12}}/>
-              ) : activeQP ? (
-                <div style={{borderRadius:7,border:"1px solid "+(isQLatest(safeQIdx)?T.slateBd:T.border),overflow:"hidden"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
-                    background:isQLatest(safeQIdx)?T.slateBg:T.surface2}}>
-                    {isQLatest(safeQIdx)
-                      ?<input value={activeQP.label} onChange={e=>setQualPhase(safeQIdx,"label",e.target.value)}
-                          style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.slate,
-                            border:"1px solid "+T.slateBd,borderRadius:4,background:"transparent"}}/>
-                      :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
-                    <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
-                      {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                    </span>
-                    {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
-                  </div>
-                  <div style={{padding:"8px 12px",background:T.surface}}>
-                    {isQLatest(safeQIdx)
-                      ?<textarea value={activeQP.note||""} onChange={e=>setQualPhase(safeQIdx,"note",e.target.value)} rows={3}
-                          placeholder="Describe expected savings for this phase"
-                          style={{...iw,resize:"vertical",fontSize:12}}/>
-                      :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
-                         {activeQP.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note recorded</span>}
-                       </p>}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          );
-        })()}
+        {/* Qualitative — own phase list, rendered via top-level component (hooks rule) */}
+        {f.showQualitative && (
+          <QualPhasesSection
+            qualPhases={f.qualPhases||[]}
+            qualNote={f.qualNote||""}
+            showQuantitative={f.showQuantitative}
+            onSetPhases={v=>set("qualPhases",v)}
+            onSetNote={v=>set("qualNote",v)}
+          />
+        )}
 
         {/* Quantitative — phase tabs + table */}
         {f.showQuantitative && snaps.length > 0 && (
