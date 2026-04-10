@@ -1899,254 +1899,366 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       )}
 
 
-      {tab === "matrix" && (
-        <div>
-          <div style={{ marginBottom:"1rem" }}>
-            <h3 style={{ margin:"0 0 3px", fontSize:14, fontWeight:600 }}>Risk matrix</h3>
-            <p style={{ margin:0, fontSize:12, color:T.muted }}>Severity × Probability · Cell colour = risk zone · Dot colour = management status</p>
-          </div>
-          {aspects.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              No aspects yet. Add aspects via the Screening tab first.
-            </div>
-          ) : (() => {
-            // Build 5x5 grid — x=Severity(1-5), y=Probability(1-5)
-            const CELL = 72;
-            const LABEL = 36;
-            const W = CELL*5 + LABEL;
-            const H = CELL*5 + LABEL;
-            const cellColor = (sv, pb) => {
-              const score = sv*pb;
-              if (score >= 15) return { bg:"#FFEBEE", border:"#EF9A9A" };
-              if (score >= 9)  return { bg:"#FFF8E1", border:"#FFE082" };
-              return { bg:"#E8F5E9", border:"#A5D6A7" };
-            };
-            // Group aspects by (severity, probability)
-            const grid = {};
-            aspects.forEach(a => {
-              if (!a.severity || !a.probability) return;
-              const sv = Math.min(5, Math.max(1, parseInt(a.severity)));
-              const pb = Math.min(5, Math.max(1, parseInt(a.probability)));
-              const key = sv+","+pb;
-              if (!grid[key]) grid[key] = [];
-              grid[key].push(a);
-            });
-            const unplotted = aspects.filter(a => !a.severity || !a.probability);
-            return (
-              <div>
+      {tab === "matrix" && (() => {
+        // ── Shared helpers ────────────────────────────────────────────────────────
+        const CELL = 80;
+        const YLAB = 120; // wide enough for text anchors
+        const XLAB = 40;
+
+        // Significance colours — matches calcSig thresholds (R≥13 = SIGNIFICANT, 8-12 = WATCH)
+        const sigCell = (sv, pb) => {
+          const r = sv*pb;
+          if (r >= 13) return { bg:"#FFEBEE", border:"#EF9A9A", zone:"SIGNIFICANT" };
+          if (r >= 8)  return { bg:"#FFF8E1", border:"#FFE082", zone:"WATCH"       };
+          return             { bg:"#E8F5E9", border:"#A5D6A7", zone:"Low"          };
+        };
+
+        // Axis descriptor labels
+        const CON_LABELS = ["","Negligible","Minor","Moderate","Major","Catastrophic"];
+        const PROB_LABELS = ["","Very unlikely
+(<1%)","Unlikely
+(1–5%)","Possible
+(5–25%)","Likely
+(25–50%)","Very likely
+(>50%)"];
+
+        const RiskMatrix = () => {
+          const grid = {};
+          aspects.forEach(a => {
+            if (!a.severity || !a.probability) return;
+            const sv = Math.min(5, Math.max(1, parseInt(a.severity)));
+            const pb = Math.min(5, Math.max(1, parseInt(a.probability)));
+            const k  = sv+","+pb;
+            if (!grid[k]) grid[k] = [];
+            grid[k].push(a);
+          });
+          const unplotted = aspects.filter(a => !a.severity || !a.probability);
+          return (
+            <div>
+              <div style={{ display:"flex", alignItems:"flex-start" }}>
+                {/* Y-axis rotated label */}
+                <div style={{ width:20, flexShrink:0, marginTop:XLAB,
+                               height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                                 whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                    Probability of occurrence →
+                  </span>
+                </div>
+                {/* Y-axis descriptors */}
+                <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
+                  {[5,4,3,2,1].map(pb => (
+                    <div key={pb} style={{ height:CELL, display:"flex", alignItems:"center",
+                                           paddingRight:8, justifyContent:"flex-end" }}>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{pb}</div>
+                        {PROB_LABELS[pb].split("\n").map((ln,i)=>(
+                          <div key={i} style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{ln}</div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Grid + X-axis */}
                 <div style={{ overflowX:"auto" }}>
-                  <div style={{ position:"relative", width:W+60, minWidth:W+60 }}>
-                    {/* Y-axis label */}
-                    <div style={{ position:"absolute", left:0, top:LABEL/2, width:24, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <span style={{ fontSize:10, fontWeight:600, color:T.muted, transform:"rotate(-90deg)", whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>Probability</span>
-                    </div>
-                    <div style={{ marginLeft:28 }}>
-                      {/* X-axis label */}
-                      <div style={{ height:LABEL, display:"flex", alignItems:"flex-end", paddingLeft:LABEL, paddingBottom:4 }}>
-                        <span style={{ fontSize:10, fontWeight:600, color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>Severity →</span>
+                  {/* X-axis label */}
+                  <div style={{ height:XLAB, display:"flex", alignItems:"flex-end", paddingBottom:6,
+                                 paddingLeft:4, gap:0 }}>
+                    {[1,2,3,4,5].map(sv => (
+                      <div key={sv} style={{ width:CELL, textAlign:"center" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{sv}</div>
+                        <div style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{CON_LABELS[sv]}</div>
                       </div>
-                      <div style={{ display:"flex" }}>
-                        {/* Y-axis numbers */}
-                        <div style={{ width:LABEL, flexShrink:0 }}>
-                          {[5,4,3,2,1].map(pb => (
-                            <div key={pb} style={{ height:CELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
-                              <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{pb}</span>
-                            </div>
-                          ))}
-                        </div>
-                        {/* Grid */}
-                        <div style={{ flex:1 }}>
-                          {[5,4,3,2,1].map(pb => (
-                            <div key={pb} style={{ display:"flex" }}>
-                              {[1,2,3,4,5].map(sv => {
-                                const c = cellColor(sv, pb);
-                                const items = grid[sv+","+pb] || [];
-                                return (
-                                  <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
-                                                         background:c.bg, border:"1px solid "+c.border,
-                                                         position:"relative", display:"flex",
-                                                         flexWrap:"wrap", alignContent:"center",
-                                                         justifyContent:"center", gap:3, padding:4 }}>
-                                    {items.map((a,i) => {
-                                      const rc = rowColor(a);
-                                      const sig = calcSig(a);
-                                      const dotC = a.status==="Closed"?{bg:T.greenBg,bd:T.greenBd,c:T.green}
-                                                   : a.status==="In Progress"?{bg:T.amberBg,bd:T.amberBd,c:T.amber}
-                                                   : {bg:T.redBg,bd:T.redBd,c:T.red};
-                                      return (
-                                        <div key={i}
-                                          title={(a.ref||"")+" — "+(a.aspect||"")+" ["+a.status+"] S:"+a.severity+" P:"+a.probability}
-                                          onClick={() => setEditAspect(a)}
-                                          style={{ width:16, height:16, borderRadius:"50%",
-                                                   background:dotC.bg, border:"2px solid "+dotC.bd,
-                                                   cursor:"pointer", flexShrink:0,
-                                                   display:"flex", alignItems:"center", justifyContent:"center",
-                                                   fontSize:8, fontWeight:700, color:dotC.c }}>
-                                          {items.length>1 && i===0 ? items.length : ""}
-                                        </div>
-                                      );
-                                    })}
-                                    {items.length === 0 && (
-                                      <span style={{ fontSize:9, color:"rgba(0,0,0,0.1)", fontWeight:600 }}>{sv*pb}</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ))}
-                          {/* X-axis numbers */}
-                          <div style={{ display:"flex" }}>
-                            {[1,2,3,4,5].map(sv => (
-                              <div key={sv} style={{ width:CELL, height:24, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                                <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{sv}</span>
-                              </div>
-                            ))}
+                    ))}
+                  </div>
+                  {/* Cells */}
+                  {[5,4,3,2,1].map(pb => (
+                    <div key={pb} style={{ display:"flex" }}>
+                      {[1,2,3,4,5].map(sv => {
+                        const c     = sigCell(sv, pb);
+                        const items = grid[sv+","+pb] || [];
+                        return (
+                          <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                 background:c.bg, border:"1px solid "+c.border,
+                                                 display:"flex", flexWrap:"wrap",
+                                                 alignContent:"center", justifyContent:"center",
+                                                 gap:4, padding:5, position:"relative" }}>
+                            {/* Score label in empty cells */}
+                            {items.length === 0 && (
+                              <span style={{ fontSize:10, fontWeight:600,
+                                             color: c.zone==="SIGNIFICANT"?T.redBd:c.zone==="WATCH"?T.amberBd:T.greenBd,
+                                             opacity:0.6 }}>{sv*pb}</span>
+                            )}
+                            {items.map((a, i) => {
+                              const sig  = calcSig(a);
+                              // Fill = significance (what IS the risk)
+                              // Border thickness/style = status (how IS it managed)
+                              const fill = sig==="SIGNIFICANT" ? T.redBg   : sig==="WATCH" ? T.amberBg   : T.greenBg;
+                              const fillC= sig==="SIGNIFICANT" ? T.red     : sig==="WATCH" ? T.amber     : T.green;
+                              const fillBd=sig==="SIGNIFICANT"? T.redBd   : sig==="WATCH" ? T.amberBd   : T.greenBd;
+                              const statusBorder = a.status==="Closed"      ? "2px solid "+T.green
+                                                 : a.status==="In Progress" ? "2px dashed "+T.amber
+                                                 :                             "3px solid "+T.red;
+                              return (
+                                <div key={i}
+                                  title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"
+Consequence: "+a.severity+" · Probability: "+a.probability+" · Score: "+sv*pb}
+                                  onClick={() => setEditAspect(a)}
+                                  style={{ width:18, height:18, borderRadius:"50%",
+                                           background:fill, border:statusBorder,
+                                           cursor:"pointer", flexShrink:0,
+                                           display:"flex", alignItems:"center", justifyContent:"center",
+                                           fontSize:8, fontWeight:700, color:fillC }}>
+                                  {items.length > 1 && i === 0 ? items.length : ""}
+                                </div>
+                              );
+                            })}
                           </div>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
+                  ))}
+                  {/* X-axis footer label */}
+                  <div style={{ paddingTop:6, paddingLeft:4, fontSize:10, fontWeight:700,
+                                 color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                    Consequence / severity →
                   </div>
                 </div>
-                {/* Legend */}
-                <div style={{ display:"flex", gap:16, marginTop:"1.25rem", flexWrap:"wrap", alignItems:"center" }}>
-                  {[{bg:"#FFEBEE",bd:"#EF9A9A",label:"High risk (score ≥15)"},
-                    {bg:"#FFF8E1",bd:"#FFE082",label:"Medium risk (9–14)"},
-                    {bg:"#E8F5E9",bd:"#A5D6A7",label:"Low risk (<9)"}].map(({bg,bd,label}) => (
-                    <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
-                      <span style={{ width:14, height:14, borderRadius:3, background:bg, border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                      {label}
-                    </span>
-                  ))}
-                  <span style={{ fontSize:11, fontWeight:600, color:T.muted, marginRight:4 }}>Aspect status:</span>
-                  {[{label:"Open",bg:T.redBg,bd:T.redBd,c:T.red},{label:"In Progress",bg:T.amberBg,bd:T.amberBd,c:T.amber},{label:"Closed",bg:T.greenBg,bd:T.greenBd,c:T.green}].map(({label,bg,bd,c})=>(
-                    <span key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:T.muted }}>
-                      <span style={{ width:12, height:12, borderRadius:"50%", background:bg, border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                      {label}
-                    </span>
-                  ))}
-                  <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click dot to edit · Number = aspects in that cell</span>
-                </div>
-                {/* Opportunity matrix */}
-                <div style={{ marginTop:"1.75rem", paddingTop:"1.25rem", borderTop:"1px solid "+T.border }}>
-                  <h3 style={{ margin:"0 0 3px", fontSize:14, fontWeight:600 }}>Opportunity matrix</h3>
-                  <p style={{ margin:"0 0 1rem", fontSize:12, color:T.muted }}>Env value × Business value · Cell colour = combined value · Dot colour = status · Dot size = feasibility</p>
-                  {opps.length === 0 ? (
-                    <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
-                  ) : (() => {
-                    const OCELL = 72;
-                    const OLABEL = 36;
-                    const oppGrid = {};
-                    opps.forEach(o => {
-                      const ev = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
-                      const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
-                      const key = ev+","+bv;
-                      if (!oppGrid[key]) oppGrid[key] = [];
-                      oppGrid[key].push(o);
-                    });
-                    const oppCellColor = (ev,bv) => {
-                      const s=ev*bv;
-                      if(s>=15) return {bg:T.tealBg,border:T.tealBd};
-                      if(s>=9)  return {bg:"#FFF8E1",border:"#FFE082"};
-                      return {bg:T.slateBg,border:T.slateBd};
-                    };
-                    return (
-                      <div style={{ overflowX:"auto" }}>
-                        <div style={{ position:"relative", width:OCELL*5+OLABEL+60, minWidth:OCELL*5+OLABEL+60 }}>
-                          <div style={{ position:"absolute", left:0, top:OLABEL/2, width:24, height:OCELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            <span style={{ fontSize:10, fontWeight:600, color:T.muted, transform:"rotate(-90deg)", whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>Business value</span>
-                          </div>
-                          <div style={{ marginLeft:28 }}>
-                            <div style={{ height:OLABEL, display:"flex", alignItems:"flex-end", paddingLeft:OLABEL, paddingBottom:4 }}>
-                              <span style={{ fontSize:10, fontWeight:600, color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>Env value →</span>
-                            </div>
-                            <div style={{ display:"flex" }}>
-                              <div style={{ width:OLABEL, flexShrink:0 }}>
-                                {[5,4,3,2,1].map(bv => (
-                                  <div key={bv} style={{ height:OCELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
-                                    <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{bv}</span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div style={{ flex:1 }}>
-                                {[5,4,3,2,1].map(bv => (
-                                  <div key={bv} style={{ display:"flex" }}>
-                                    {[1,2,3,4,5].map(ev => {
-                                      const c = oppCellColor(ev,bv);
-                                      const items = oppGrid[ev+","+bv] || [];
-                                      return (
-                                        <div key={ev} style={{ width:OCELL, height:OCELL, flexShrink:0,
-                                                               background:c.bg, border:"1px solid "+c.border,
-                                                               position:"relative", display:"flex",
-                                                               flexWrap:"wrap", alignContent:"center",
-                                                               justifyContent:"center", gap:3, padding:4 }}>
-                                          {items.map((o,i) => {
-                                            const sz = 10 + (Math.min(5,Math.max(1,parseInt(o.feasibility)||1))-1)*2;
-                                            const odotC = o.status==="Closed"?{bg:T.greenBg,bd:T.greenBd}
-                                                        : o.status==="In Progress"?{bg:T.amberBg,bd:T.amberBd}
-                                                        : {bg:T.purpleBg,bd:T.purpleBd};
-                                            return (
-                                              <div key={i}
-                                                title={(o.ref||"")+" — "+(o.description||"").slice(0,50)+" · "+o.status+" · Feasibility: "+o.feasibility}
-                                                onClick={() => setEditOpp(o)}
-                                                style={{ width:sz, height:sz, borderRadius:"50%",
-                                                         background:odotC.bg, border:"2px solid "+odotC.bd,
-                                                         cursor:"pointer", flexShrink:0 }}>
-                                              </div>
-                                            );
-                                          })}
-                                          {items.length === 0 && (
-                                            <span style={{ fontSize:9, color:"rgba(0,0,0,0.1)", fontWeight:600 }}>{ev*bv}</span>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                ))}
-                                <div style={{ display:"flex" }}>
-                                  {[1,2,3,4,5].map(ev => (
-                                    <div key={ev} style={{ width:OCELL, height:24, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                                      <span style={{ fontSize:11, fontWeight:600, color:T.muted }}>{ev}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ display:"flex", gap:16, marginTop:"1rem", flexWrap:"wrap", alignItems:"center" }}>
-                          {[{bg:T.tealBg,bd:T.tealBd,label:"High value (score ≥15)"},
-                            {bg:"#FFF8E1",bd:"#FFE082",label:"Medium (9–14)"},
-                            {bg:T.slateBg,bd:T.slateBd,label:"Lower (<9)"}].map(({bg,bd,label}) => (
-                            <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.muted }}>
-                              <span style={{ width:14, height:14, borderRadius:3, background:bg, border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                              {label}
-                            </span>
-                          ))}
-                          <span style={{ fontSize:11, fontWeight:600, color:T.muted, marginRight:4 }}>Status:</span>
-                          {[{l:"Open",bg:T.purpleBg,bd:T.purpleBd},{l:"In Progress",bg:T.amberBg,bd:T.amberBd},{l:"Closed",bg:T.greenBg,bd:T.greenBd}].map(({l,bg,bd})=>(
-                            <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:T.muted }}>
-                              <span style={{ width:12, height:12, borderRadius:"50%", background:bg, border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
-                              {l}
-                            </span>
-                          ))}
-                          <span style={{ fontSize:12, color:T.faint }}>· Dot size = feasibility</span>
-                          <span style={{ marginLeft:"auto", fontSize:11, color:T.faint }}>Click dot to edit</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {unplotted.length > 0 && (
-                  <p style={{ marginTop:"1rem", fontSize:11, color:T.faint }}>
-                    {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted (missing severity or probability values).
-                  </p>
-                )}
               </div>
-            );
-          })()}
-        </div>
-      )}
 
+              {/* Legend */}
+              <div style={{ display:"flex", gap:20, marginTop:"1.25rem", flexWrap:"wrap", alignItems:"flex-start" }}>
+                <div>
+                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
+                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Risk zone (cell colour)</p>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                    {[{bg:"#FFEBEE",bd:"#EF9A9A",label:"SIGNIFICANT (R ≥ 13)"},
+                      {bg:"#FFF8E1",bd:"#FFE082",label:"WATCH (R 8–12)"},
+                      {bg:"#E8F5E9",bd:"#A5D6A7",label:"Low (R ≤ 7)"}].map(({bg,bd,label})=>(
+                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
+                        <span style={{ width:14, height:14, borderRadius:3, background:bg,
+                                       border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
+                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Dot fill = significance level</p>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                    {[{bg:T.redBg,bd:T.redBd,label:"SIGNIFICANT"},{bg:T.amberBg,bd:T.amberBd,label:"WATCH"},{bg:T.greenBg,bd:T.greenBd,label:"Low"}].map(({bg,bd,label})=>(
+                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
+                        <span style={{ width:14, height:14, borderRadius:"50%", background:bg,
+                                       border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
+                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Dot border = management status</p>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                    {[{bd:"3px solid "+T.red,label:"Open"},
+                      {bd:"2px dashed "+T.amber,label:"In Progress"},
+                      {bd:"2px solid "+T.green,label:"Closed"}].map(({bd,label})=>(
+                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
+                        <span style={{ width:14, height:14, borderRadius:"50%", background:T.slateBg,
+                                       border:bd, flexShrink:0, display:"inline-block" }}/>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <span style={{ marginLeft:"auto", fontSize:11, color:T.faint, alignSelf:"flex-end" }}>
+                  Click any dot to edit aspect
+                </span>
+              </div>
+
+              {unplotted.length > 0 && (
+                <p style={{ fontSize:11, color:T.faint, marginTop:"0.75rem" }}>
+                  {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted — severity or probability not set.
+                </p>
+              )}
+            </div>
+          );
+        };
+
+        // ── Opportunity matrix ─────────────────────────────────────────────────────
+        // Axes: Environmental benefit (X) × Feasibility (Y) — both from existing fields
+        // Dot size = business value (bigger = higher strategic value)
+        // Four named quadrants following ISO 14001 Cl.6.1.2 prioritisation logic
+        const OPP_AX_LABELS = ["","Negligible","Minor","Moderate","Significant","Major"];
+        const OPP_FEA_LABELS = ["","Very difficult","Difficult","Moderate","Achievable","Easy"];
+
+        const oppQuadrant = (ev, feas) => {
+          const highE = ev   >= 4;
+          const highF = feas >= 4;
+          if (highE && highF)  return { bg:T.tealBg,   border:T.tealBd,   label:"Pursue",        labelC:T.teal   };
+          if (highE && !highF) return { bg:T.blueBg,   border:T.blueBd,   label:"Plan",           labelC:T.blue   };
+          if (!highE && highF) return { bg:T.purpleBg, border:T.purpleBd, label:"Quick win",      labelC:T.purple };
+          return                      { bg:T.slateBg,  border:T.slateBd,  label:"Deprioritise",   labelC:T.slate  };
+        };
+
+        const OppMatrix = () => {
+          const oppGrid = {};
+          opps.forEach(o => {
+            const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+            const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
+            const k    = ev+","+feas;
+            if (!oppGrid[k]) oppGrid[k] = [];
+            oppGrid[k].push(o);
+          });
+          return (
+            <div>
+              <div style={{ display:"flex", alignItems:"flex-start" }}>
+                <div style={{ width:20, flexShrink:0, marginTop:XLAB,
+                               height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                                 whiteSpace:"nowrap", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                    Implementation feasibility →
+                  </span>
+                </div>
+                <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
+                  {[5,4,3,2,1].map(feas => (
+                    <div key={feas} style={{ height:CELL, display:"flex", alignItems:"center",
+                                             paddingRight:8, justifyContent:"flex-end" }}>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{feas}</div>
+                        <div style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{OPP_FEA_LABELS[feas]}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ overflowX:"auto" }}>
+                  <div style={{ height:XLAB, display:"flex", alignItems:"flex-end", paddingBottom:6,
+                                 paddingLeft:4 }}>
+                    {[1,2,3,4,5].map(ev => (
+                      <div key={ev} style={{ width:CELL, textAlign:"center" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.text }}>{ev}</div>
+                        <div style={{ fontSize:9, color:T.faint, lineHeight:1.3 }}>{OPP_AX_LABELS[ev]}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {[5,4,3,2,1].map(feas => (
+                    <div key={feas} style={{ display:"flex" }}>
+                      {[1,2,3,4,5].map(ev => {
+                        const q     = oppQuadrant(ev, feas);
+                        const items = oppGrid[ev+","+feas] || [];
+                        return (
+                          <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                 background:q.bg, border:"1px solid "+q.border,
+                                                 display:"flex", flexWrap:"wrap",
+                                                 alignContent:"center", justifyContent:"center",
+                                                 gap:4, padding:5, position:"relative" }}>
+                            {items.length === 0 && (ev===4||ev===5) && (feas===4||feas===5) && ev+feas===8 && (
+                              <span style={{ fontSize:8, color:q.labelC, opacity:0.4, textAlign:"center",
+                                             fontWeight:600 }}>{q.label}</span>
+                            )}
+                            {items.map((o,i) => {
+                              // Dot size = business value (1=10px, 5=18px)
+                              const sz = 10 + (Math.min(5,Math.max(1,parseInt(o.bizValue)||1))-1)*2;
+                              const oC = o.status==="Closed"      ? {bg:T.greenBg,bd:T.greenBd}
+                                       : o.status==="In Progress" ? {bg:T.amberBg,bd:T.amberBd}
+                                       :                             {bg:T.purpleBg,bd:T.purpleBd};
+                              return (
+                                <div key={i}
+                                  title={(o.ref||"")+" — "+(o.description||"").slice(0,60)
+                                    +"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility
+                                    +" · Business value: "+o.bizValue+" · "+o.status}
+                                  onClick={() => setEditOpp(o)}
+                                  style={{ width:sz, height:sz, borderRadius:"50%",
+                                           background:oC.bg, border:"2px solid "+oC.bd,
+                                           cursor:"pointer", flexShrink:0 }}>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  <div style={{ paddingTop:6, paddingLeft:4, fontSize:10, fontWeight:700,
+                                 color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                    Environmental benefit / magnitude →
+                  </div>
+                </div>
+              </div>
+
+              {/* Quadrant legend + dot legend */}
+              <div style={{ display:"flex", gap:20, marginTop:"1.25rem", flexWrap:"wrap", alignItems:"flex-start" }}>
+                <div>
+                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
+                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority quadrants</p>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                    {[{bg:T.tealBg,bd:T.tealBd,c:T.teal,label:"Pursue",sub:"High benefit + easy"},
+                      {bg:T.blueBg,bd:T.blueBd,c:T.blue,label:"Plan",sub:"High benefit, harder"},
+                      {bg:T.purpleBg,bd:T.purpleBd,c:T.purple,label:"Quick win",sub:"Easy, lower impact"},
+                      {bg:T.slateBg,bd:T.slateBd,c:T.slate,label:"Deprioritise",sub:"Low benefit + hard"}].map(({bg,bd,c,label,sub})=>(
+                      <span key={label} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
+                        <span style={{ width:12, height:12, borderRadius:2, background:bg,
+                                       border:"1px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                        <span><strong>{label}</strong> <span style={{ color:T.faint }}>— {sub}</span></span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:600, color:T.muted,
+                               letterSpacing:"0.07em", textTransform:"uppercase" }}>Dot colour = status · Size = business value</p>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                    {[{bg:T.purpleBg,bd:T.purpleBd,l:"Open"},{bg:T.amberBg,bd:T.amberBd,l:"In Progress"},{bg:T.greenBg,bd:T.greenBd,l:"Closed"}].map(({bg,bd,l})=>(
+                      <span key={l} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.text }}>
+                        <span style={{ width:12, height:12, borderRadius:"50%", background:bg,
+                                       border:"2px solid "+bd, flexShrink:0, display:"inline-block" }}/>
+                        {l}
+                      </span>
+                    ))}
+                    <span style={{ fontSize:11, color:T.faint }}>· Larger dot = higher business value</span>
+                  </div>
+                </div>
+                <span style={{ marginLeft:"auto", fontSize:11, color:T.faint, alignSelf:"flex-end" }}>
+                  Click any dot to edit opportunity
+                </span>
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <div>
+            {/* ── Risk matrix ── */}
+            <div style={{ marginBottom:"0.5rem" }}>
+              <h3 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700 }}>Environmental risk matrix</h3>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>
+                Consequence × Probability per NORSOK S-003 / ISO 14001. Significance thresholds: R ≥ 13 = SIGNIFICANT, R 8–12 = WATCH, R ≤ 7 = Low.
+              </p>
+            </div>
+            {aspects.length === 0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8,
+                               border:"1px solid "+T.border, color:T.faint, fontSize:12, marginBottom:"2rem" }}>
+                  No aspects yet — use the Screening tab to get started.
+                </div>
+              : <div style={{ marginBottom:"2.5rem" }}><RiskMatrix/></div>
+            }
+
+            {/* ── Opportunity matrix ── */}
+            <div style={{ borderTop:"1px solid "+T.border, paddingTop:"1.5rem", marginBottom:"0.5rem" }}>
+              <h3 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700 }}>Opportunity priority matrix</h3>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>
+                Environmental benefit × Feasibility, per ISO 14001:2015 Cl.6.1.2. Dot size = business value. Quadrants guide prioritisation.
+              </p>
+            </div>
+            {opps.length === 0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8,
+                               border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+                  No opportunities yet.
+                </div>
+              : <OppMatrix/>
+            }
+          </div>
+        );
+      })()}
       {tab === "changes" && (
         <div>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
