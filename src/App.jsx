@@ -1086,15 +1086,26 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
 
       {/* ── NOx warning — shown when type is NOx ── */}
       {(f.type||"").includes("NOₓ") && (
-        <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:"1rem",
-                     background:T.amberBg,border:"1px solid "+T.amberBd,borderRadius:8,padding:"10px 14px"}}>
-          <span style={{fontSize:16,flexShrink:0}}>⚠</span>
-          <div>
-            <p style={{margin:"0 0 3px",fontSize:12,fontWeight:600,color:T.amber}}>NOₓ is a criteria air pollutant, not a greenhouse gas</p>
-            <p style={{margin:0,fontSize:11,color:T.text,lineHeight:1.6}}>
-              Include NOₓ in the GHG savings table only where a project-specific CO₂e equivalence factor has been agreed (e.g. under a recognised offset scheme).
-              Otherwise, report it separately as an air quality impact in the aspects register.
-            </p>
+        <div style={{marginBottom:"1rem",background:T.amberBg,border:"1px solid "+T.amberBd,borderRadius:8,padding:"12px 16px"}}>
+          <p style={{margin:"0 0 8px",fontSize:12,fontWeight:700,color:T.amber,display:"flex",alignItems:"center",gap:8}}>
+            <span>⚠</span> NOₓ is a regulated air pollutant — handle separately from GHG accounting
+          </p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
+            <div>
+              <p style={{margin:"0 0 3px",fontSize:11,fontWeight:600,color:T.text}}>NOₓ tax (Norway)</p>
+              <p style={{margin:0,fontSize:11,color:T.muted,lineHeight:1.55}}>
+                NOₓ emissions are subject to the Norwegian NOₓ tax (NOₓ-avgift) under the NOₓ Fund agreement.
+                Reductions represent a direct cost saving and should be quantified separately from CO₂e reductions.
+              </p>
+            </div>
+            <div>
+              <p style={{margin:"0 0 3px",fontSize:11,fontWeight:600,color:T.text}}>CO₂e conversion</p>
+              <p style={{margin:0,fontSize:11,color:T.muted,lineHeight:1.55}}>
+                A CO₂e factor (typically 296 kg CO₂e / kg NOₓ via GWP) can be applied for internal GHG accounting,
+                but NOₓ reductions must not be aggregated with Scope 1 CO₂e in external or regulatory disclosure
+                without an explicit methodology note.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -1126,7 +1137,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           <span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>Score:</span>
           <span style={{fontFamily:T.mono,fontSize:20,fontWeight:500,padding:"2px 12px",
                         borderRadius:5,background:sc.bg,color:sc.c}}>{score}</span>
-
+          <span style={{fontSize:12,fontWeight:600,color:sc.c}}>{prioLabel}</span>
         </div>
       </Card>
 
@@ -1481,21 +1492,21 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   // Scope button style
   const ScopeBtn = ({ label, sub, color, onClick }) => (
     <button onClick={onClick}
-      style={{ textAlign:"left", padding:"13px 16px", borderRadius:8,
+      style={{ textAlign:"left", padding:"9px 12px", borderRadius:6,
                border:"1.5px solid "+(color.border||T.border), background:color.bg,
-               cursor:"pointer", fontFamily:T.sans, display:"flex", flexDirection:"column", gap:5,
+               cursor:"pointer", fontFamily:T.sans, display:"flex", flexDirection:"column", gap:3,
                transition:"filter 0.1s", width:"100%" }}
       onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
       onMouseLeave={e=>e.currentTarget.style.filter="none"}>
-      <span style={{ fontSize:13, fontWeight:700, color:color.head, lineHeight:1.3 }}>{label}</span>
-      {sub && <span style={{ fontSize:11, color:T.muted, lineHeight:1.5 }}>{sub}</span>}
+      <span style={{ fontSize:12, fontWeight:700, color:color.head, lineHeight:1.3 }}>{label}</span>
+      {sub && <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{sub}</span>}
     </button>
   );
 
   return (
     <div style={{ height:"calc(100vh - 110px)", minHeight:500, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
       {/* ── Top bar ── */}
-      <div style={{ padding:"1rem 1.25rem 0.75rem", background:T.surface, borderBottom:"1px solid "+T.border,
+      <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <div style={{ display:"inline-flex", borderRadius:6, overflow:"hidden", border:"1px solid "+T.border }}>
           <button onClick={() => { setMode("risks"); setView("guide"); setScreenSearch(""); }}
@@ -1542,7 +1553,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ flex:1, overflowY:"auto", padding:"1.25rem" }}>
+      <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
 
         {/* ══ RISKS GUIDE ══════════════════════════════════════════════════════════ */}
         {view === "guide" && isRisks && (
@@ -1559,13 +1570,13 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const stageKey = "stage_"+code;
               const stageOpen = expanded[stageKey]!==false;
               return (
-                <div key={code} style={{ marginBottom:16 }}>
+                <div key={code} style={{ marginBottom:8 }}>
                   <div onClick={()=>toggleCat(stageKey)}
                     style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                             padding:"10px 16px", background:T.surface,
-                             border:"1px solid "+T.border, borderRadius:7,
+                             padding:"8px 14px", background:T.surface,
+                             border:"1px solid "+T.border, borderRadius:6,
                              cursor:"pointer", userSelect:"none",
-                             marginBottom:stageOpen?8:0 }}>
+                             marginBottom:stageOpen?6:0 }}>
                     <div>
                       <span style={{ fontSize:13, fontWeight:700, color:T.text }}>{stage?.label||code}</span>
                       {stage?.sub&&<span style={{ fontSize:11, color:T.faint, marginLeft:10 }}>{stage.sub}</span>}
@@ -1577,11 +1588,11 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                     const key = "R"+code+section.cat;
                     const open = screenSearch.trim()?true:expanded[key]!==false;
                     return (
-                      <div key={key} style={{ marginBottom:10, marginLeft:12 }}>
+                      <div key={key} style={{ marginBottom:6, marginLeft:8 }}>
                         <div onClick={()=>toggleCat(key)}
                           style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                                   padding:"9px 16px", background:col.head, borderRadius:6,
-                                   cursor:"pointer", userSelect:"none", marginBottom:open?8:0 }}>
+                                   padding:"7px 14px", background:col.head, borderRadius:5,
+                                   cursor:"pointer", userSelect:"none", marginBottom:open?6:0 }}>
                           <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{section.cat}</span>
                           <span style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>{open?"▾":"▸"}</span>
                         </div>
@@ -1590,16 +1601,16 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                             {section.items.map((item,i) => (
                               <button key={i}
                                 onClick={()=>prefillRisk(code,item,section.color)}
-                                style={{ textAlign:"left", padding:"13px 15px", borderRadius:8,
+                                style={{ textAlign:"left", padding:"9px 12px", borderRadius:7,
                                          border:"1.5px solid "+col.border, background:col.bg,
                                          cursor:"pointer", fontFamily:T.sans, display:"flex",
-                                         flexDirection:"column", gap:7, transition:"filter 0.1s" }}
+                                         flexDirection:"column", gap:4, transition:"filter 0.1s" }}
                                 onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
                                 onMouseLeave={e=>e.currentTarget.style.filter="none"}>
-                                <span style={{ fontSize:13, fontWeight:700, color:col.head }}>{item.kw}</span>
-                                <span style={{ fontSize:12, color:T.text, lineHeight:1.55 }}>{item.q}</span>
-                                <span style={{ fontSize:11, color:T.muted }}>
-                                  <strong style={{ color:T.text }}>Aspect:</strong> {item.aspect}
+                                <span style={{ fontSize:12, fontWeight:700, color:col.head, lineHeight:1.3 }}>{item.kw}</span>
+                                <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{item.q}</span>
+                                <span style={{ fontSize:10, color:T.muted, lineHeight:1.35 }}>
+                                  <strong style={{ color:T.text }}>→</strong> {item.aspect}
                                 </span>
                               </button>
                             ))}
@@ -1622,11 +1633,11 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const key="opp_scope1"; const open=expanded[key]!==false;
               const col=COLOR_MAP.red;
               return(
-                <div style={{marginBottom:14}}>
+                <div style={{marginBottom:8}}>
                   <div onClick={()=>toggleCat(key)}
                     style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      padding:"11px 18px",background:col.head,borderRadius:6,cursor:"pointer",
-                      userSelect:"none",marginBottom:open?10:0}}>
+                      padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
+                      userSelect:"none",marginBottom:open?7:0}}>
                     <div>
                       <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Scope 1 — Direct Emissions</span>
                       <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>Emissions directly from project operations</span>
@@ -1654,11 +1665,11 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const key="opp_scope2"; const open=expanded[key]!==false;
               const col=COLOR_MAP.blue;
               return(
-                <div style={{marginBottom:14}}>
+                <div style={{marginBottom:8}}>
                   <div onClick={()=>toggleCat(key)}
                     style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      padding:"11px 18px",background:col.head,borderRadius:6,cursor:"pointer",
-                      userSelect:"none",marginBottom:open?10:0}}>
+                      padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
+                      userSelect:"none",marginBottom:open?7:0}}>
                     <div>
                       <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Scope 2 — Indirect Emissions</span>
                       <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>Energy consumption and purchased utilities</span>
@@ -1681,11 +1692,11 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               const key="opp_scope3"; const open=expanded[key]!==false;
               const col=COLOR_MAP.teal;
               return(
-                <div style={{marginBottom:14}}>
+                <div style={{marginBottom:8}}>
                   <div onClick={()=>toggleCat(key)}
                     style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      padding:"11px 18px",background:col.head,borderRadius:6,cursor:"pointer",
-                      userSelect:"none",marginBottom:open?10:0}}>
+                      padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
+                      userSelect:"none",marginBottom:open?7:0}}>
                     <div>
                       <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Scope 3 — Value Chain Emissions</span>
                       <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>Upstream and downstream indirect emissions</span>
