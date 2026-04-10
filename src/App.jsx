@@ -489,24 +489,31 @@ function calcSig(a) {
   return "Low";
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
+function snapKg(snap) {
+  if (!snap) return {identified:0, actual:0};
+  const all = [...(snap.lines||[]),...(snap.customRows||[])];
+  return {
+    identified: all.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
+    actual:     all.filter(l=>l.savingType==="actual" ).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
+  };
+}
 function calcGhgTotal(o) {
+  // Returns the highest identified saving across ALL phases (biggest number = final reportable value)
+  // If any phase has actual savings, returns that instead
   if (!o.showQuantitative && o.calcType!=="quantitative") return null;
-  const snaps = o.ghgSnapshots||([]); 
+  const snaps = o.ghgSnapshots||[];
   if (snaps.length===0) {
-    // Legacy format
     const allLines = [...(o.ghgLines||[]), ...(o.customGhgRows||[])];
     const actual = allLines.filter(l=>l.savingType==="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
     const identified = allLines.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-    const t = actual>0?actual:identified;
-    return t>0?t:null;
+    return (actual||identified)||null;
   }
-  // Use latest snapshot
-  const latest = snaps[snaps.length-1];
-  const all = [...(latest.lines||[]),...(latest.customRows||[])];
-  const actual = all.filter(l=>l.savingType==="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-  const identified = all.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-  const t = actual>0?actual:identified;
-  return t>0?t:null;
+  const totals = snaps.map(s=>snapKg(s));
+  const maxActual = Math.max(...totals.map(t=>t.actual));
+  const maxIdentified = Math.max(...totals.map(t=>t.identified));
+  // Biggest actual wins; if none, biggest identified
+  const best = maxActual>0 ? maxActual : maxIdentified;
+  return best>0 ? best : null;
 }
 
 function inferOppType(oppText) {
@@ -556,6 +563,7 @@ const emptyOpp = () => ({
   showQuantitative: false,
   prefillGhgIds: [],
   ghgSnapshots: [],
+  qualPhases: [],  // [{id,label,date,note}] — separate from quantitative snapshots
 });
 
 // Migrate old opp format to snapshot-based format
@@ -759,6 +767,177 @@ function relevantLines(type, prefillIds) {
   return GHG_LINES; // all
 }
 
+// ── GHG snapshot table (hoisted to module level to prevent input focus loss) ──
+function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGroups,
+                        customForScope, SCOPE_COLORS, thS, tdS, fmt, snapKgFn,
+                        onSetLine, onSetCustomRow, onAddCustomRow, onDelCustomRow }) {
+  const t = snapKgFn(snap);
+  return (
+    <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:T.sans}}>
+        <thead>
+          <tr style={{background:T.surface2}}>
+            {visibleScopes.length>1&&<th style={thS}>Scope</th>}
+            {["Emission / reduction type","Unit","Baseline qty","Reduction qty","CF","Saving (kg CO₂e)","Type","Reference"].map(h=>(
+              <th key={h} style={{...thS,textAlign:["Baseline qty","Reduction qty","CF","Saving (kg CO₂e)"].includes(h)?"right":"left"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleScopes.flatMap(scope=>{
+            const sc2=SCOPE_COLORS[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+            const slines=scopeGroups[scope]||[];
+            const crows=(customForScope||[]).filter(r=>r.scope===scope);
+            const totalRows=slines.length+crows.length+1;
+            return [
+              ...slines.map((l,li)=>{
+                const qty=parseFloat(l.qty)||0,cf=parseFloat(l.cf)||0;
+                const sav=qty&&cf?qty*cf:null;
+                return(
+                  <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,background:qty>0?sc2.bg+"44":undefined}}>
+                    {visibleScopes.length>1&&li===0&&<td rowSpan={totalRows}
+                      style={{padding:"5px 7px",verticalAlign:"top",paddingTop:8,borderBottom:"1px solid "+T.rowBd,
+                              borderRight:"1px solid "+T.border,width:82}}>
+                      <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,
+                        background:sc2.bg,color:sc2.c,border:"1px solid "+sc2.bd,display:"inline-block",whiteSpace:"nowrap"}}>{scope}</span>
+                    </td>}
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,color:T.text,fontWeight:500}}>{l.type}</td>
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontSize:10,color:T.faint}}>{l.unit}</td>
+                    <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={l.baseline} onChange={e=>onSetLine(si,l.id,"baseline",e.target.value)}
+                        placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
+                          border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.baseline||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={l.qty} onChange={e=>onSetLine(si,l.id,"qty",e.target.value)}
+                        placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
+                          border:"1px solid "+(qty>0?sc2.bd:T.border),borderRadius:4,
+                          background:qty>0?sc2.bg:T.surface,color:qty>0?sc2.c:T.text}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:12,fontWeight:qty>0?600:400,color:qty>0?sc2.c:T.faint}}>{qty||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {l.cfFixed?<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.cfDefault}</span>
+                        :editable?<input type="number" min={0} value={l.cf} onChange={e=>onSetLine(si,l.id,"cf",e.target.value)}
+                          placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
+                            border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
+                          :<span style={{fontFamily:T.mono,fontSize:11,color:l.cf?T.muted:T.faint}}>{l.cf||"—"}</span>}
+                    </td>
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontWeight:sav?700:400,color:sav?T.teal:T.faint}}>
+                      {sav!=null?sav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
+                    </td>
+                    <td style={{padding:"2px 5px",fontSize:12,borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<select value={l.savingType} onChange={e=>onSetLine(si,l.id,"savingType",e.target.value)}
+                        style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
+                          border:"1px solid "+(l.savingType==="actual"?T.tealBd:T.blueBd),
+                          background:l.savingType==="actual"?T.tealBg:T.blueBg,
+                          color:l.savingType==="actual"?T.teal:T.blue}}>
+                        <option value="identified">Identified</option>
+                        <option value="actual">Actual</option>
+                      </select>:<span style={{fontSize:10,padding:"2px 6px",borderRadius:3,fontWeight:500,
+                        background:l.savingType==="actual"?T.tealBg:T.blueBg,
+                        color:l.savingType==="actual"?T.teal:T.blue}}>{l.savingType}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",fontSize:12,borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<input value={l.ref} onChange={e=>onSetLine(si,l.id,"ref",e.target.value)}
+                        placeholder="Source" style={{width:"100%",minWidth:80,padding:"2px 5px",fontSize:10,
+                          border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
+                        :<span style={{fontSize:10,color:T.faint}}>{l.ref||"—"}</span>}
+                    </td>
+                  </tr>
+                );
+              }),
+              ...crows.map(cr=>{
+                const cqty=parseFloat(cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
+                const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                return(
+                  <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg+"22"}}>
+                    {visibleScopes.length>1&&<td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd}}/>}
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.uid,"type",e.target.value)}
+                        placeholder="Custom type" style={{width:"100%",padding:"2px 5px",fontSize:11,
+                          border:"1px solid "+T.amberBd,borderRadius:3,background:T.amberBg,color:T.amber}}/>
+                        :<span style={{fontSize:11,color:T.amber}}>{cr.type||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input value={cr.unit} onChange={e=>onSetCustomRow(si,cr.uid,"unit",e.target.value)}
+                        placeholder="kg" style={{width:40,textAlign:"right",padding:"2px 4px",fontSize:10,
+                          border:"1px solid "+T.border,borderRadius:3,background:T.surface,color:T.muted}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>{cr.unit||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={cr.baseline||""} onChange={e=>onSetCustomRow(si,cr.uid,"baseline",e.target.value)}
+                        placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
+                          border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{cr.baseline||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={cr.qty} onChange={e=>onSetCustomRow(si,cr.uid,"qty",e.target.value)}
+                        placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
+                          border:"1px solid "+(cqty>0?sc2c.bd:T.border),borderRadius:4,
+                          background:cqty>0?sc2c.bg:T.surface,color:cqty>0?sc2c.c:T.text}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:12,color:cqty>0?sc2c.c:T.faint}}>{cqty||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={cr.cf} onChange={e=>onSetCustomRow(si,cr.uid,"cf",e.target.value)}
+                        placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
+                          border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:11,color:T.amber}}>{cr.cf||"—"}</span>}
+                    </td>
+                    <td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontWeight:csav?700:400,color:csav?T.teal:T.faint}}>
+                      {csav!=null?csav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
+                    </td>
+                    <td style={{padding:"2px 5px",borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<select value={cr.savingType||"identified"} onChange={e=>onSetCustomRow(si,cr.uid,"savingType",e.target.value)}
+                        style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
+                          border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:T.blueBd),
+                          background:(cr.savingType||"identified")==="actual"?T.tealBg:T.blueBg,
+                          color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>
+                        <option value="identified">Identified</option>
+                        <option value="actual">Actual</option>
+                      </select>:<span style={{fontSize:10,color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>{cr.savingType||"identified"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<div style={{display:"flex",gap:3,alignItems:"center"}}>
+                        <input value={cr.ref||""} onChange={e=>onSetCustomRow(si,cr.uid,"ref",e.target.value)}
+                          placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
+                            border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
+                        <button onClick={()=>onDelCustomRow(si,cr.uid)}
+                          style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>✕</button>
+                      </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
+                    </td>
+                  </tr>
+                );
+              }),
+              <tr key={"add_"+scope+"_"+si}>
+                <td colSpan={9} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
+                  {editable&&<button onClick={()=>onAddCustomRow(si,scope)}
+                    style={{fontSize:11,color:(SCOPE_COLORS[scope]||{c:T.slate}).c,background:"transparent",
+                      border:"none",cursor:"pointer",padding:"2px 4px",fontFamily:T.sans,fontWeight:500}}>
+                    + Add custom row
+                  </button>}
+                </td>
+              </tr>
+            ];
+          })}
+        </tbody>
+        <tfoot>
+          {t.actual>0&&<tr style={{background:T.tealBg,borderTop:"2px solid "+T.tealBd}}>
+            <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.teal}}>Actual saving</td>
+            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.teal}}>{t.actual.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
+            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.actual)}</td>
+          </tr>}
+          {t.identified>0&&<tr style={{background:T.blueBg,borderTop:t.actual>0?"none":"2px solid "+T.blueBd}}>
+            <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.blue}}>Identified saving</td>
+            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.blue}}>{t.identified.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
+            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.identified)}</td>
+          </tr>}
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // ── Shared OppFormBody — used identically from OppForm and ScreeningTab ───────
 function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const set = (k,v) => setF(p=>({...p,[k]:v}));
@@ -824,196 +1003,24 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
              borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
   const tdS=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
 
-  const SnapTable = ({snap, si}) => {
-    const editable = isActive(si);
-    const prefillIds = f.prefillGhgIds||[];
-    const visibleLines = relevantLines(f.type, prefillIds);
-    const visibleScopes = [...new Set(visibleLines.map(l=>l.scope))];
-    const mergedLines = visibleLines.map(l=>{
-      const s=(snap.lines||[]).find(x=>x.id===l.id);
-      return{...l,qty:s?s.qty:"",baseline:s?s.baseline||"":"",
-             cf:(s&&s.cf!=="")?s.cf:l.cfDefault,ref:s?s.ref||"":"",savingType:s?s.savingType:"identified"};
-    });
-    const scopeGroups = visibleScopes.reduce((acc,sc)=>{
-      acc[sc]=mergedLines.filter(l=>l.scope===sc); return acc;
-    },{});
-    const customForScope = snap.customRows||[];
-    const t = snapTotal(snap);
-    return (
-      <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:T.sans}}>
-          <thead>
-            <tr style={{background:T.surface2}}>
-              {visibleScopes.length>1&&<th style={thS}>Scope</th>}
-              {["Emission / reduction type","Unit","Baseline qty","Reduction qty","CF","Saving (kg CO₂e)","Type","Reference"].map(h=>(
-                <th key={h} style={{...thS,textAlign:["Baseline qty","Reduction qty","CF","Saving (kg CO₂e)"].includes(h)?"right":"left"}}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visibleScopes.flatMap(scope=>{
-              const sc2=SCOPE_COLORS[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
-              const slines=scopeGroups[scope]||[];
-              const crows=customForScope.filter(r=>r.scope===scope);
-              const totalRows=slines.length+crows.length+1;
-              return [
-                ...slines.map((l,li)=>{
-                  const qty=parseFloat(l.qty)||0,cf=parseFloat(l.cf)||0;
-                  const sav=qty&&cf?qty*cf:null;
-                  return(
-                    <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,
-                      background:qty>0?sc2.bg+"44":undefined}}>
-                      {visibleScopes.length>1&&li===0&&<td rowSpan={totalRows}
-                        style={{...tdS(),verticalAlign:"top",paddingTop:8,borderRight:"1px solid "+T.border,width:82}}>
-                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,
-                          background:sc2.bg,color:sc2.c,border:"1px solid "+sc2.bd,display:"inline-block",whiteSpace:"nowrap"}}>{scope}</span>
-                      </td>}
-                      <td style={{...tdS(),color:T.text,fontWeight:500}}>{l.type}</td>
-                      <td style={{...tdS({textAlign:"right"}),fontFamily:T.mono,fontSize:10,color:T.faint}}>{l.unit}</td>
-                      <td style={{...tdS({textAlign:"right",padding:"3px 6px"})}}>
-                        {editable?<input type="number" min={0} value={l.baseline} onChange={e=>setLine(si,l.id,"baseline",e.target.value)}
-                          placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
-                            border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.baseline||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({textAlign:"right",padding:"3px 6px"})}}>
-                        {editable?<input type="number" min={0} value={l.qty} onChange={e=>setLine(si,l.id,"qty",e.target.value)}
-                          placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
-                            border:"1px solid "+(qty>0?sc2.bd:T.border),borderRadius:4,
-                            background:qty>0?sc2.bg:T.surface,color:qty>0?sc2.c:T.text}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:12,fontWeight:qty>0?600:400,color:qty>0?sc2.c:T.faint}}>{qty||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({textAlign:"right",padding:"3px 6px"})}}>
-                        {l.cfFixed?<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.cfDefault}</span>
-                          :editable?<input type="number" min={0} value={l.cf} onChange={e=>setLine(si,l.id,"cf",e.target.value)}
-                            placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
-                              border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
-                            :<span style={{fontFamily:T.mono,fontSize:11,color:l.cf?T.muted:T.faint}}>{l.cf||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({textAlign:"right"}),fontFamily:T.mono,fontWeight:sav?700:400,color:sav?T.teal:T.faint}}>
-                        {sav!=null?sav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
-                      </td>
-                      <td style={{...tdS({padding:"2px 5px"})}}>
-                        {editable?<select value={l.savingType} onChange={e=>setLine(si,l.id,"savingType",e.target.value)}
-                          style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
-                            border:"1px solid "+(l.savingType==="actual"?T.tealBd:T.blueBd),
-                            background:l.savingType==="actual"?T.tealBg:T.blueBg,
-                            color:l.savingType==="actual"?T.teal:T.blue}}>
-                          <option value="identified">Identified</option>
-                          <option value="actual">Actual</option>
-                        </select>:<span style={{fontSize:10,padding:"2px 6px",borderRadius:3,fontWeight:500,
-                          background:l.savingType==="actual"?T.tealBg:T.blueBg,
-                          color:l.savingType==="actual"?T.teal:T.blue}}>{l.savingType}</span>}
-                      </td>
-                      <td style={{...tdS({padding:"3px 5px"})}}>
-                        {editable?<input value={l.ref} onChange={e=>setLine(si,l.id,"ref",e.target.value)}
-                          placeholder="Source" style={{width:"100%",minWidth:80,padding:"2px 5px",fontSize:10,
-                            border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                          :<span style={{fontSize:10,color:T.faint}}>{l.ref||"—"}</span>}
-                      </td>
-                    </tr>
-                  );
-                }),
-                ...crows.map(cr=>{
-                  const cqty=parseFloat(cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
-                  const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
-                  return(
-                    <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg+"22"}}>
-                      {visibleScopes.length>1&&<td style={tdS()}/>}
-                      <td style={{...tdS({padding:"3px 5px"})}}>
-                        {editable?<input value={cr.type} onChange={e=>setCustomRow(si,cr.uid,"type",e.target.value)}
-                          placeholder="Custom type" style={{width:"100%",padding:"2px 5px",fontSize:11,
-                            border:"1px solid "+T.amberBd,borderRadius:3,background:T.amberBg,color:T.amber}}/>
-                          :<span style={{fontSize:11,color:T.amber}}>{cr.type||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {editable?<input value={cr.unit} onChange={e=>setCustomRow(si,cr.uid,"unit",e.target.value)}
-                          placeholder="kg" style={{width:40,textAlign:"right",padding:"2px 4px",fontSize:10,
-                            border:"1px solid "+T.border,borderRadius:3,background:T.surface,color:T.muted}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>{cr.unit||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {editable?<input type="number" min={0} value={cr.baseline||""} onChange={e=>setCustomRow(si,cr.uid,"baseline",e.target.value)}
-                          placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
-                            border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{cr.baseline||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {editable?<input type="number" min={0} value={cr.qty} onChange={e=>setCustomRow(si,cr.uid,"qty",e.target.value)}
-                          placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
-                            border:"1px solid "+(cqty>0?sc2c.bd:T.border),borderRadius:4,
-                            background:cqty>0?sc2c.bg:T.surface,color:cqty>0?sc2c.c:T.text}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:12,color:cqty>0?sc2c.c:T.faint}}>{cqty||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({padding:"3px 5px",textAlign:"right"})}}>
-                        {editable?<input type="number" min={0} value={cr.cf} onChange={e=>setCustomRow(si,cr.uid,"cf",e.target.value)}
-                          placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
-                            border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
-                          :<span style={{fontFamily:T.mono,fontSize:11,color:T.amber}}>{cr.cf||"—"}</span>}
-                      </td>
-                      <td style={{...tdS({textAlign:"right"}),fontFamily:T.mono,fontWeight:csav?700:400,color:csav?T.teal:T.faint}}>
-                        {csav!=null?csav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
-                      </td>
-                      <td style={{...tdS({padding:"2px 5px"})}}>
-                        {editable?<select value={cr.savingType||"identified"} onChange={e=>setCustomRow(si,cr.uid,"savingType",e.target.value)}
-                          style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
-                            border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:T.blueBd),
-                            background:(cr.savingType||"identified")==="actual"?T.tealBg:T.blueBg,
-                            color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>
-                          <option value="identified">Identified</option>
-                          <option value="actual">Actual</option>
-                        </select>:<span style={{fontSize:10,color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>{cr.savingType||"identified"}</span>}
-                      </td>
-                      <td style={{...tdS({padding:"3px 5px"})}}>
-                        {editable?<div style={{display:"flex",gap:3,alignItems:"center"}}>
-                          <input value={cr.ref||""} onChange={e=>setCustomRow(si,cr.uid,"ref",e.target.value)}
-                            placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
-                              border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                          <button onClick={()=>delCustomRow(si,cr.uid)}
-                            style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>✕</button>
-                        </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
-                      </td>
-                    </tr>
-                  );
-                }),
-                <tr key={"add_"+scope+"_"+si}>
-                  <td colSpan={9} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
-                    {editable&&<button onClick={()=>addCustomRow(si,scope)}
-                      style={{fontSize:11,color:(SCOPE_COLORS[scope]||{c:T.slate}).c,background:"transparent",
-                        border:"none",cursor:"pointer",padding:"2px 4px",fontFamily:T.sans,fontWeight:500}}>
-                      + Add custom row
-                    </button>}
-                  </td>
-                </tr>
-              ];
-            })}
-          </tbody>
-          {(()=>{return(
-            <>
-              {t.actual>0&&<tfoot><tr style={{background:T.tealBg,borderTop:"2px solid "+T.tealBd}}>
-                <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.teal}}>Actual saving</td>
-                <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.teal}}>{t.actual.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
-                <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.actual)}</td>
-              </tr></tfoot>}
-              {t.identified>0&&<tfoot><tr style={{background:T.blueBg,borderTop:t.actual>0?"none":"2px solid "+T.blueBd}}>
-                <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.blue}}>Identified saving</td>
-                <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.blue}}>{t.identified.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
-                <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.identified)}</td>
-              </tr></tfoot>}
-            </>
-          );})()}
-        </table>
-      </div>
-    );
-  };
+  // GhgSnapTable is a top-level component to prevent remounting on keystroke
+  // All callbacks passed as props to maintain stable identity
 
+
+  // SnapDiff: only show actual change; identified is never shown as negative
+  // If actual increased, show +; if actual is new (was 0), show as first value
+  // Biggest identified across all phases is the canonical figure — never show minus
   const SnapDiff = ({prev,curr}) => {
-    const pT=snapTotal(prev),cT=snapTotal(curr);
-    const dI=cT.identified-pT.identified,dA=cT.actual-pT.actual;
-    if(dI===0&&dA===0) return <span style={{fontSize:11,color:T.faint}}>No change from previous phase.</span>;
+    const pT=snapKg(prev),cT=snapKg(curr);
+    // For identified: only show increase (biggest number wins, never decrease)
+    const dI=cT.identified-pT.identified;
+    const dA=cT.actual-pT.actual;
+    const hasChange=dA!==0||(dI>0); // only show positive identified change
+    if(!hasChange&&dA===0) return <span style={{fontSize:11,color:T.faint}}>Values carried forward.</span>;
     return(<span style={{fontSize:11}}>
-      {dI!==0&&<span style={{color:dI>0?T.teal:T.red,marginRight:8}}>Identified {dI>0?"+":""}{fmt(dI)}</span>}
-      {dA!==0&&<span style={{color:dA>0?T.teal:T.red}}>Actual {dA>0?"+":""}{fmt(dA)}</span>}
+      {dI>0&&<span style={{color:T.teal,marginRight:8}}>Identified +{fmt(dI)}</span>}
+      {dA>0&&<span style={{color:T.teal,marginRight:8}}>Actual +{fmt(dA)}</span>}
+      {dA<0&&<span style={{color:T.amber}}>Actual {fmt(dA)} vs prev</span>}
     </span>);
   };
 
@@ -1027,7 +1034,6 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
                            border:"1px solid "+T.border,fontSize:12,color:T.text,fontWeight:500}}>
                 {f.type||"—"}
-                <span style={{fontSize:10,color:T.faint,marginLeft:8}}>(pre-filled — locked)</span>
               </div>
             ) : (
               <select value={f.type} onChange={e=>set("type",e.target.value)} style={iw}>
@@ -1071,6 +1077,21 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
         </div>
       </Card>
 
+      {/* ── NOx warning — shown when type is NOx ── */}
+      {(f.type||"").includes("NOₓ") && (
+        <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:"1rem",
+                     background:T.amberBg,border:"1px solid "+T.amberBd,borderRadius:8,padding:"10px 14px"}}>
+          <span style={{fontSize:16,flexShrink:0}}>⚠</span>
+          <div>
+            <p style={{margin:"0 0 3px",fontSize:12,fontWeight:600,color:T.amber}}>NOₓ is a criteria air pollutant, not a greenhouse gas</p>
+            <p style={{margin:0,fontSize:11,color:T.text,lineHeight:1.6}}>
+              Include NOₓ in the GHG savings table only where a project-specific CO₂e equivalence factor has been agreed (e.g. under a recognised offset scheme).
+              Otherwise, report it separately as an air quality impact in the aspects register.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Priority scoring — 3 dimensions ── */}
       <Card style={{marginBottom:"1rem",background:T.tealBg}} accent={T.teal}>
         <SectionLabel>Priority score = env value × business value × technical feasibility (max 125)</SectionLabel>
@@ -1098,7 +1119,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           <span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>Score:</span>
           <span style={{fontFamily:T.mono,fontSize:20,fontWeight:500,padding:"2px 12px",
                         borderRadius:5,background:sc.bg,color:sc.c}}>{score}</span>
-          <span style={{fontSize:12,color:T.muted}}>{prioLabel}</span>
+
         </div>
       </Card>
 
@@ -1126,42 +1147,64 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           </div>
         </div>
 
-        {/* Qualitative */}
-        {f.showQualitative && (
-          <div style={{marginBottom:f.showQuantitative?"1rem":0}}>
-            {snaps.length===0 ? (
-              <textarea value={f.qualNote||""} onChange={e=>set("qualNote",e.target.value)} rows={3}
-                placeholder="Describe expected savings qualitatively"
-                style={{...iw,resize:"vertical",fontSize:12}}/>
-            ) : (
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {snaps.map((snap,si)=>(
-                  <div key={snap.id} style={{borderRadius:7,
-                    border:"1px solid "+(isActive(si)?T.tealBd:T.border),overflow:"hidden"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
-                      background:isActive(si)?T.tealBg:T.surface2}}>
-                      {isActive(si)
-                        ?<input value={snap.label} onChange={e=>setSnapField(si,"label",e.target.value)}
-                            style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.teal,
-                              border:"1px solid "+T.tealBd,borderRadius:4,background:"transparent"}}/>
-                        :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{snap.label}</span>}
-                      <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
-                        {new Date(snap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                      </span>
-                    </div>
-                    <div style={{padding:"8px 12px",background:T.surface}}>
-                      {isActive(si)
-                        ?<textarea value={snap.note||""} onChange={e=>setSnapField(si,"note",e.target.value)} rows={2}
-                            placeholder="Qualitative description for this phase"
-                            style={{...iw,resize:"vertical",fontSize:12}}/>
-                        :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.6}}>{snap.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note</span>}</p>}
-                    </div>
+        {/* Qualitative — own phase list, independent of quantitative phases */}
+        {f.showQualitative && (() => {
+          const qp = f.qualPhases||[];
+          const lastQP = qp.length-1;
+          const addQualPhase = () => set("qualPhases",[...qp,{id:"qp_"+Date.now(),label:"Phase "+(qp.length+1),date:new Date().toISOString(),note:""}]);
+          const setQualPhase = (qi,k,v) => set("qualPhases",qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
+          return(
+            <div style={{marginBottom:f.showQuantitative?"1rem":0}}>
+              {qp.length===0 ? (
+                <div>
+                  <textarea value={f.qualNote||""} onChange={e=>set("qualNote",e.target.value)} rows={3}
+                    placeholder="Describe expected savings qualitatively"
+                    style={{...iw,resize:"vertical",fontSize:12,marginBottom:8}}/>
+                  <button onClick={addQualPhase}
+                    style={{fontSize:11,color:T.slate,background:"transparent",border:"1px solid "+T.border,
+                      borderRadius:5,cursor:"pointer",padding:"3px 10px",fontFamily:T.sans}}>
+                    + Add phase note
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
+                    {qp.map((qph,qi)=>(
+                      <div key={qph.id} style={{borderRadius:7,
+                        border:"1px solid "+(qi===lastQP?T.slateBd:T.border),overflow:"hidden"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
+                          background:qi===lastQP?T.slateBg:T.surface2}}>
+                          {qi===lastQP
+                            ?<input value={qph.label} onChange={e=>setQualPhase(qi,"label",e.target.value)}
+                                style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.slate,
+                                  border:"1px solid "+T.slateBd,borderRadius:4,background:"transparent"}}/>
+                            :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{qph.label}</span>}
+                          <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+                            {new Date(qph.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                          </span>
+                        </div>
+                        <div style={{padding:"8px 12px",background:T.surface}}>
+                          {qi===lastQP
+                            ?<textarea value={qph.note||""} onChange={e=>setQualPhase(qi,"note",e.target.value)} rows={2}
+                                placeholder="Qualitative description for this phase"
+                                style={{...iw,resize:"vertical",fontSize:12}}/>
+                            :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.6}}>
+                               {qph.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note</span>}
+                             </p>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  <button onClick={addQualPhase}
+                    style={{fontSize:11,color:T.slate,background:"transparent",border:"1px solid "+T.slateBd,
+                      borderRadius:5,cursor:"pointer",padding:"3px 10px",fontFamily:T.sans}}>
+                    + Add phase note
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Quantitative — phase tabs + table */}
         {f.showQuantitative && snaps.length > 0 && (
@@ -1215,7 +1258,28 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                 {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only — only the latest phase is editable</span>}
               </div>
             )}
-            {activeSnap && <SnapTable snap={activeSnap} si={safeIdx}/>}
+            {activeSnap && (() => {
+              const prefillIds=f.prefillGhgIds||[];
+              const visibleLines=relevantLines(f.type,prefillIds);
+              const visibleScopes=[...new Set(visibleLines.map(l=>l.scope))];
+              const mergedLines=visibleLines.map(l=>{
+                const s=(activeSnap.lines||[]).find(x=>x.id===l.id);
+                return{...l,qty:s?s.qty:"",baseline:s?s.baseline||"":"",
+                       cf:(s&&s.cf!=="")?s.cf:l.cfDefault,ref:s?s.ref||"":"",savingType:s?s.savingType:"identified"};
+              });
+              const scopeGroups=visibleScopes.reduce((acc,sc)=>{acc[sc]=mergedLines.filter(l=>l.scope===sc);return acc;},{});
+              const SCOPE_COLORS={"Scope 1":{bg:T.redBg,c:T.red,bd:T.redBd},"Scope 2":{bg:T.blueBg,c:T.blue,bd:T.blueBd},"Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},"Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}};
+              const thS2={padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
+              const tdS2=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
+              return <GhgSnapTable
+                snap={activeSnap} si={safeIdx} editable={isActive(safeIdx)}
+                visibleScopes={visibleScopes} mergedLines={mergedLines}
+                scopeGroups={scopeGroups} customForScope={activeSnap.customRows||[]}
+                SCOPE_COLORS={SCOPE_COLORS} thS={thS2} tdS={tdS2} fmt={fmt}
+                snapKgFn={snapKg}
+                onSetLine={setLine} onSetCustomRow={setCustomRow}
+                onAddCustomRow={addCustomRow} onDelCustomRow={delCustomRow}/>;
+            })()}
             <p style={{fontSize:11,color:T.faint,margin:"0.5rem 0 0"}}>
               Phase snapshots preserve all historical data. Identified savings are never deleted when actual values are added.
               Fixed CFs: CO₂=1, NOₓ=296, CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2, material=1.5 kg CO₂e/kg.
@@ -1244,6 +1308,7 @@ function OppForm({ opp, onSave, onCancel }) {
     showQuantitative: base.showQuantitative ?? (base.calcType==="quantitative"),
     ghgSnapshots: migrateOppSnaps(base),
     prefillGhgIds: base.prefillGhgIds||[],
+    qualPhases: base.qualPhases||[],
   });
   return (
     <div style={{maxWidth:900,margin:"0 auto",padding:"1.5rem"}}>
@@ -1688,12 +1753,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
               <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple }}>Opportunity screening</h3>
-              {noxWarn && (
-                <div style={{ background:T.amberBg, border:"1px solid "+T.amberBd, borderRadius:6,
-                               padding:"6px 12px", fontSize:11, color:T.amber, maxWidth:480 }}>
-                  ⚠ NOₓ is a criteria air pollutant. Include in the GHG table only where a project-specific CO₂e equivalence factor applies.
-                </div>
-              )}
+  
             </div>
             <OppFormBody f={oppForm} setF={setOppForm} onSave={saveOpp}
               onCancel={()=>{setView("guide");setNoxWarn(false);}}
@@ -2027,12 +2087,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
           <OSTH col="type" label="Type"/>
           <OSTH col="description" label="Description"/>
-          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Linked</th>
           <OSTH col="score" label="Score"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority</th>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>GHG saving</th>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
-          <OSTH col="status" label="Status"/>
           <OSTH col="createdAt" label="Created"/>
           <OSTH col="updatedAt" label="Modified"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}></th>
@@ -2060,12 +2118,12 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                   <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color: rc ? rc.head : T.text }} title={o.description}>{o.description||"—"}</div>
                   {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
                 </td>
-                <td style={{ padding:"9px 12px" }}>{o.aspectRef?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.tealBg, color:T.teal }}>{o.aspectRef}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
                 <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
-                <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{o.status}</span></td>
+
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
                 </td>
