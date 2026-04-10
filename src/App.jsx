@@ -2081,8 +2081,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                                               :                            "3px solid "+T.red;
                                   return (
                                     <div key={i}
-                                      title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"
-Consequence: "+a.severity+" · Probability: "+a.probability+" · Score: "+sv*pb}
+                                      title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nConsequence: "+a.severity+" · Probability: "+a.probability+" · Score: "+sv*pb}
                                       onClick={()=>setEditAspect(a)}
                                       style={{ width:18, height:18, borderRadius:"50%",
                                                background:fill, border:bdr,
