@@ -509,11 +509,10 @@ function calcGhgTotal(o) {
     return (actual||identified)||null;
   }
   const totals = snaps.map(s=>snapKg(s));
-  const maxActual = Math.max(...totals.map(t=>t.actual));
+  // Biggest identified across all phases is the canonical reportable figure.
+  // Actual savings are tracked separately — they do not replace identified for this total.
   const maxIdentified = Math.max(...totals.map(t=>t.identified));
-  // Biggest actual wins; if none, biggest identified
-  const best = maxActual>0 ? maxActual : maxIdentified;
-  return best>0 ? best : null;
+  return maxIdentified>0 ? maxIdentified : null;
 }
 
 function inferOppType(oppText) {
@@ -924,13 +923,13 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
         <tfoot>
           {t.actual>0&&<tr style={{background:T.tealBg,borderTop:"2px solid "+T.tealBd}}>
             <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.teal}}>Actual saving</td>
-            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.teal}}>{t.actual.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
-            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.actual)}</td>
+            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.teal}}>{fmt(t.actual)}</td>
+            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>{t.actual>=1000?"= "+t.actual.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg":""}</td>
           </tr>}
           {t.identified>0&&<tr style={{background:T.blueBg,borderTop:t.actual>0?"none":"2px solid "+T.blueBd}}>
             <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.blue}}>Identified saving</td>
-            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.blue}}>{t.identified.toLocaleString("nb-NO",{maximumFractionDigits:1})} kg</td>
-            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>= {fmt(t.identified)}</td>
+            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.blue}}>{fmt(t.identified)}</td>
+            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>{t.identified>=1000?"= "+t.identified.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg":""}</td>
           </tr>}
         </tfoot>
       </table>
@@ -953,7 +952,10 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const snaps = f.ghgSnapshots||[];
   const safeIdx = Math.min(activeSnapIdx, snaps.length-1);
   const activeSnap = snaps[safeIdx]||null;
-  const isActive = (si) => si===snaps.length-1; // only last snapshot is editable
+  // Latest phase is editable (and deletable).
+  // Phase directly before it is also editable so you can correct previous data.
+  const isActive = (si) => si >= snaps.length-2 && si >= 0;
+  const isLatest = (si) => si === snaps.length-1;
 
   // Snapshot updater targeting a specific index
   const updateSnap = (si, updater) => setF(p=>{
@@ -972,6 +974,11 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     const n = snaps.length+1;
     setF(p=>({...p,ghgSnapshots:[...p.ghgSnapshots,emptySnapshot("Phase "+n,prev)]}));
     setActiveSnapIdx(n-1);
+  };
+  const deleteLatestPhase = () => {
+    if (snaps.length < 2) return; // never delete the only phase
+    setF(p=>({...p,ghgSnapshots:p.ghgSnapshots.slice(0,-1)}));
+    setActiveSnapIdx(prev=>Math.max(0,prev-1));
   };
 
   const toggleQuantitative = () => {
@@ -1215,18 +1222,32 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                 const t=snapTotal(snap);
                 const hasData=t.identified>0||t.actual>0;
                 const active=si===safeIdx;
+                const latest=isLatest(si);
                 return(
-                  <button key={snap.id} onClick={()=>setActiveSnapIdx(si)}
-                    style={{padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:500,
-                           cursor:"pointer",fontFamily:T.sans,
-                           background:active?T.teal:"transparent",
-                           color:active?"#fff":T.muted,
-                           border:"1px solid "+(active?T.teal:T.border)}}>
-                    {snap.label}
-                    {hasData&&<span style={{marginLeft:5,fontSize:10,opacity:0.75}}>
-                      {t.actual>0?fmt(t.actual):fmt(t.identified)}
-                    </span>}
-                  </button>
+                  <div key={snap.id} style={{display:"flex",alignItems:"center",gap:0,
+                    borderRadius:20,border:"1px solid "+(active?T.teal:T.border),
+                    overflow:"hidden",background:active?T.teal:"transparent"}}>
+                    <button onClick={()=>setActiveSnapIdx(si)}
+                      style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
+                             fontFamily:T.sans,background:"transparent",border:"none",
+                             color:active?"#fff":T.muted}}>
+                      {snap.label}
+                      {hasData&&<span style={{marginLeft:5,fontSize:10,opacity:0.75}}>
+                        {t.identified>0?fmt(t.identified):fmt(t.actual)}
+                      </span>}
+                    </button>
+                    {latest&&snaps.length>1&&(
+                      <button onClick={deleteLatestPhase}
+                        title="Delete this phase"
+                        style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
+                               fontFamily:T.sans,background:"transparent",border:"none",
+                               color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
+                        onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
+                        onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 );
               })}
               <button onClick={addPhaseSnapshot}
@@ -1247,15 +1268,17 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
             {/* Table header: snapshot label + date, editable if active */}
             {activeSnap && (
               <div style={{marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
-                {isActive(safeIdx)
-                  ?<input value={activeSnap.label} onChange={e=>setSnapField(safeIdx,"label",e.target.value)}
-                      style={{padding:"3px 8px",fontSize:13,fontWeight:700,color:T.teal,
-                        border:"1px solid "+T.tealBd,borderRadius:5,background:"transparent"}}/>
-                  :<span style={{fontSize:13,fontWeight:600,color:T.muted}}>{activeSnap.label}</span>}
+                <input value={activeSnap.label} onChange={e=>setSnapField(safeIdx,"label",e.target.value)}
+                      style={{padding:"3px 8px",fontSize:13,fontWeight:700,
+                        color:isLatest(safeIdx)?T.teal:T.slate,
+                        border:"1px solid "+(isLatest(safeIdx)?T.tealBd:T.slateBd),
+                        borderRadius:5,background:"transparent",
+                        pointerEvents:isActive(safeIdx)?"auto":"none",
+                        opacity:isActive(safeIdx)?1:0.5}}/>
                 <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
                   {new Date(activeSnap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
                 </span>
-                {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only — only the latest phase is editable</span>}
+                {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
               </div>
             )}
             {activeSnap && (() => {
@@ -2585,12 +2608,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                                 )}
                                 {items.map((o,i) => {
                                   const sz  = 10+(Math.min(5,Math.max(1,parseInt(o.bizValue)||1))-1)*2;
-                                  const oC  = o.status==="Closed"      ?{bg:T.greenBg,bd:T.greenBd}
-                                            : o.status==="In Progress" ?{bg:T.amberBg,bd:T.amberBd}
-                                            :                            {bg:T.purpleBg,bd:T.purpleBd};
+                                  const oC  = {bg:T.tealBg,bd:T.tealBd};
                                   return (
                                     <div key={i}
-                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility+" · Business value: "+o.bizValue+" · "+o.status}
+                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility+" · Business value: "+o.bizValue}
                                       onClick={()=>setEditOpp(o)}
                                       style={{ width:sz, height:sz, borderRadius:"50%",
                                                background:oC.bg, border:"2px solid "+oC.bd,
@@ -2611,15 +2632,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                         { bg:T.purpleBg, bd:"1px solid "+T.purpleBd, br:"3px", sw:14, sh:14, label:"Quick win",     sub:"Easy, lower impact"          },
                         { bg:T.slateBg,  bd:"1px solid "+T.slateBd,  br:"3px", sw:14, sh:14, label:"Deprioritise",  sub:"Low benefit + hard"          },
                     ]},
-                    { title:"Dot colour — status", items:[
-                        { bg:T.purpleBg, bd:"2px solid "+T.purpleBd, label:"Open"        },
-                        { bg:T.amberBg,  bd:"2px solid "+T.amberBd,  label:"In Progress" },
-                        { bg:T.greenBg,  bd:"2px solid "+T.greenBd,  label:"Closed"      },
-                    ]},
                     { title:"Dot size — business value", items:[
-                        { bg:T.muted, bd:"none", sw:10, sh:10, label:"1 — Low"  },
-                        { bg:T.muted, bd:"none", sw:14, sh:14, label:"3 — Medium" },
-                        { bg:T.muted, bd:"none", sw:18, sh:18, label:"5 — High" },
+                        { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:10, sh:10, label:"1 — Low"  },
+                        { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:14, sh:14, label:"3 — Medium" },
+                        { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:18, sh:18, label:"5 — High" },
                     ]},
                   ]}/>
                 </>
