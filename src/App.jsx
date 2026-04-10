@@ -451,9 +451,11 @@ function calcSig(a) {
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
 function calcGhgTotal(o) {
   if (o.calcType==="qualitative") return null;
-  const t1 = (o.ghgLines||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-  const t2 = (o.customGhgRows||[]).reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.cf)||0),0);
-  const t  = t1+t2;
+  // Return total of ACTUAL savings only (for display in table); if none, fall back to identified
+  const allLines = [...(o.ghgLines||[]), ...(o.customGhgRows||[])];
+  const actual     = allLines.filter(l=>l.savingType==="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
+  const identified = allLines.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
+  const t = actual > 0 ? actual : identified;
   return t > 0 ? t : null;
 }
 
@@ -480,7 +482,7 @@ const GHG_LINES = [
   { id:"s1_ch4",   scope:"Scope 1", group:"Direct emission to air",   type:"CH4",                           unit:"kg",  cfDefault:28,   cfFixed:true  },
   { id:"s1_nmvoc", scope:"Scope 1", group:"Direct emission to air",   type:"nmVOC",                         unit:"kg",  cfDefault:"",   cfFixed:false },
   { id:"s1_chem",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. chemicals)",        unit:"kg",  cfDefault:"",   cfFixed:false },
-  { id:"s1_refr",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. refrigerants)",     unit:"kWh", cfDefault:"",   cfFixed:false },
+  { id:"s1_refr",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. refrigerants / GWP gases)", unit:"kg",  cfDefault:"",   cfFixed:false },
   { id:"s1_other", scope:"Scope 1", group:"Direct emission to air",   type:"Other",                         unit:"kg",  cfDefault:"",   cfFixed:false },
   // Scope 2 — Energy
   { id:"s2_elec",  scope:"Scope 2", group:"Reduction energy consumption", type:"Reduction in energy consumption", unit:"kWh", cfDefault:0.57, cfFixed:true },
@@ -501,8 +503,9 @@ const emptyOpp = () => ({
   action:"", alignment:"", owner:"", status:"Open", _color:"",
   createdAt:"", updatedAt:"",
   calcType:"qualitative",
-  ghgLines: GHG_LINES.map(l => ({ id:l.id, qty:"", cf:l.cfDefault, ref:"" })),
-  customGhgRows: []
+  ghgLines: GHG_LINES.map(l => ({ id:l.id, qty:"", baseline:"", cf:l.cfDefault, ref:"", savingType:"identified" })),
+  customGhgRows: [],
+  ghgSavingType: "identified"
 });
 const newProject = () => {
   const ts = Date.now();
@@ -663,7 +666,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
 function OppForm({ opp, aspects, onSave, onCancel }) {
   const base = { ...emptyOpp(), ...opp };
   // Preserve saved lines (new uid-format); drop old id-format lines from previous version
-  const [f, setF] = useState({ ...base, ghgLines: GHG_LINES.map(l => { const s=(base.ghgLines||[]).find(x=>x.id===l.id); return { id:l.id, qty:s?s.qty:"", cf:(s&&s.cf!=="")?s.cf:l.cfDefault, ref:s?s.ref||"":"" }; }) });
+  const [f, setF] = useState({ ...base, ghgLines: GHG_LINES.map(l => { const s=(base.ghgLines||[]).find(x=>x.id===l.id); return { id:l.id, qty:s?s.qty:"", baseline:s?s.baseline||"":"", cf:(s&&s.cf!=="")?s.cf:l.cfDefault, ref:s?s.ref||"":"", savingType:s?s.savingType||"identified":"identified" }; }) });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
 
   const score = calcOppScore(f);
@@ -732,19 +735,19 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
           </div>
         )}
 
-        {/* Quantitative: table with reference column */}
+        {/* Quantitative: table with baseline, saving type, reference */}
         {f.calcType === "quantitative" && (() => {
           const setLine = (id, field, val) => setF(p => ({
             ...p, ghgLines: p.ghgLines.map(l => l.id===id ? {...l,[field]:val} : l)
           }));
-          // Merge saved data into the full GHG_LINES template
           const lines = GHG_LINES.map(l => {
             const saved = (f.ghgLines||[]).find(x=>x.id===l.id);
-            return { ...l, qty:saved?saved.qty:"", cf:(saved&&saved.cf!=="")?saved.cf:l.cfDefault, ref:saved?saved.ref||"":"" };
+            return { ...l, qty:saved?saved.qty:"", baseline:saved?saved.baseline||"":"", cf:(saved&&saved.cf!=="")?saved.cf:l.cfDefault, ref:saved?saved.ref||"":"", savingType:saved?saved.savingType||"identified":"identified" };
           });
-          const ghgTotal  = lines.reduce((s,l) => s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0), 0)
-                           + (f.customGhgRows||[]).reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.cf)||0),0);
-          const ghgTonnes = ghgTotal/1000;
+          const allLines = [...lines, ...(f.customGhgRows||[])];
+          const identifiedTotal = allLines.reduce((s,l)=>l.savingType!=="actual"?s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0):s, 0);
+          const actualTotal     = allLines.reduce((s,l)=>l.savingType==="actual"?s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0):s, 0);
+          const hasActual       = allLines.some(l=>l.savingType==="actual" && parseFloat(l.qty)>0);
           const scopeColors = {
             "Scope 1":      {bg:T.redBg,    c:T.red,    bd:T.redBd},
             "Scope 2":      {bg:T.blueBg,   c:T.blue,   bd:T.blueBd},
@@ -759,28 +762,45 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                         color:T.muted, borderBottom:"1px solid "+T.border,
                         letterSpacing:"0.07em", textTransform:"uppercase", whiteSpace:"nowrap" };
           const tdS = (extra) => ({ padding:"6px 8px", fontSize:12, borderBottom:"1px solid "+T.rowBd, ...(extra||{}) });
+          const fmt = (v) => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e"
+                                     :v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
           return (
             <div>
-              {/* Live total banner */}
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                            background:ghgTotal>0?T.tealBg:T.slateBg,
-                            border:"1px solid "+(ghgTotal>0?T.tealBd:T.border),
-                            borderRadius:8, padding:"12px 16px", marginBottom:"1rem" }}>
-                <div>
-                  <p style={{ margin:"0 0 2px", fontSize:11, fontWeight:600, color:ghgTotal>0?T.teal:T.faint,
-                               letterSpacing:"0.06em", textTransform:"uppercase" }}>Total GHG saving</p>
-                  <p style={{ margin:0, fontSize:11, color:T.muted }}>Enter reduction quantities in the table below</p>
-                </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontFamily:T.mono, fontSize:22, fontWeight:700, color:ghgTotal>0?T.teal:T.faint, lineHeight:1 }}>
-                    {ghgTonnes>=1 ? ghgTonnes.toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e"
-                                  : ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e"}
+              {/* Split total banner: Identified vs Actual */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:"1rem" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                              background:identifiedTotal>0?T.blueBg:T.slateBg,
+                              border:"1px solid "+(identifiedTotal>0?T.blueBd:T.border),
+                              borderRadius:8, padding:"10px 14px" }}>
+                  <div>
+                    <p style={{ margin:"0 0 2px", fontSize:10, fontWeight:700, color:identifiedTotal>0?T.blue:T.faint,
+                                 letterSpacing:"0.06em", textTransform:"uppercase" }}>Identified saving</p>
+                    <p style={{ margin:0, fontSize:10, color:T.muted }}>Estimated — not yet verified</p>
                   </div>
-                  {ghgTonnes>=1 && <div style={{ fontFamily:T.mono, fontSize:10, color:T.muted, marginTop:2 }}>
-                    = {ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:0})} kg CO₂e
-                  </div>}
+                  <div style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:identifiedTotal>0?T.blue:T.faint }}>
+                    {identifiedTotal>0?fmt(identifiedTotal):"—"}
+                  </div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                              background:actualTotal>0?T.tealBg:T.slateBg,
+                              border:"1px solid "+(actualTotal>0?T.tealBd:T.border),
+                              borderRadius:8, padding:"10px 14px" }}>
+                  <div>
+                    <p style={{ margin:"0 0 2px", fontSize:10, fontWeight:700, color:actualTotal>0?T.teal:T.faint,
+                                 letterSpacing:"0.06em", textTransform:"uppercase" }}>Actual saving</p>
+                    <p style={{ margin:0, fontSize:10, color:T.muted }}>Verified / as-built</p>
+                  </div>
+                  <div style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:actualTotal>0?T.teal:T.faint }}>
+                    {actualTotal>0?fmt(actualTotal):"—"}
+                  </div>
                 </div>
               </div>
+              {hasActual && identifiedTotal>0 && (
+                <div style={{ background:T.amberBg, border:"1px solid "+T.amberBd, borderRadius:6,
+                               padding:"7px 12px", marginBottom:"0.75rem", fontSize:11, color:T.amber }}>
+                  ⚠ Both identified and actual savings are present. The totals above are shown separately — do not add them together to avoid double-reporting.
+                </div>
+              )}
 
               {/* Table */}
               <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border }}>
@@ -790,10 +810,12 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                       <th style={thS}>Scope</th>
                       <th style={thS}>Type</th>
                       <th style={{ ...thS, textAlign:"right" }}>Unit</th>
+                      <th style={{ ...thS, textAlign:"right" }}>Baseline qty</th>
                       <th style={{ ...thS, textAlign:"right" }}>Reduction qty</th>
                       <th style={{ ...thS, textAlign:"right" }}>CF (kg CO₂e)</th>
                       <th style={{ ...thS, textAlign:"right" }}>Saving (kg CO₂e)</th>
-                      <th style={thS}>Reference</th>
+                      <th style={thS}>Type</th>
+                      <th style={thS}>Reference / source</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -802,7 +824,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                       const customForScope = (f.customGhgRows||[]).filter(r=>r.scope===scope);
                       const addCustomRow = () => setF(p=>({ ...p, customGhgRows:[
                         ...(p.customGhgRows||[]),
-                        { uid:"c"+Date.now(), scope, type:"", unit:"kg", qty:"", cf:"", ref:"" }
+                        { uid:"c"+Date.now(), scope, type:"", unit:"kg", qty:"", baseline:"", cf:"", ref:"", savingType:"identified" }
                       ]}));
                       const delCustomRow = uid => setF(p=>({ ...p, customGhgRows:(p.customGhgRows||[]).filter(r=>r.uid!==uid) }));
                       const setCustomRow = (uid,k,v) => setF(p=>({ ...p, customGhgRows:(p.customGhgRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r) }));
@@ -825,8 +847,19 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                                                  display:"inline-block", whiteSpace:"nowrap" }}>{scope}</span>
                                 </td>
                               )}
-                              <td style={{ ...tdS(), fontWeight:500, color:T.text }}>{l.type}</td>
+                              <td style={{ ...tdS(), fontWeight:500, color:T.text,
+                                                   textDecoration:line.savingType==="superseded"?"line-through":undefined,
+                                                   opacity:line.savingType==="superseded"?0.4:1 }}>{l.type}</td>
                               <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono, fontSize:10, color:T.faint }}>{l.unit}</td>
+                              {/* Baseline qty */}
+                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
+                                <input type="number" min={0} value={line.baseline}
+                                  onChange={e=>setLine(l.id,"baseline",e.target.value)} placeholder="—"
+                                  style={{ width:72, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
+                                           fontSize:12, border:"1px solid "+T.border,
+                                           borderRadius:5, background:T.surface, color:T.muted }}/>
+                              </td>
+                              {/* Reduction qty */}
                               <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
                                 <input type="number" min={0} value={line.qty}
                                   onChange={e=>setLine(l.id,"qty",e.target.value)} placeholder="0"
@@ -848,6 +881,19 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                               <td style={{ ...tdS({ textAlign:"right" }), fontFamily:T.mono,
                                            fontWeight:saving?700:400, color:saving?T.teal:T.faint }}>
                                 {saving!=null ? saving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
+                              </td>
+                              {/* Saving type */}
+                              <td style={{ ...tdS({ padding:"3px 5px" }) }}>
+                                <select value={line.savingType} onChange={e=>setLine(l.id,"savingType",e.target.value)}
+                                  style={{ fontSize:10, padding:"3px 6px", borderRadius:4,
+                                           border:"1px solid "+(line.savingType==="actual"?T.tealBd:line.savingType==="superseded"?T.border:T.blueBd),
+                                           background:line.savingType==="actual"?T.tealBg:line.savingType==="superseded"?T.slateBg:T.blueBg,
+                                           color:line.savingType==="actual"?T.teal:line.savingType==="superseded"?T.faint:T.blue,
+                                           fontWeight:500, cursor:"pointer", width:"100%" }}>
+                                  <option value="identified">Identified</option>
+                                  <option value="actual">Actual</option>
+                                  <option value="superseded">Superseded</option>
+                                </select>
                               </td>
                               <td style={{ ...tdS({ padding:"4px 6px" }) }}>
                                 <input value={line.ref} onChange={e=>setLine(l.id,"ref",e.target.value)}
@@ -881,6 +927,13 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                                            background:T.surface, color:T.muted }}/>
                               </td>
                               <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
+                                <input type="number" min={0} value={cr.baseline||""}
+                                  onChange={e=>setCustomRow(cr.uid,"baseline",e.target.value)} placeholder="—"
+                                  style={{ width:72, textAlign:"right", padding:"4px 6px", fontFamily:T.mono,
+                                           fontSize:12, border:"1px solid "+T.border,
+                                           borderRadius:5, background:T.surface, color:T.muted }}/>
+                              </td>
+                              <td style={{ ...tdS({ textAlign:"right", padding:"4px 6px" }) }}>
                                 <input type="number" min={0} value={cr.qty}
                                   onChange={e=>setCustomRow(cr.uid,"qty",e.target.value)} placeholder="0"
                                   style={{ width:86, textAlign:"right", padding:"4px 8px", fontFamily:T.mono,
@@ -898,6 +951,18 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                                            fontWeight:csaving?700:400, color:csaving?T.teal:T.faint }}>
                                 {csaving!=null ? csaving.toLocaleString("nb-NO",{maximumFractionDigits:1}) : "—"}
                               </td>
+                              <td style={{ ...tdS({ padding:"3px 5px" }) }}>
+                                <select value={cr.savingType||"identified"} onChange={e=>setCustomRow(cr.uid,"savingType",e.target.value)}
+                                  style={{ fontSize:10, padding:"3px 6px", borderRadius:4,
+                                           border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:(cr.savingType||"identified")==="superseded"?T.border:T.blueBd),
+                                           background:(cr.savingType||"identified")==="actual"?T.tealBg:(cr.savingType||"identified")==="superseded"?T.slateBg:T.blueBg,
+                                           color:(cr.savingType||"identified")==="actual"?T.teal:(cr.savingType||"identified")==="superseded"?T.faint:T.blue,
+                                           fontWeight:500, cursor:"pointer", width:"100%" }}>
+                                  <option value="identified">Identified</option>
+                                  <option value="actual">Actual</option>
+                                  <option value="superseded">Superseded</option>
+                                </select>
+                              </td>
                               <td style={{ ...tdS({ padding:"4px 6px" }) }}>
                                 <div style={{ display:"flex", gap:4, alignItems:"center" }}>
                                   <input value={cr.ref} onChange={e=>setCustomRow(cr.uid,"ref",e.target.value)}
@@ -914,7 +979,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                           );
                         }),
                         <tr key={"add-"+scope}>
-                          <td colSpan={6} style={{ padding:"4px 8px", borderBottom:"1px solid "+T.rowBd }}>
+                          <td colSpan={8} style={{ padding:"4px 8px", borderBottom:"1px solid "+T.rowBd }}>
                             <button onClick={addCustomRow}
                               style={{ fontSize:11, color:sc2.c, background:"transparent",
                                        border:"none", cursor:"pointer", padding:"2px 4px",
@@ -928,7 +993,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
                   </tbody>
                   <tfoot>
                     <tr style={{ background:T.tealBg, borderTop:"2px solid "+T.tealBd }}>
-                      <td colSpan={5} style={{ padding:"8px 10px", fontWeight:600, fontSize:12, color:T.teal }}>Total GHG saving</td>
+                      <td colSpan={7} style={{ padding:"8px 10px", fontWeight:600, fontSize:12, color:T.teal }}>Total — see split above</td>
                       <td style={{ padding:"8px 10px", textAlign:"right", fontFamily:T.mono, fontSize:14, fontWeight:700, color:T.teal }}>
                         {ghgTotal.toLocaleString("nb-NO",{maximumFractionDigits:1})}
                       </td>
@@ -941,7 +1006,7 @@ function OppForm({ opp, aspects, onSave, onCancel }) {
               </div>
               <p style={{ fontSize:11, color:T.faint, margin:"0.5rem 0 0" }}>
                 Fixed CFs: CO₂ = 1, NOₓ = 296, CH₄ = 28 · Energy = 0.57 kg CO₂e/kWh · Steel = 2, other material = 1.5 kg CO₂e/kg.
-                Amber fields = enter your own CF. Rows with a quantity entered are highlighted.
+                Amber CF fields = enter your own conversion factor. Baseline qty = reference quantity before reduction. Saving type: Identified = estimated not yet verified · Actual = verified/as-built · Superseded = replaced by a newer figure (excluded from totals and shown greyed out).
               </p>
             </div>
           );
