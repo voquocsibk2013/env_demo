@@ -950,18 +950,21 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
     onSetPhases(next);
     setActiveQIdx(n-1);
   };
+  // Allow deleting any phase — even Phase 1 (clears back to empty list)
   const delQualPhase = () => {
-    if (qp.length < 2) return;
-    onSetPhases(qp.slice(0,-1));
-    setActiveQIdx(Math.max(0, qp.length-2));
+    const phase = qp[qp.length-1];
+    if (!window.confirm("Delete phase \"" + (phase?.label||"this phase") + "\"? This cannot be undone.")) return;
+    const next = qp.slice(0,-1);
+    onSetPhases(next);
+    setActiveQIdx(Math.max(0, next.length-1));
   };
   const setQualPhase = (qi,k,v) => onSetPhases(qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
-  const activeQP = qp[safeQIdx]||null;
+  const activeQP = qp.length>0 ? (qp[safeQIdx]||null) : null;
 
   return (
     <div style={{marginBottom:showQuantitative?"1rem":0}}>
-      {/* Phase pill row */}
-      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.65rem",flexWrap:"wrap"}}>
+      {/* Phase pill row — matches quantitative */}
+      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
         {qp.map((qph,qi)=>{
           const active=qi===safeQIdx;
           const latest=isQLatest(qi);
@@ -976,7 +979,7 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
                 {qph.label}
                 {qph.note&&<span style={{marginLeft:4,fontSize:9,opacity:0.6}}>●</span>}
               </button>
-              {latest&&qp.length>1&&(
+              {latest&&(
                 <button onClick={delQualPhase} title="Delete this phase"
                   style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
                          fontFamily:T.sans,background:"transparent",border:"none",
@@ -997,36 +1000,38 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
         </button>
       </div>
 
-      {/* Active phase content */}
-      {qp.length===0 ? (
-        <textarea value={qualNote} onChange={e=>onSetNote(e.target.value)} rows={3}
-          placeholder="Describe expected savings qualitatively — or add a phase above"
-          style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
-      ) : activeQP ? (
+      {/* Active phase — same layout as quantitative: header bar + note body */}
+      {activeQP ? (
         <div style={{borderRadius:7,border:"1px solid "+(isQLatest(safeQIdx)?T.slateBd:T.border),overflow:"hidden"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",
+          {/* Header bar: editable label (latest only) + date */}
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",
             background:isQLatest(safeQIdx)?T.slateBg:T.surface2}}>
             {isQLatest(safeQIdx)
               ?<input value={activeQP.label} onChange={e=>setQualPhase(safeQIdx,"label",e.target.value)}
-                  style={{flex:1,padding:"2px 6px",fontSize:12,fontWeight:600,color:T.slate,
-                    border:"1px solid "+T.slateBd,borderRadius:4,background:"transparent"}}/>
-              :<span style={{fontSize:12,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
+                  style={{flex:1,padding:"3px 8px",fontSize:13,fontWeight:700,color:T.slate,
+                    border:"1px solid "+T.slateBd,borderRadius:5,background:"transparent"}}/>
+              :<span style={{fontSize:13,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
             <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
               {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
             </span>
             {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
           </div>
-          <div style={{padding:"8px 12px",background:T.surface}}>
+          {/* Note body */}
+          <div style={{padding:"10px 12px",background:T.surface}}>
             {isQLatest(safeQIdx)
               ?<textarea value={activeQP.note||""} onChange={e=>setQualPhase(safeQIdx,"note",e.target.value)} rows={3}
-                  placeholder="Describe expected savings for this phase"
+                  placeholder="Describe expected savings for this phase — approach, methodology, estimated reduction range"
                   style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
               :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
                  {activeQP.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note recorded</span>}
                </p>}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <p style={{fontSize:11,color:T.faint,margin:0,fontStyle:"italic"}}>
+          No phases — click "+ Add phase" to start.
+        </p>
+      )}
     </div>
   );
 }
@@ -1070,9 +1075,10 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     setActiveSnapIdx(n-1); // jump to new latest
   };
   const deleteLatestPhase = () => {
-    if (snaps.length < 2) return;
+    if (snaps.length === 0) return;
+    const phase = snaps[snaps.length-1];
+    if (!window.confirm("Delete phase \"" + (phase?.label||"this phase") + "\"? This cannot be undone.")) return;
     setF(p=>({...p,ghgSnapshots:p.ghgSnapshots.slice(0,-1)}));
-    // After delete, newest = length-2; switch view to it
     setActiveSnapIdx(Math.max(0, snaps.length-2));
   };
 
@@ -1241,7 +1247,15 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem"}}>
           <SectionLabel style={{margin:0}}>Savings estimate</SectionLabel>
           <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>set("showQualitative",!f.showQualitative)}
+            <button onClick={()=>{
+                const next=!f.showQualitative;
+                if(next && (f.qualPhases||[]).length===0){
+                  // auto-create Phase 1
+                  setF(p=>({...p,showQualitative:true,qualPhases:[{id:"qp_"+Date.now(),label:"Phase 1",date:new Date().toISOString(),note:""}]}));
+                } else {
+                  set("showQualitative",next);
+                }
+              }}
               style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
                      fontFamily:T.sans,borderRadius:6,
                      background:f.showQualitative?T.slate:"transparent",
@@ -1294,7 +1308,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                         {t.identified>0?fmt(t.identified):fmt(t.actual)}
                       </span>}
                     </button>
-                    {latest&&snaps.length>1&&(
+                    {latest&&(
                       <button onClick={deleteLatestPhase}
                         title="Delete this phase"
                         style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
