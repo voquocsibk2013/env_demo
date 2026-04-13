@@ -428,7 +428,7 @@ const RISK_CATEGORIES = [
     ],
   },
   {
-    cat: '10. Abnormal condition and Emergency Response',
+    cat: '7. Abnormal Condition and Emergency Response',
     color: 'darkred',
     items: [
       { sub: 'Oil spill response plan', hint: 'All offshore and coastal hydrocarbon operations', aspect: 'Inadequate preparedness for accidental oil release; environmental damage' },
@@ -1783,23 +1783,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                     {open && (
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
                         {cat.items.map((item,i) => (
-                          <button key={i}
+                          <ScopeBtn key={i}
+                            label={item.sub} sub={item.hint} color={col}
                             onClick={()=>{
                               setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub, _color:cat.color});
                               setView("form");
-                            }}
-                            style={{ textAlign:"left", padding:"9px 12px", borderRadius:7,
-                                     border:"1.5px solid "+col.border, background:col.bg,
-                                     cursor:"pointer", fontFamily:T.sans, display:"flex",
-                                     flexDirection:"column", gap:4, transition:"filter 0.1s" }}
-                            onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
-                            onMouseLeave={e=>e.currentTarget.style.filter="none"}>
-                            <span style={{ fontSize:12, fontWeight:700, color:col.head, lineHeight:1.3 }}>{item.sub}</span>
-                            <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{item.hint}</span>
-                            <span style={{ fontSize:10, color:T.muted, lineHeight:1.35 }}>
-                              <strong style={{ color:T.text }}>→</strong> {item.aspect}
-                            </span>
-                          </button>
+                            }}/>
                         ))}
                       </div>
                     )}
@@ -1813,17 +1802,19 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 {/* ══ OPPORTUNITIES GUIDE — Scope-based with search ══════════════════════ */}
         {view === "guide" && !isRisks && (() => {
           const q = screenSearch.trim().toLowerCase();
-          const filterBtns = (btns, labelFn) => q
-            ? btns.filter(b => labelFn(b).toLowerCase().includes(q) || (b.sub||"").toLowerCase().includes(q))
-            : btns;
-          const s1 = filterBtns(OPP_SCOPE1_BUTTONS, b=>b.label);
-          const s2 = filterBtns(OPP_SCOPE2_BUTTONS, b=>b.label);
-          const s3 = filterBtns(OPP_SCOPE3_BUTTONS, b=>b.label);
-          const OppSection = ({skey, col, title, sub, btns, mkOnClick}) => {
-            const open = (q&&btns.length>0) ? true : expanded[skey]!==false;
+          const matchBtn = b => !q ||
+            (b.label||"").toLowerCase().includes(q) ||
+            (b.sub||"").toLowerCase().includes(q) ||
+            (b.desc||"").toLowerCase().includes(q);
+          const s1 = OPP_SCOPE1_BUTTONS.filter(matchBtn);
+          const s2 = OPP_SCOPE2_BUTTONS.filter(matchBtn);
+          const s3 = OPP_SCOPE3_BUTTONS.filter(matchBtn);
+          // Helper: render one scope block inline (not as a component, avoids remount on search)
+          const renderScope = (skey, col, title, sub, btns, mkOnClick) => {
             if (q && btns.length===0) return null;
+            const open = (q&&btns.length>0) ? true : expanded[skey]!==false;
             return (
-              <div style={{marginBottom:8}}>
+              <div key={skey} style={{marginBottom:8}}>
                 <div onClick={()=>toggleCat(skey)}
                   style={{display:"flex",alignItems:"center",justifyContent:"space-between",
                     padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
@@ -1837,7 +1828,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                     <span style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{open?"▾":"▸"}</span>
                   </div>
                 </div>
-                {open&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {open&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
                   {btns.map(btn=><ScopeBtn key={btn.id} label={btn.label.replace("\n"," ")} sub={btn.sub} color={col} onClick={mkOnClick(btn)}/>)}
                 </div>}
               </div>
@@ -1847,15 +1838,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.faint,fontSize:12}}>No opportunities match your search.</div>;
           return (
             <div>
-              <OppSection skey="opp_scope1" col={COLOR_MAP.red}
-                title="Scope 1 — Direct Emissions" sub="Emissions directly from project operations"
-                btns={s1} mkOnClick={btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn)}/>
-              <OppSection skey="opp_scope2" col={COLOR_MAP.blue}
-                title="Scope 2 — Indirect Emissions" sub="Energy consumption and purchased utilities"
-                btns={s2} mkOnClick={btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false)}/>
-              <OppSection skey="opp_scope3" col={COLOR_MAP.teal}
-                title="Scope 3 — Value Chain Emissions" sub="Upstream and downstream indirect emissions"
-                btns={s3} mkOnClick={btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false)}/>
+              {renderScope("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",s1,
+                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn))}
+              {renderScope("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",s2,
+                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false))}
+              {renderScope("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",s3,
+                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false))}
             </div>
           );
         })()}
