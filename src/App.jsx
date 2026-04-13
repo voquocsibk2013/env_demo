@@ -1810,98 +1810,55 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
           );
         })()}
 
-        {/* ══ OPPORTUNITIES GUIDE — Scope-based ══════════════════════════════════ */}
-        {view === "guide" && !isRisks && (
-          <div>
-            {/* Scope 1 */}
-            {(()=>{
-              const key="opp_scope1"; const open=expanded[key]!==false;
-              const col=COLOR_MAP.red;
-              return(
-                <div style={{marginBottom:8}}>
-                  <div onClick={()=>toggleCat(key)}
-                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
-                      userSelect:"none",marginBottom:open?7:0}}>
-                    <div>
-                      <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Scope 1 — Direct Emissions</span>
-                      <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>Emissions directly from project operations</span>
-                    </div>
+                {/* ══ OPPORTUNITIES GUIDE — Scope-based with search ══════════════════════ */}
+        {view === "guide" && !isRisks && (() => {
+          const q = screenSearch.trim().toLowerCase();
+          const filterBtns = (btns, labelFn) => q
+            ? btns.filter(b => labelFn(b).toLowerCase().includes(q) || (b.sub||"").toLowerCase().includes(q))
+            : btns;
+          const s1 = filterBtns(OPP_SCOPE1_BUTTONS, b=>b.label);
+          const s2 = filterBtns(OPP_SCOPE2_BUTTONS, b=>b.label);
+          const s3 = filterBtns(OPP_SCOPE3_BUTTONS, b=>b.label);
+          const OppSection = ({skey, col, title, sub, btns, mkOnClick}) => {
+            const open = (q&&btns.length>0) ? true : expanded[skey]!==false;
+            if (q && btns.length===0) return null;
+            return (
+              <div style={{marginBottom:8}}>
+                <div onClick={()=>toggleCat(skey)}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                    padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
+                    userSelect:"none",marginBottom:open?7:0}}>
+                  <div>
+                    <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{title}</span>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>{sub}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:10,color:"rgba(255,255,255,0.6)"}}>{btns.length} options</span>
                     <span style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{open?"▾":"▸"}</span>
                   </div>
-                  {open&&(
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-                      {OPP_SCOPE1_BUTTONS.map(btn=>(
-                        <ScopeBtn key={btn.id} label={btn.label} sub={btn.sub} color={col}
-                          onClick={()=>prefillOppScope(
-                            "Scope 1 — "+btn.label,
-                            btn.ghgId?[btn.ghgId]:[],
-                            "Reduction of "+btn.label+" direct emissions",
-                            "red", btn.noxWarn
-                          )}/>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              );
-            })()}
-            {/* Scope 2 */}
-            {(()=>{
-              const key="opp_scope2"; const open=expanded[key]!==false;
-              const col=COLOR_MAP.blue;
-              return(
-                <div style={{marginBottom:8}}>
-                  <div onClick={()=>toggleCat(key)}
-                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
-                      userSelect:"none",marginBottom:open?7:0}}>
-                    <div>
-                      <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Scope 2 — Indirect Emissions</span>
-                      <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>Energy consumption and purchased utilities</span>
-                    </div>
-                    <span style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{open?"▾":"▸"}</span>
-                  </div>
-                  {open&&(
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                      {OPP_SCOPE2_BUTTONS.map(btn=>(
-                        <ScopeBtn key={btn.id} label={btn.label} sub={btn.sub} color={col}
-                          onClick={()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false)}/>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            {/* Scope 3 */}
-            {(()=>{
-              const key="opp_scope3"; const open=expanded[key]!==false;
-              const col=COLOR_MAP.teal;
-              return(
-                <div style={{marginBottom:8}}>
-                  <div onClick={()=>toggleCat(key)}
-                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
-                      userSelect:"none",marginBottom:open?7:0}}>
-                    <div>
-                      <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Scope 3 — Value Chain Emissions</span>
-                      <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>Upstream and downstream indirect emissions</span>
-                    </div>
-                    <span style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{open?"▾":"▸"}</span>
-                  </div>
-                  {open&&(
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                      {OPP_SCOPE3_BUTTONS.map(btn=>(
-                        <ScopeBtn key={btn.id}
-                          label={btn.label.replace("\\n","\n")} sub={btn.sub} color={col}
-                          onClick={()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false)}/>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
+                {open&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {btns.map(btn=><ScopeBtn key={btn.id} label={btn.label.replace("\n"," ")} sub={btn.sub} color={col} onClick={mkOnClick(btn)}/>)}
+                </div>}
+              </div>
+            );
+          };
+          if (q && s1.length===0 && s2.length===0 && s3.length===0)
+            return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.faint,fontSize:12}}>No opportunities match your search.</div>;
+          return (
+            <div>
+              <OppSection skey="opp_scope1" col={COLOR_MAP.red}
+                title="Scope 1 — Direct Emissions" sub="Emissions directly from project operations"
+                btns={s1} mkOnClick={btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn)}/>
+              <OppSection skey="opp_scope2" col={COLOR_MAP.blue}
+                title="Scope 2 — Indirect Emissions" sub="Energy consumption and purchased utilities"
+                btns={s2} mkOnClick={btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false)}/>
+              <OppSection skey="opp_scope3" col={COLOR_MAP.teal}
+                title="Scope 3 — Value Chain Emissions" sub="Upstream and downstream indirect emissions"
+                btns={s3} mkOnClick={btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false)}/>
+            </div>
+          );
+        })()}
 
         {/* ══ RISK FORM ════════════════════════════════════════════════════════════ */}
         {view === "form" && isRisks && (
