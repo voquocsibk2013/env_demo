@@ -308,6 +308,138 @@ const OPP_SCOPE3_BUTTONS = [
 ];
 
 
+// ── Environmental risk categories (from aspects reference library) ──────────
+const RISK_CATEGORIES = [
+  {
+    cat: '1. Ecology & Biodiversity',
+    color: 'green',
+    items: [
+      { sub: 'Protected habitat & designations', hint: 'Siting, ground clearance, cable/pipeline routing', aspect: 'Loss of or disturbance to Natura 2000, RAMSAR, or nationally protected habitat' },
+      { sub: 'Protected species — terrestrial', hint: 'Vegetation removal, excavation in known habitat', aspect: 'Disturbance or harm to red-listed or Annex IV species (bats, reptiles, insects)' },
+      { sub: 'Vegetation clearance', hint: 'Land clearing, access track construction, cable trenching', aspect: 'Habitat loss; harm to nesting birds or protected plant species' },
+      { sub: 'Invasive species', hint: 'Earthworks, material import, equipment mobilisation', aspect: 'Introduction or spread of invasive plant or animal species' },
+      { sub: 'Ecological connectivity', hint: 'Linear construction, fencing, culverting', aspect: 'Severance of wildlife corridors (hedgerows, riparian margins, migration routes)' },
+      { sub: 'Marine mammal protection', hint: 'Seismic surveys, piling, vessel operations, sonar', aspect: 'Acoustic disturbance, injury, or displacement of cetaceans and seals' },
+      { sub: 'Fish spawning & migration', hint: 'Seabed disturbance, dewatering outfall, cofferdam', aspect: 'Disruption to salmon, herring, or other protected fish migration or spawning' },
+      { sub: 'Seabed habitats', hint: 'Anchoring, trenching, structure installation, decommissioning', aspect: 'Physical damage to cold-water coral, maerl beds, biogenic reef, or priority seabed habitat' },
+      { sub: 'Bird collision & displacement', hint: 'Wind turbines, flare stacks, tall structures, marine platforms, construction lighting', aspect: 'Collision mortality or displacement of migratory or breeding birds' },
+      { sub: 'Light pollution & ecology', hint: 'Floodlighting, flare lighting, platform lighting', aspect: 'Disruption to nocturnal species (bats, insects, seabirds) behaviour and movement' },
+      { sub: 'Peat & carbon-rich soil disturbance', hint: 'Onshore trenching, grading, borrow pits in peatland', aspect: 'Release of stored carbon; peat subsidence; loss of protected bog habitat' },
+      { sub: 'Phase 1 Habitat Survey *(desk study + walkover)*', hint: 'Any onshore project with potential ecological sensitivity; EIA scoping; planning application', aspect: 'Failure to identify habitats or designated sites before design — consent delay, stop-work, or inadequate mitigation design' },
+      { sub: 'Phase 2 Ecological Survey *(NVC, protected species, extended walkover)*', hint: 'Triggered by Phase 1 findings; applies within seasonal survey windows (bat, reptile, bird nesting)', aspect: 'Incomplete species data leading to consent refusal, planning conditions, or missed mitigation opportunities; seasonal window missed delaying project' },
+      { sub: 'Noise boundary limits', hint: 'Compressors, turbines, processing plant, generators', aspect: 'Noise at community boundary exceeding regulatory or planning limits' },
+      { sub: 'Construction noise', hint: 'Piling, demolition, heavy plant, blasting', aspect: 'Community noise disturbance during construction works' },
+      { sub: 'Noise during commissioning', hint: 'Pressure testing, relief valve lift, venting, flaring', aspect: 'High-impulse or sustained noise during start-up and testing activities' },
+      { sub: 'Ground vibration', hint: 'Piling, blasting, heavy compaction, road traffic from heavy plant', aspect: 'Structural damage to third-party property; nuisance vibration' },
+      { sub: 'Underwater noise — pile driving', hint: 'Offshore monopile installation, jacket installation, subsea piling', aspect: 'Acoustic injury or disturbance to fish and marine mammals' },
+      { sub: 'Artificial light at night', hint: 'Floodlighting, flare stacks, platform lighting, construction lighting', aspect: 'Disruption to nocturnal wildlife (bats, insects, seabirds); community visual intrusion' },
+      { sub: 'Noise baseline survey', hint: 'Projects near sensitive receptors (residential, schools); Forurensningsloven §11 permit trigger; construction noise impact prediction', aspect: 'Permit conditions set without pre-project background; complaint risk; inadequate noise limits in contract or planning consent' },
+    ],
+  },
+  {
+    cat: '2. Discharge to Water & Marine Environment',
+    color: 'blue',
+    items: [
+      { sub: 'Ballast water (vessels)', hint: 'Vessel operations, installation support vessels', aspect: 'Introduction of non-indigenous species via ballast water exchange' },
+      { sub: 'Vessel fuel & lubricants', hint: 'Marine support operations, installation vessels', aspect: 'Accidental oil discharge from vessel machinery or fuel transfer' },
+      { sub: 'Grey water & sewage (vessels)', hint: 'Crew vessels, installation vessels, FPSOs', aspect: 'Sewage discharge within 12 nm or in special areas' },
+      { sub: 'Cooling water thermal discharge', hint: 'Power plant cooling, electrolyser cooling, process cooling', aspect: 'Elevated temperature affecting dissolved oxygen and species behaviour in receiving water' },
+      { sub: 'Produced water', hint: 'Oil & gas production operations', aspect: 'Discharge of produced water with hydrocarbons, scale inhibitors, NORM' },
+      { sub: 'Process wastewater design', hint: 'Chemical injection, utility systems, drains', aspect: 'Design of wastewater streams — volume, composition, treatment route' },
+      { sub: 'Seabed sediment disturbance', hint: 'Dredging, trenching, anchor dragging, jetting, structure installation', aspect: 'Sediment plume; burial of benthic communities; contaminant resuspension' },
+      { sub: 'Water quality baseline', hint: 'Onshore watercourse crossings; discharge permitting under Forurensningsloven §11; offshore produced water permitting', aspect: 'Permit refused or inappropriate conditions set without baseline evidence; inability to demonstrate no deterioration under WFD Art. 4' },
+      { sub: 'Marine baseline survey *(benthic, ROV, seabed characterisation)*', hint: 'Offshore installation, pipeline or cable routing, anchor deployment, dredging', aspect: 'Unable to demonstrate pre-installation seabed condition; permit refused; unexpected sensitive habitat (cold-water coral, maerl) triggering stop-work' },
+      { sub: 'Geophysical / UXO survey', hint: 'Offshore seabed operations; pipeline or cable route survey; anchor pattern; jack-up preloading; construction in former conflict areas', aspect: 'Unknown seabed obstacles, contamination, UXO, or unstable ground; dropped object risk; unexpected habitat disturbance; jack-up punch-through' },
+    ],
+  },
+  {
+    cat: '3. Emission to Air',
+    color: 'red',
+    items: [
+      { sub: 'Stack / vent emissions', hint: 'Combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
+      { sub: 'Diesel plant emissions', hint: 'Generators, construction plant, crane engines', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
+      { sub: 'Flaring volumes & composition', hint: 'Commissioning purge, emergency relief, production upsets', aspect: 'Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability' },
+      { sub: 'NOₓ emissions & NOₓ tax', hint: 'Gas turbines, engines, flaring, process heaters — offshore and nearshore', aspect: 'NOₓ emissions subject to Norwegian NOₓ tax (kr/kg NOₓ); obligation to join NOₓ Fund or pay full rate' },
+      { sub: 'CO₂ emissions & CO₂ tax / ETS', hint: 'All combustion, flaring, venting, process releases from offshore installations', aspect: 'CO₂ emissions subject to Norwegian CO₂ tax and Norwegian ETS (kvotesystemet)' },
+      { sub: 'GHG / CO₂ reporting', hint: 'All combustion, venting, flaring, process releases — all active phases', aspect: 'GHG emissions contributing to national inventory, carbon reporting, and regulatory/fiscal obligations' },
+      { sub: 'Fugitive VOC & hydrocarbon emissions', hint: 'Flanges, valve stems, loading operations, tank venting', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
+      { sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
+      { sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
+      { sub: 'Atmospheric dispersion modelling', hint: 'Stack design, siting near sensitive receptors', aspect: 'Air quality impact on community or ecological receptors' },
+      { sub: 'Odour', hint: 'Wastewater treatment, waste handling, produced water, solvents, construction waste', aspect: 'Odour nuisance affecting community receptors' },
+      { sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
+      { sub: 'Paint & surface treatment VOCs', hint: 'Maintenance painting, blasting, coating operations', aspect: 'VOC emissions from solvents; contaminated blast grit; paint waste' },
+      { sub: 'Air quality baseline monitoring', hint: 'Facilities near sensitive receptors (residential, schools, hospitals); emission permit applications under Forurensningsloven §11; EIA', aspect: 'Permit refused or inappropriate emission limit set without pre-project background data; inability to attribute project contribution' },
+    ],
+  },
+  {
+    cat: '4. Waste, Materials & Chemicals',
+    color: 'amber',
+    items: [
+      { sub: 'Hazardous substance inventory & REACH', hint: 'Chemical specification, procurement, materials selection', aspect: 'Failure to register or control SVHCs; non-compliant use of restricted substances' },
+      { sub: 'Waste hierarchy — materials selection', hint: 'Design decisions, material specification', aspect: 'Generation of excess or non-recyclable waste due to poor design choices' },
+      { sub: 'Hazardous waste', hint: 'Excavated contaminated soil, chemical containers, insulation, first-fill residues', aspect: 'Improper storage, transport, or disposal of hazardous waste categories' },
+      { sub: 'Packaging waste', hint: 'Procurement of equipment, materials, consumables', aspect: 'Non-recyclable or excessive packaging waste volumes' },
+      { sub: 'Refrigerants & blowing agents (F-gas)', hint: 'HVAC design, insulation foam specification, fire suppression systems', aspect: 'Use of high-GWP HFCs; F-gas leakage and loss' },
+      { sub: 'Asbestos', hint: 'Legacy equipment, pipe lagging, insulation removal in older facilities', aspect: 'Asbestos fibre release during maintenance or demolition' },
+      { sub: 'NORM — naturally occurring radioactive material', hint: 'Produced water scaling, pigging returns, sand production, deposition in vessels', aspect: 'Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste' },
+      { sub: 'Radioactive measurement sources', hint: 'Density gauges, level gauges, nuclear logging tools', aspect: 'Loss, damage, or disposal of sealed radioactive sources' },
+      { sub: 'Heavy metals in systems', hint: 'Legacy coating systems (lead paint), alloy materials, anti-corrosion anodes', aspect: 'Release of lead, cadmium, mercury, or chromium during maintenance or decommissioning' },
+      { sub: 'Chemical flushing & pigging', hint: 'Commissioning clean-up, pipeline maintenance, change of service', aspect: 'Generation of chemically contaminated flush water requiring treatment and disposal' },
+      { sub: 'Tank cleaning', hint: 'Tank inspection, change of service, decommissioning', aspect: 'Oily sludge or chemical residue requiring hazardous waste disposal' },
+      { sub: 'Subsea structure removal', hint: 'Decommissioning of pipelines, umbilicals, templates, jackets', aspect: 'Contaminated materials, marine litter, seabed disturbance' },
+    ],
+  },
+  {
+    cat: '5. Land, Soil & Contamination',
+    color: 'brown',
+    items: [
+      { sub: 'Bulk excavation', hint: 'Site preparation, foundation works, cable trenching', aspect: 'Loss of topsoil; disturbance of contaminated ground; peat or organic soil release' },
+      { sub: 'Topsoil management', hint: 'Stripping, stockpiling, and reinstatement of topsoil', aspect: 'Loss of topsoil quality; failure to reinstate appropriate substrate for habitat recovery' },
+      { sub: 'Soil erosion & sediment control', hint: 'Graded surfaces, unpaved haul roads, stockpiles, borrow pits', aspect: 'Sediment runoff to watercourse; loss of topsoil from disturbed areas' },
+      { sub: 'Land contamination survey', hint: 'Previous industrial use, infilled land, leaking USTs', aspect: 'Contamination of soil or groundwater; worker and receptor exposure' },
+      { sub: 'Floodplain encroachment', hint: 'Facility siting, bund design, drainage routing', aspect: 'Increased flood risk to third parties; loss of flood storage volume' },
+      { sub: 'Habitat reinstatement', hint: 'Post-construction restoration, decommissioning, site clearance', aspect: 'Failure to reinstate disturbed ground to pre-existing or agreed habitat quality' },
+      { sub: 'Concrete demolition waste', hint: 'Structure removal, decommissioning of onshore facilities', aspect: 'Alkaline debris; potential contamination; high volume for disposal or recycling' },
+      { sub: 'Ground disturbance near infrastructure', hint: 'Pipeline crossings, road crossings, utility corridors', aspect: 'Damage to existing buried services; unplanned releases from third-party infrastructure' },
+    ],
+  },
+  {
+    cat: '6. Community, Heritage and Lanscape',
+    color: 'purple',
+    items: [
+      { sub: 'Buried archaeological remains', hint: 'Ground breaking, piling, trenching in uncharted areas', aspect: 'Disturbance or destruction of legally protected archaeological remains' },
+      { sub: 'Historic buildings & structures', hint: 'Demolition, modification, or visual impact on listed buildings', aspect: 'Harm to protected or listed built heritage' },
+      { sub: 'Seabed cultural heritage', hint: 'Subsea pipeline, cable, or anchor installation', aspect: 'Disturbance of protected wrecks or seabed archaeological sites' },
+      { sub: 'Chance find procedure', hint: 'Any ground breaking activity', aspect: 'Unanticipated discovery of artefacts, structures, or human remains' },
+      { sub: 'Cultural landscape', hint: 'Design of installations in areas with designated cultural landscape value', aspect: 'Change to the character of a culturally significant landscape' },
+      { sub: 'Archaeological Desk-Based Assessment (DBA)', hint: 'Any ground disturbance onshore; seabed operations; planning application in areas of potential archaeological sensitivity', aspect: 'Failure to identify designated sites or SMR-recorded finds before works; stop-work if remains discovered; planning consent refused or conditions set without adequate baseline' },
+      { sub: 'Visual landscape impact', hint: 'Siting of above-ground structures, masts, flare stacks, wind turbines', aspect: 'Visual intrusion on protected landscape or sensitive scenic views' },
+      { sub: 'Lighting & sky glow', hint: 'Site floodlighting, platform lighting, flare', aspect: 'Community visual intrusion; sky glow in rural, wilderness, or protected settings' },
+      { sub: 'Cumulative visual impact', hint: 'Multiple wind turbines, platforms, or industrial structures in same viewshed', aspect: 'Combined visual impact greater than sum of individual structures' },
+      { sub: 'Community stakeholder engagement', hint: 'All phases with potential community impact', aspect: 'Inadequate engagement; community complaints; loss of social licence' },
+      { sub: 'Air quality & human health', hint: 'Emissions near residential areas, schools, hospitals', aspect: 'Exceedance of air quality standards affecting community health' },
+      { sub: 'Noise & community disturbance', hint: 'Plant operations, construction, traffic', aspect: 'Breach of community noise limits; sleep disturbance; complaint trigger' },
+      { sub: 'Emergency preparedness & community safety', hint: 'Hazardous operations near populated areas', aspect: 'Inadequate emergency planning for community receptors' },
+      { sub: 'Traffic & access disruption', hint: 'Heavy haulage routes, port access, offshore logistics, abnormal loads', aspect: 'Road damage, traffic congestion, community access restriction' },
+      { sub: 'Employment & local economy', hint: 'Project workforce planning, supply chain decisions', aspect: 'Missed opportunity for local content; social licence risk' },
+      { sub: 'Indigenous peoples — Sámi', hint: 'Projects in Sámi traditional lands (Finnmark/Troms/Nordland)', aspect: 'Impact on Sámi reindeer herding, cultural heritage, and traditional land use' },
+      { sub: 'Socioeconomic baseline', hint: 'Major projects near communities; EIA requirement; IFC PS1 projects; projects affecting employment, livelihoods, or access', aspect: 'Inadequate characterisation of baseline; EIA non-compliant; social licence risk; inability to detect and attribute project-induced socioeconomic change' },
+    ],
+  },
+  {
+    cat: '10. Abnormal condition and Emergency Response',
+    color: 'darkred',
+    items: [
+      { sub: 'Oil spill response plan', hint: 'All offshore and coastal hydrocarbon operations', aspect: 'Inadequate preparedness for accidental oil release; environmental damage' },
+      { sub: 'Chemical spill & containment', hint: 'Chemical storage, dosing systems, loading and offloading', aspect: 'Release of hazardous chemicals to soil, water, or marine environment' },
+      { sub: 'Spill protection — secondary containment', hint: 'Storage tanks, chemical bunds, drip trays, offshore deck drainage', aspect: 'Inadequate bunding or containment allowing release to ground or water' },
+      { sub: 'Dropped objects — marine', hint: 'Offshore lifting, crane operations, deck work, personnel transfer', aspect: 'Loss of equipment or materials to seabed; marine debris' },
+      { sub: 'Emergency venting & blowdown', hint: 'Process upsets, ESD activation, commissioning activities', aspect: 'Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes' },
+    ],
+  },
+];
+
 // ── Color map for guide word categories ──────────────────────────────────────
 const COLOR_MAP = {
   teal:   { bg:"var(--cat-teal-bg)",   border:"var(--cat-teal-bd)",   text:"var(--cat-teal-tx)",   head:"var(--cat-teal-hd)" },
@@ -316,7 +448,9 @@ const COLOR_MAP = {
   red:    { bg:"var(--cat-red-bg)",    border:"var(--cat-red-bd)",    text:"var(--cat-red-tx)",    head:"var(--cat-red-hd)" },
   green:  { bg:"var(--cat-green-bg)",  border:"var(--cat-green-bd)",  text:"var(--cat-green-tx)",  head:"var(--cat-green-hd)" },
   blue:   { bg:"var(--cat-blue-bg)",   border:"var(--cat-blue-bd)",   text:"var(--cat-blue-tx)",   head:"var(--cat-blue-hd)" },
-  gray:   { bg:"var(--cat-gray-bg)",   border:"var(--cat-gray-bd)",   text:"var(--cat-gray-tx)",   head:"var(--cat-gray-hd)" },
+  gray:    { bg:"var(--cat-gray-bg)",    border:"var(--cat-gray-bd)",    text:"var(--cat-gray-tx)",    head:"var(--cat-gray-hd)"    },
+  brown:   { bg:"var(--cat-brown-bg)",   border:"var(--cat-brown-bd)",   text:"var(--cat-brown-tx)",   head:"var(--cat-brown-hd)"   },
+  darkred: { bg:"var(--cat-darkred-bg)", border:"var(--cat-darkred-bd)", text:"var(--cat-darkred-tx)", head:"var(--cat-darkred-hd)" },
 };
 
 // ── Theme definitions ─────────────────────────────────────────────────────────
@@ -368,6 +502,8 @@ const THEMES = {
     "--cat-green-bg": "#E8F5E9","--cat-green-bd": "#A5D6A7","--cat-green-tx": "#1B5E20","--cat-green-hd": "#2E7D52",
     "--cat-blue-bg":  "#E3F2FD","--cat-blue-bd":  "#90CAF9","--cat-blue-tx":  "#0D47A1","--cat-blue-hd":  "#1565C0",
     "--cat-gray-bg":  "#ECEFF1","--cat-gray-bd":  "#CFD8DC","--cat-gray-tx":  "#37474F","--cat-gray-hd":  "#455A64",
+    "--cat-brown-bg":"#EFEBE9","--cat-brown-bd":"#BCAAA4","--cat-brown-tx":"#3E2723","--cat-brown-hd":"#5D4037",
+    "--cat-darkred-bg":"#FCE4EC","--cat-darkred-bd":"#F48FB1","--cat-darkred-tx":"#880E4F","--cat-darkred-hd":"#AD1457",
   },
   dark: {
     "--bg":          "#0F1117",
@@ -416,6 +552,8 @@ const THEMES = {
     "--cat-green-bg": "#0A1505","--cat-green-bd": "#3B6D11","--cat-green-tx": "#C0DD97","--cat-green-hd": "#639922",
     "--cat-blue-bg":  "#070F1A","--cat-blue-bd":  "#1565C0","--cat-blue-tx":  "#85B7EB","--cat-blue-hd":  "#378ADD",
     "--cat-gray-bg":  "#1A1D26","--cat-gray-bd":  "#252830","--cat-gray-tx":  "#8B8F9A","--cat-gray-hd":  "#5F5E5A",
+    "--cat-brown-bg":"#1A1108","--cat-brown-bd":"#6D4025","--cat-brown-tx":"#DDB07A","--cat-brown-hd":"#A0622E",
+    "--cat-darkred-bg":"#1A0612","--cat-darkred-bd":"#7B1248","--cat-darkred-tx":"#F4A0C8","--cat-darkred-hd":"#C2185B",
   },
 };
 
@@ -1498,9 +1636,10 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const setOF = (k, v) => setOppForm(p => ({ ...p, [k]:v }));
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
+  // prefillRisk now inlined in button onClick — kept for legacy compatibility
   const prefillRisk = (code, item, sectionColor) => {
-    setRiskForm({ ...emptyAspect(), phase:PHASE_MAP[code]||"", area:item.area||"",
-                  aspect:item.aspect||"", condition:COND_MAP[code]||"Normal", _color:sectionColor||"" });
+    setRiskForm({ ...emptyAspect(), area:item.area||item.sub||"",
+                  aspect:item.aspect||"", _color:sectionColor||"" });
     setView("form");
   };
 
@@ -1537,16 +1676,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const prioLabel = oppScore>=75?"High priority":oppScore>=30?"Medium priority":"Low priority";
   const oppSc = oppScore>=75?{bg:T.tealBg,c:T.tealDark}:oppScore>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
 
-  // Risk guide data
-  const allRiskGuide = Object.entries(GW_RISK).flatMap(([code, sections]) =>
-    sections.map(s=>({...s, code}))
-  );
-  const filteredRiskGuide = screenSearch.trim()
-    ? allRiskGuide.map(s=>({...s, items:s.items.filter(item=>{
-        const q=screenSearch.toLowerCase();
-        return (item.kw||"").toLowerCase().includes(q)||(item.q||"").toLowerCase().includes(q)||(item.aspect||"").toLowerCase().includes(q);
-      })})).filter(s=>s.items.length>0)
-    : allRiskGuide;
+  // Risk guide data now uses RISK_CATEGORIES constant — filteredRiskGuide removed
 
   // Scope button style
   const ScopeBtn = ({ label, sub, color, onClick }) => (
@@ -1614,75 +1744,71 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
       {/* ── Content ── */}
       <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
 
-        {/* ══ RISKS GUIDE ══════════════════════════════════════════════════════════ */}
-        {view === "guide" && isRisks && (
-          <div>
-            {filteredRiskGuide.length === 0 && (
-              <div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>
-                No guide words match your search.
-              </div>
-            )}
-            {Object.entries(GW_RISK).map(([code, sections]) => {
-              const stageSections = filteredRiskGuide.filter(s=>s.code===code);
-              if (stageSections.length===0) return null;
-              const stage = EPCIC_STAGES.find(s=>s.code===code);
-              const stageKey = "stage_"+code;
-              const stageOpen = expanded[stageKey]!==false;
-              return (
-                <div key={code} style={{ marginBottom:8 }}>
-                  <div onClick={()=>toggleCat(stageKey)}
-                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                             padding:"8px 14px", background:T.surface,
-                             border:"1px solid "+T.border, borderRadius:6,
-                             cursor:"pointer", userSelect:"none",
-                             marginBottom:stageOpen?6:0 }}>
-                    <div>
-                      <span style={{ fontSize:13, fontWeight:700, color:T.text }}>{stage?.label||code}</span>
-                      {stage?.sub&&<span style={{ fontSize:11, color:T.faint, marginLeft:10 }}>{stage.sub}</span>}
-                    </div>
-                    <span style={{ fontSize:12, color:T.faint }}>{stageOpen?"▾":"▸"}</span>
-                  </div>
-                  {stageOpen && stageSections.map(section => {
-                    const col = COLOR_MAP[section.color]||COLOR_MAP.gray;
-                    const key = "R"+code+section.cat;
-                    const open = screenSearch.trim()?true:expanded[key]!==false;
-                    return (
-                      <div key={key} style={{ marginBottom:6, marginLeft:8 }}>
-                        <div onClick={()=>toggleCat(key)}
-                          style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                                   padding:"7px 14px", background:col.head, borderRadius:5,
-                                   cursor:"pointer", userSelect:"none", marginBottom:open?6:0 }}>
-                          <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{section.cat}</span>
-                          <span style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>{open?"▾":"▸"}</span>
-                        </div>
-                        {open && (
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                            {section.items.map((item,i) => (
-                              <button key={i}
-                                onClick={()=>prefillRisk(code,item,section.color)}
-                                style={{ textAlign:"left", padding:"9px 12px", borderRadius:7,
-                                         border:"1.5px solid "+col.border, background:col.bg,
-                                         cursor:"pointer", fontFamily:T.sans, display:"flex",
-                                         flexDirection:"column", gap:4, transition:"filter 0.1s" }}
-                                onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
-                                onMouseLeave={e=>e.currentTarget.style.filter="none"}>
-                                <span style={{ fontSize:12, fontWeight:700, color:col.head, lineHeight:1.3 }}>{item.kw}</span>
-                                <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{item.q}</span>
-                                <span style={{ fontSize:10, color:T.muted, lineHeight:1.35 }}>
-                                  <strong style={{ color:T.text }}>→</strong> {item.aspect}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+        {/* ══ RISKS GUIDE — category-based, mirrors opportunities layout ══════════ */}
+        {view === "guide" && isRisks && (() => {
+          // Filter across all categories/items
+          const q = screenSearch.trim().toLowerCase();
+          const filtered = RISK_CATEGORIES.map(cat => ({
+            ...cat,
+            items: q ? cat.items.filter(it =>
+              it.sub.toLowerCase().includes(q) ||
+              it.hint.toLowerCase().includes(q) ||
+              it.aspect.toLowerCase().includes(q)
+            ) : cat.items
+          })).filter(cat => cat.items.length > 0);
+
+          return (
+            <div>
+              {filtered.length === 0 && (
+                <div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>
+                  No aspects match your search.
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+              {filtered.map(cat => {
+                const col = COLOR_MAP[cat.color]||COLOR_MAP.gray;
+                const key = "risk_cat_"+cat.cat;
+                const open = q ? true : expanded[key]!==false;
+                return (
+                  <div key={cat.cat} style={{ marginBottom:8 }}>
+                    <div onClick={()=>toggleCat(key)}
+                      style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                               padding:"8px 16px", background:col.head, borderRadius:5,
+                               cursor:"pointer", userSelect:"none", marginBottom:open?7:0 }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{cat.cat}</span>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:10, color:"rgba(255,255,255,0.6)" }}>{cat.items.length} aspects</span>
+                        <span style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>{open?"▾":"▸"}</span>
+                      </div>
+                    </div>
+                    {open && (
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                        {cat.items.map((item,i) => (
+                          <button key={i}
+                            onClick={()=>{
+                              setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub, _color:cat.color});
+                              setView("form");
+                            }}
+                            style={{ textAlign:"left", padding:"9px 12px", borderRadius:7,
+                                     border:"1.5px solid "+col.border, background:col.bg,
+                                     cursor:"pointer", fontFamily:T.sans, display:"flex",
+                                     flexDirection:"column", gap:4, transition:"filter 0.1s" }}
+                            onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
+                            onMouseLeave={e=>e.currentTarget.style.filter="none"}>
+                            <span style={{ fontSize:12, fontWeight:700, color:col.head, lineHeight:1.3 }}>{item.sub}</span>
+                            <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{item.hint}</span>
+                            <span style={{ fontSize:10, color:T.muted, lineHeight:1.35 }}>
+                              <strong style={{ color:T.text }}>→</strong> {item.aspect}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* ══ OPPORTUNITIES GUIDE — Scope-based ══════════════════════════════════ */}
         {view === "guide" && !isRisks && (
