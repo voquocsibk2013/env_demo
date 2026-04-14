@@ -627,30 +627,22 @@ function calcSig(a) {
   return "Low";
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
-function snapKg(snap) {
-  if (!snap) return {identified:0, actual:0};
-  const all = [...(snap.lines||[]),...(snap.customRows||[])];
+function snapKg(phase) {
+  // Works for both GhgPhase and legacy GhgSnapshot
+  if (!phase) return {identified:0, actual:0};
+  const lines = phase.lines||[];
+  const reduction = l => parseFloat(l.reduction||l.qty||0);
   return {
-    identified: all.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
-    actual:     all.filter(l=>l.savingType==="actual" ).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
+    identified: lines.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+reduction(l)*(parseFloat(l.cf)||0),0),
+    actual:     lines.filter(l=>l.savingType==="actual" ).reduce((s,l)=>s+reduction(l)*(parseFloat(l.cf)||0),0),
   };
 }
 function calcGhgTotal(o) {
-  // Returns the highest identified saving across ALL phases (biggest number = final reportable value)
-  // If any phase has actual savings, returns that instead
-  if (!o.showQuantitative && o.calcType!=="quantitative") return null;
-  const snaps = o.ghgSnapshots||[];
-  if (snaps.length===0) {
-    const allLines = [...(o.ghgLines||[]), ...(o.customGhgRows||[])];
-    const actual = allLines.filter(l=>l.savingType==="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-    const identified = allLines.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0);
-    return (actual||identified)||null;
-  }
-  const totals = snaps.map(s=>snapKg(s));
-  // Biggest identified across all phases is the canonical reportable figure.
-  // Actual savings are tracked separately — they do not replace identified for this total.
-  const maxIdentified = Math.max(...totals.map(t=>t.identified));
-  return maxIdentified>0 ? maxIdentified : null;
+  // Biggest identified saving across all ghgPhases = canonical reportable value
+  const phases = o.ghgPhases||o.ghgSnapshots||[]; // support both formats
+  if (phases.length===0) return null;
+  const maxId = Math.max(...phases.map(p=>snapKg(p).identified));
+  return maxId>0 ? maxId : null;
 }
 
 function inferOppType(oppText) {
@@ -696,46 +688,92 @@ const emptyOpp = () => ({
   envValue:3, bizValue:3, feasibility:3,
   owner:"", status:"Open", _color:"",
   createdAt:"", updatedAt:"",
-  showQualitative: false,
-  showQuantitative: false,
-  prefillGhgIds: [],
-  ghgSnapshots: [],
-  qualPhases: [],  // [{id,label,date,note}] — separate from quantitative snapshots
+  // Savings — two separate tracks with independent phases
+  qualPhases: [],   // [{id, label, date, note}]
+  ghgPhases:  [],   // [{id, label, date, note, lines:[]}]
+  // lines shape: {id, custom, scope, type, unit, reduction, baseline, cf, ref, savingType}
+  // custom:false = standard GHG_LINES row; custom:true = user-added row
 });
 
-// Migrate old opp format to snapshot-based format
-const migrateOppSnaps = (base) => {
-  if ((base.ghgSnapshots||[]).length > 0) return base.ghgSnapshots;
-  const oldLines = base.ghgLines||[];
-  const oldCustom = base.customGhgRows||[];
-  const hasData = oldLines.some(l=>parseFloat(l.qty)>0) || oldCustom.length>0;
-  const hasNote = !!(base.ghgNote||"").trim();
-  if (!hasData && !hasNote) return [];
-  return [{
-    id:"snap_migrated",
-    label:"Initial data",
-    date: base.createdAt||new Date().toISOString(),
-    note: base.ghgNote||"",
-    lines: GHG_LINES.map(l => {
-      const s = oldLines.find(x=>x.id===l.id);
-      return { id:l.id, qty:s?s.qty:"", baseline:s?s.baseline||"":"",
-               cf:(s&&s.cf!=="")?s.cf:l.cfDefault, ref:s?s.ref||"":"",
-               savingType:s&&s.savingType!=="superseded"?s.savingType:"identified" };
-    }),
-    customRows: oldCustom.map(r=>({...r, savingType:(r.savingType||"").replace("superseded","identified")||"identified"}))
-  }];
-};
-
-const emptySnapshot = (label, fromSnap) => ({
-  id: "snap_"+Date.now(),
-  label: label||"New phase",
+// ── GhgPhase factory ──────────────────────────────────────────────────────────
+const emptyGhgPhase = (label, fromPhase) => ({
+  id: "ghgp_"+Date.now(),
+  label: label||"Phase 1",
   date: new Date().toISOString(),
   note: "",
-  lines: fromSnap
-    ? JSON.parse(JSON.stringify(fromSnap.lines))
-    : GHG_LINES.map(l=>({ id:l.id, qty:"", baseline:"", cf:l.cfDefault, ref:"", savingType:"identified" })),
-  customRows: fromSnap ? JSON.parse(JSON.stringify(fromSnap.customRows||[])) : []
+  lines: fromPhase
+    ? JSON.parse(JSON.stringify(fromPhase.lines))
+    : GHG_LINES.map(l=>({
+        id:l.id, custom:false, scope:l.scope, type:l.type, unit:l.unit,
+        reduction:"", baseline:"", cf:l.cfDefault, ref:"", savingType:"identified"
+      }))
 });
+
+// ── Migration: any saved format → current format ──────────────────────────────
+const migrateOpp = (base) => {
+  // Already migrated
+  if ((base.ghgPhases||[]).length > 0 || (base.qualPhases||[]).length > 0)
+    return { ghgPhases: base.ghgPhases||[], qualPhases: base.qualPhases||[] };
+
+  // From ghgSnapshots[] format (v2→v3)
+  if ((base.ghgSnapshots||[]).length > 0) {
+    const ghgPhases = base.ghgSnapshots.map(snap => ({
+      id: snap.id||("ghgp_"+Date.now()),
+      label: snap.label||"Phase",
+      date: snap.date||new Date().toISOString(),
+      note: snap.note||"",
+      lines: [
+        // standard lines: rename qty→reduction, drop custom:false implied
+        ...(snap.lines||[]).map(l=>({
+          id:l.id, custom:false, scope:l.scope||"", type:l.type||"",
+          unit:l.unit||"", reduction:l.qty||l.reduction||"",
+          baseline:l.baseline||"", cf:l.cf||"", ref:l.ref||"",
+          savingType:l.savingType||"identified"
+        })),
+        // custom rows: merge in with custom:true
+        ...(snap.customRows||[]).map(r=>({
+          id:r.uid||("c_"+Date.now()), custom:true,
+          scope:r.scope||"", type:r.type||"", unit:r.unit||"kg",
+          reduction:r.qty||r.reduction||"", baseline:r.baseline||"",
+          cf:r.cf||"", ref:r.ref||"", savingType:r.savingType||"identified"
+        }))
+      ]
+    }));
+    return { ghgPhases, qualPhases: base.qualPhases||[] };
+  }
+
+  // From raw ghgLines[] format (v1)
+  const oldLines = base.ghgLines||[];
+  const oldCustom = base.customGhgRows||[];
+  const hasData = oldLines.some(l=>parseFloat(l.qty||l.reduction)>0) || oldCustom.length>0;
+  const hasNote = !!(base.ghgNote||"").trim();
+  if (!hasData && !hasNote) return { ghgPhases:[], qualPhases:[] };
+  return {
+    ghgPhases: [{
+      id:"ghgp_migrated", label:"Initial data",
+      date: base.createdAt||new Date().toISOString(),
+      note: base.ghgNote||"",
+      lines: [
+        ...GHG_LINES.map(l=>{
+          const s = oldLines.find(x=>x.id===l.id);
+          return { id:l.id, custom:false, scope:l.scope, type:l.type, unit:l.unit,
+                   reduction:s?s.qty||s.reduction||"":"", baseline:s?s.baseline||"":"",
+                   cf:(s&&s.cf!=="")?s.cf:l.cfDefault, ref:s?s.ref||"":"",
+                   savingType:s&&s.savingType!=="superseded"?s.savingType:"identified" };
+        }),
+        ...oldCustom.map(r=>({
+          id:r.uid||("c_"+Date.now()), custom:true,
+          scope:r.scope||"", type:r.type||"", unit:r.unit||"kg",
+          reduction:r.qty||r.reduction||"", baseline:r.baseline||"",
+          cf:r.cf||"", ref:r.ref||"",
+          savingType:(r.savingType||"").replace("superseded","identified")||"identified"
+        }))
+      ]
+    }],
+    qualPhases: []
+  };
+};
+
 const newProject = () => {
   const ts = Date.now();
   return {
@@ -743,7 +781,7 @@ const newProject = () => {
     projectId: "PRJ-"+ts.toString().slice(-5),
     name:"", company:"", contract:"", type:"", phase:"",
     createdAt: new Date().toISOString(),
-    aspects:[], opps:[], changelog:[]
+    aspects:[], opportunities:[], changelog:[]
   };
 };
 
@@ -908,7 +946,7 @@ function relevantLines(type, prefillIds) {
 function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGroups,
                         customForScope, SCOPE_COLORS, thS, tdS, fmt, snapKgFn,
                         onSetLine, onSetCustomRow, onAddCustomRow, onDelCustomRow }) {
-  const t = snapKgFn(snap);
+  const t = snapKgFn(snap);  // {identified, actual}
   return (
     <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:T.sans}}>
@@ -928,7 +966,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
             const totalRows=slines.length+crows.length+1;
             return [
               ...slines.map((l,li)=>{
-                const qty=parseFloat(l.qty)||0,cf=parseFloat(l.cf)||0;
+                const qty=parseFloat(l.reduction||l.qty)||0,cf=parseFloat(l.cf)||0;
                 const sav=qty&&cf?qty*cf:null;
                 return(
                   <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,background:qty>0?sc2.bg+"44":undefined}}>
@@ -947,11 +985,11 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                         :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.baseline||"—"}</span>}
                     </td>
                     <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
-                      {editable?<input type="number" min={0} value={l.qty} onChange={e=>onSetLine(si,l.id,"qty",e.target.value)}
+                      {editable?<input type="number" min={0} value={l.reduction||l.qty||""} onChange={e=>onSetLine(si,l.id,"reduction",e.target.value)}
                         placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
                           border:"1px solid "+(qty>0?sc2.bd:T.border),borderRadius:4,
                           background:qty>0?sc2.bg:T.surface,color:qty>0?sc2.c:T.text}}/>
-                        :<span style={{fontFamily:T.mono,fontSize:12,fontWeight:qty>0?600:400,color:qty>0?sc2.c:T.faint}}>{qty||"—"}</span>}
+                        :<span style={{fontFamily:T.mono,fontSize:12,fontWeight:qty>0?600:400,color:qty>0?sc2.c:T.faint}}>{l.reduction||l.qty||"—"}</span>}
                     </td>
                     <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
                       {l.cfFixed?<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.cfDefault}</span>
@@ -985,38 +1023,38 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                 );
               }),
               ...crows.map(cr=>{
-                const cqty=parseFloat(cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
+                const cqty=parseFloat(cr.reduction||cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
                 const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
                 return(
                   <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg+"22"}}>
                     {visibleScopes.length>1&&<td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd}}/>}
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
-                      {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.uid,"type",e.target.value)}
+                      {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"type",e.target.value)}
                         placeholder="Custom type" style={{width:"100%",padding:"2px 5px",fontSize:11,
                           border:"1px solid "+T.amberBd,borderRadius:3,background:T.amberBg,color:T.amber}}/>
                         :<span style={{fontSize:11,color:T.amber}}>{cr.type||"—"}</span>}
                     </td>
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
-                      {editable?<input value={cr.unit} onChange={e=>onSetCustomRow(si,cr.uid,"unit",e.target.value)}
+                      {editable?<input value={cr.unit} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"unit",e.target.value)}
                         placeholder="kg" style={{width:40,textAlign:"right",padding:"2px 4px",fontSize:10,
                           border:"1px solid "+T.border,borderRadius:3,background:T.surface,color:T.muted}}/>
                         :<span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>{cr.unit||"—"}</span>}
                     </td>
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
-                      {editable?<input type="number" min={0} value={cr.baseline||""} onChange={e=>onSetCustomRow(si,cr.uid,"baseline",e.target.value)}
+                      {editable?<input type="number" min={0} value={cr.baseline||""} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"baseline",e.target.value)}
                         placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
                           border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
                         :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{cr.baseline||"—"}</span>}
                     </td>
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
-                      {editable?<input type="number" min={0} value={cr.qty} onChange={e=>onSetCustomRow(si,cr.uid,"qty",e.target.value)}
+                      {editable?<input type="number" min={0} value={cr.reduction||cr.qty||""} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"reduction",e.target.value)}
                         placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
                           border:"1px solid "+(cqty>0?sc2c.bd:T.border),borderRadius:4,
                           background:cqty>0?sc2c.bg:T.surface,color:cqty>0?sc2c.c:T.text}}/>
-                        :<span style={{fontFamily:T.mono,fontSize:12,color:cqty>0?sc2c.c:T.faint}}>{cqty||"—"}</span>}
+                        :<span style={{fontFamily:T.mono,fontSize:12,color:cqty>0?sc2c.c:T.faint}}>{cr.reduction||cr.qty||"—"}</span>}
                     </td>
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
-                      {editable?<input type="number" min={0} value={cr.cf} onChange={e=>onSetCustomRow(si,cr.uid,"cf",e.target.value)}
+                      {editable?<input type="number" min={0} value={cr.cf} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"cf",e.target.value)}
                         placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
                           border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
                         :<span style={{fontFamily:T.mono,fontSize:11,color:T.amber}}>{cr.cf||"—"}</span>}
@@ -1025,7 +1063,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                       {csav!=null?csav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
                     </td>
                     <td style={{padding:"2px 5px",borderBottom:"1px solid "+T.rowBd}}>
-                      {editable?<select value={cr.savingType||"identified"} onChange={e=>onSetCustomRow(si,cr.uid,"savingType",e.target.value)}
+                      {editable?<select value={cr.savingType||"identified"} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"savingType",e.target.value)}
                         style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
                           border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:T.blueBd),
                           background:(cr.savingType||"identified")==="actual"?T.tealBg:T.blueBg,
@@ -1048,7 +1086,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
               }),
               <tr key={"add_"+scope+"_"+si}>
                 <td colSpan={9} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
-                  {editable&&<button onClick={()=>onAddCustomRow(si,scope)}
+                  {editable&&<button onClick={()=>onAddCustomRow(si,scope)}  /* adds to lines with custom:true */
                     style={{fontSize:11,color:(SCOPE_COLORS[scope]||{c:T.slate}).c,background:"transparent",
                       border:"none",cursor:"pointer",padding:"2px 4px",fontFamily:T.sans,fontWeight:500}}>
                     + Add custom row
@@ -1178,7 +1216,7 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
 function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const [activeSnapIdx, setActiveSnapIdx] = useState(
-    () => Math.max(0,(f.ghgSnapshots||[]).length-1)
+    () => Math.max(0,(f.ghgPhases||[]).length-1)
   );
 
   const score = calcOppScore(f);
@@ -1186,7 +1224,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const sc = score>=75?{bg:T.tealBg,c:T.tealDark}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
 
   // Keep activeSnapIdx in bounds
-  const snaps = f.ghgSnapshots||[];
+  const snaps = f.ghgPhases||[];
   const safeIdx = Math.min(activeSnapIdx, snaps.length-1);
   const activeSnap = snaps[safeIdx]||null;
   // Only the latest (last) phase is editable and deletable.
@@ -1196,47 +1234,43 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
 
   // Snapshot updater targeting a specific index
   const updateSnap = (si, updater) => setF(p=>{
-    const s=[...(p.ghgSnapshots||[])];
-    s[si]=updater(s[si]); return {...p,ghgSnapshots:s};
+    const s=[...(p.ghgPhases||[])];
+    s[si]=updater(s[si]); return {...p,ghgPhases:s};
   });
   const setSnapField = (si,k,v) => updateSnap(si,s=>({...s,[k]:v}));
   const setLine      = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
-  const addCustomRow = (si,scope) => updateSnap(si,s=>({...s,customRows:[...(s.customRows||[]),
-    {uid:"c"+Date.now(),scope,type:"",unit:"kg",qty:"",baseline:"",cf:"",ref:"",savingType:"identified"}]}));
-  const delCustomRow = (si,uid) => updateSnap(si,s=>({...s,customRows:(s.customRows||[]).filter(r=>r.uid!==uid)}));
-  const setCustomRow = (si,uid,k,v) => updateSnap(si,s=>({...s,customRows:(s.customRows||[]).map(r=>r.uid===uid?{...r,[k]:v}:r)}));
+  const addCustomRow = (si,scope) => updateSnap(si,s=>({...s,lines:[...(s.lines||[]),
+    {id:"c_"+Date.now(),custom:true,scope,type:"",unit:"kg",reduction:"",baseline:"",cf:"",ref:"",savingType:"identified"}]}));
+  const delCustomRow = (si,id) => updateSnap(si,s=>({...s,lines:(s.lines||[]).filter(l=>l.id!==id)}));
+  const setCustomRow = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
 
   const addPhaseSnapshot = () => {
     const prev = snaps[snaps.length-1]||null;
     const n = snaps.length+1;
-    setF(p=>({...p,ghgSnapshots:[...p.ghgSnapshots,emptySnapshot("Phase "+n,prev)]}));
+    setF(p=>({...p,ghgPhases:[...p.ghgPhases,emptyGhgPhase("Phase "+n,prev)]}));
     setActiveSnapIdx(n-1); // jump to new latest
   };
   const deleteLatestPhase = () => {
     if (snaps.length === 0) return;
     const phase = snaps[snaps.length-1];
     if (!window.confirm("Delete phase \"" + (phase?.label||"this phase") + "\"? This cannot be undone.")) return;
-    setF(p=>({...p,ghgSnapshots:p.ghgSnapshots.slice(0,-1)}));
+    setF(p=>({...p,ghgPhases:p.ghgPhases.slice(0,-1)}));
     setActiveSnapIdx(Math.max(0, snaps.length-2));
   };
 
+  // showQuantitative derived from ghgPhases.length > 0
+  const hasQuantitative = snaps.length > 0;
   const toggleQuantitative = () => {
-    const next = !f.showQuantitative;
-    setF(p=>{
-      const s=p.ghgSnapshots||[];
-      return {...p,showQuantitative:next,ghgSnapshots:next&&s.length===0?[emptySnapshot("Phase 1",null)]:s};
-    });
-    if(!f.showQuantitative) setActiveSnapIdx(0);
+    if (hasQuantitative) {
+      // collapse = just switch view; data preserved
+      setF(p=>({...p,ghgPhases:p.ghgPhases})); // noop — toggle handled by UI
+    } else {
+      setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]}));
+      setActiveSnapIdx(0);
+    }
   };
 
-  const snapTotal = (snap) => {
-    if(!snap) return {identified:0,actual:0};
-    const all=[...(snap.lines||[]),...(snap.customRows||[])];
-    return {
-      identified:all.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
-      actual:    all.filter(l=>l.savingType==="actual" ).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.cf)||0),0),
-    };
-  };
+  const snapTotal = snapKg; // delegate to module-level snapKg
   const fmt = v => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e":v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
 
   const SCOPE_COLORS = {
@@ -1386,45 +1420,52 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           <SectionLabel style={{margin:0}}>Savings estimate</SectionLabel>
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>{
-                const next=!f.showQualitative;
-                if(next && (f.qualPhases||[]).length===0){
-                  // auto-create Phase 1
-                  setF(p=>({...p,showQualitative:true,qualPhases:[{id:"qp_"+Date.now(),label:"Phase 1",date:new Date().toISOString(),note:""}]}));
+                const qp=f.qualPhases||[];
+                if(qp.length===0){
+                  setF(p=>({...p,qualPhases:[{id:"qp_"+Date.now(),label:"Phase 1",date:new Date().toISOString(),note:""}]}));
                 } else {
-                  set("showQualitative",next);
+                  setF(p=>({...p,qualPhases:[]})); // hide = clear phases (confirmed by user)
                 }
               }}
               style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
                      fontFamily:T.sans,borderRadius:6,
-                     background:f.showQualitative?T.slate:"transparent",
-                     color:f.showQualitative?"#fff":T.muted,
-                     border:"1px solid "+(f.showQualitative?T.slate:T.border)}}>
-              Qualitative {f.showQualitative?"▾":"▸"}
+                     background:(f.qualPhases||[]).length>0?T.slate:"transparent",
+                     color:(f.qualPhases||[]).length>0?"#fff":T.muted,
+                     border:"1px solid "+((f.qualPhases||[]).length>0?T.slate:T.border)}}>
+              Qualitative {(f.qualPhases||[]).length>0?"▾":"▸"}
             </button>
-            <button onClick={toggleQuantitative}
+            <button onClick={()=>{
+                if(hasQuantitative){
+                  if(window.confirm("Remove all quantitative phases? Data will be lost."))
+                    setF(p=>({...p,ghgPhases:[]}));
+                } else {
+                  setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]}));
+                  setActiveSnapIdx(0);
+                }
+              }}
               style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
                      fontFamily:T.sans,borderRadius:6,
-                     background:f.showQuantitative?T.teal:"transparent",
-                     color:f.showQuantitative?"#fff":T.muted,
-                     border:"1px solid "+(f.showQuantitative?T.teal:T.border)}}>
-              Quantitative {f.showQuantitative?"▾":"▸"}
+                     background:hasQuantitative?T.teal:"transparent",
+                     color:hasQuantitative?"#fff":T.muted,
+                     border:"1px solid "+(hasQuantitative?T.teal:T.border)}}>
+              Quantitative {hasQuantitative?"▾":"▸"}
             </button>
           </div>
         </div>
 
         {/* Qualitative — own phase list, rendered via top-level component (hooks rule) */}
-        {f.showQualitative && (
+        {(f.qualPhases||[]).length > 0 && (
           <QualPhasesSection
             qualPhases={f.qualPhases||[]}
             qualNote={f.qualNote||""}
-            showQuantitative={f.showQuantitative}
+            showQuantitative={hasQuantitative}
             onSetPhases={v=>set("qualPhases",v)}
             onSetNote={v=>set("qualNote",v)}
           />
         )}
 
         {/* Quantitative — phase tabs + table */}
-        {f.showQuantitative && snaps.length > 0 && (
+        {hasQuantitative && snaps.length > 0 && (
           <div>
             {/* Phase pill tabs */}
             <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
@@ -1493,10 +1534,15 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               const prefillIds=f.prefillGhgIds||[];
               const visibleLines=relevantLines(f.type,prefillIds);
               const visibleScopes=[...new Set(visibleLines.map(l=>l.scope))];
+              const stdLines=(activeSnap.lines||[]).filter(l=>!l.custom);
               const mergedLines=visibleLines.map(l=>{
-                const s=(activeSnap.lines||[]).find(x=>x.id===l.id);
-                return{...l,qty:s?s.qty:"",baseline:s?s.baseline||"":"",
-                       cf:(s&&s.cf!=="")?s.cf:l.cfDefault,ref:s?s.ref||"":"",savingType:s?s.savingType:"identified"};
+                const s=stdLines.find(x=>x.id===l.id);
+                return{...l,
+                  reduction:s?s.reduction||s.qty||"":"",
+                  baseline:s?s.baseline||"":"",
+                  cf:(s&&s.cf!=="")?s.cf:l.cfDefault,
+                  ref:s?s.ref||"":"",
+                  savingType:s?s.savingType:"identified"};
               });
               const scopeGroups=visibleScopes.reduce((acc,sc)=>{acc[sc]=mergedLines.filter(l=>l.scope===sc);return acc;},{});
               const SCOPE_COLORS={"Scope 1":{bg:T.redBg,c:T.red,bd:T.redBd},"Scope 2":{bg:T.blueBg,c:T.blue,bd:T.blueBd},"Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},"Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}};
@@ -1505,7 +1551,8 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               return <GhgSnapTable
                 snap={activeSnap} si={safeIdx} editable={isActive(safeIdx)}
                 visibleScopes={visibleScopes} mergedLines={mergedLines}
-                scopeGroups={scopeGroups} customForScope={activeSnap.customRows||[]}
+                scopeGroups={scopeGroups}
+                customForScope={(activeSnap.lines||[]).filter(l=>l.custom && visibleScopes.some(sc=>l.scope===sc||!l.scope))}
                 SCOPE_COLORS={SCOPE_COLORS} thS={thS2} tdS={tdS2} fmt={fmt}
                 snapKgFn={snapKg}
                 onSetLine={setLine} onSetCustomRow={setCustomRow}
@@ -1533,14 +1580,15 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
 // ── Opp form ──────────────────────────────────────────────────────────────────
 function OppForm({ opp, onSave, onCancel }) {
   const base = { ...emptyOpp(), ...opp };
+  const migrated = migrateOpp(base);
   const [f, setF] = useState({
     ...base,
-    showQualitative: base.showQualitative ?? !!(base.ghgNote||(base.calcType==="qualitative")),
-    showQuantitative: base.showQuantitative ?? (base.calcType==="quantitative"),
-    ghgSnapshots: migrateOppSnaps(base),
-    prefillGhgIds: base.prefillGhgIds||[],
-    qualPhases: base.qualPhases||[],
+    ghgPhases:   migrated.ghgPhases,
+    qualPhases:  migrated.qualPhases,
+    // showQualitative / showQuantitative derived from phase arrays — not persisted
   });
+  // Transient screening hint — not stored on opp record
+  const [prefillGhgIds] = useState(base.prefillGhgIds||[]);
   return (
     <div style={{maxWidth:900,margin:"0 auto",padding:"1.5rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem",
@@ -1657,10 +1705,10 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
     const newOpp = {
       ...emptyOpp(),
       type, description, _color:color||"",
-      showQuantitative: ghgIds&&ghgIds.length>0,
-      prefillGhgIds: ghgIds||[],
-      ghgSnapshots: ghgIds&&ghgIds.length>0 ? [emptySnapshot("Phase 1", null)] : [],
+      ghgPhases: ghgIds&&ghgIds.length>0 ? [emptyGhgPhase("Phase 1", null)] : [],
     };
+    // Store prefillGhgIds transiently on the object for form init (not persisted)
+    newOpp.prefillGhgIds = ghgIds||[];
     setOppForm(newOpp);
     setNoxWarn(!!warn);
     setView("form");
@@ -1947,7 +1995,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const aspects = project.aspects || [];
-  const opps    = project.opps    || [];
+  const opps    = project.opportunities || project.opps || [];
   const changelog = project.changelog || [];
   const nextRef = (arr, pfx) => pfx+"-"+String(arr.length+1).padStart(3,"0");
 
@@ -1977,7 +2025,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const updated = isEdit ? opps.map(x=>x.id===o.id?withTs:x)
                            : [...opps,{...withTs,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
     const ref = isEdit ? o.ref : nextRef(opps,"OPP");
-    onChange({ ...project, opps:updated,
+    onChange({ ...project, opportunities:updated,
                changelog:logChange(isEdit?"Edited opportunity":"Added opportunity",
                  `${ref}: ${(withTs.description||"").slice(0,60)}`) });
     setEditOpp(null);
@@ -1987,7 +2035,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                changelog:logChange("Deleted aspect", `${a.ref}: ${(a.aspect||"").slice(0,60)}`) });
   };
   const deleteOpp = (o) => {
-    onChange({ ...project, opps:opps.filter(x=>x.id!==o.id),
+    onChange({ ...project, opportunities:opps.filter(x=>x.id!==o.id),
                changelog:logChange("Deleted opportunity", `${o.ref}: ${(o.description||"").slice(0,60)}`) });
   };
 
@@ -2915,7 +2963,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
   const visibleProjects = activeContract==="__all__" ? projects
     : projects.filter(p => (activeContract==="__none__" ? !(p.contract||"").trim() : (p.contract||"").trim()===activeContract));
   const visAspects = visibleProjects.flatMap(p=>p.aspects||[]);
-  const visOpps    = visibleProjects.flatMap(p=>p.opps||[]);
+  const visOpps    = visibleProjects.flatMap(p=>p.opportunities||p.opps||[]);
   const visSig     = visAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
   const visWatch   = visAspects.filter(a=>calcSig(a)==="WATCH").length;
   const visLow     = visAspects.filter(a=>calcSig(a)==="Low").length;
@@ -2944,7 +2992,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
 
   const ProjectCard = ({ p }) => {
     const asp   = p.aspects||[];
-    const opp   = p.opps||[];
+    const opp   = p.opportunities||p.opps||[];
     const sig   = asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
     const watch = asp.filter(a=>calcSig(a)==="WATCH").length;
     const low   = asp.filter(a=>calcSig(a)==="Low").length;
