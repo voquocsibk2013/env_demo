@@ -866,7 +866,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
   const score = calcScore(f);
   const sig   = calcSig(f);
   return (
-    <div style={{ maxWidth:800, margin:"0 auto", padding:"1.5rem" }}>
+    <div style={{ padding:"1.25rem" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
                     paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
         <Btn onClick={onCancel} variant="ghost">Back</Btn>
@@ -1590,7 +1590,7 @@ function OppForm({ opp, onSave, onCancel }) {
   // Transient screening hint — not stored on opp record
   const [prefillGhgIds] = useState(base.prefillGhgIds||[]);
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:"1.5rem"}}>
+    <div style={{padding:"1.25rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem",
                    paddingBottom:"1rem",borderBottom:"1px solid "+T.border}}>
         <Btn onClick={onCancel} variant="ghost">Back</Btn>
