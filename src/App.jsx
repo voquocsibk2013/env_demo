@@ -2156,8 +2156,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const changelog = project.changelog || [];
   const nextRef = (arr, pfx) => pfx+"-"+String(arr.length+1).padStart(3,"0");
 
-  const logChange = (action, detail) => {
-    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail };
+  const logChange = (action, detail, fields) => {
+    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail, fields:fields||[] };
     return [...(project.changelog||[]), entry];
   };
 
@@ -2169,9 +2169,32 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const updated = isEdit ? aspects.map(x=>x.id===a.id?withTs:x)
                            : [...aspects,{...withTs,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
     const ref = isEdit ? a.ref : nextRef(aspects,"ASP");
+    const aspFields = isEdit ? (() => {
+      const prev = aspects.find(x=>x.id===a.id)||{};
+      const f = [];
+      if(prev.aspect    !==withTs.aspect)     f.push({k:"Aspect",    v:(withTs.aspect||"").slice(0,80)});
+      if(prev.phase     !==withTs.phase)      f.push({k:"Phase",     v:withTs.phase});
+      if(prev.area      !==withTs.area)       f.push({k:"Area",      v:withTs.area});
+      if(prev.activity  !==withTs.activity)   f.push({k:"Activity",  v:(withTs.activity||"").slice(0,60)});
+      if(prev.impact    !==withTs.impact)     f.push({k:"Impact",    v:(withTs.impact||"").slice(0,80)});
+      if(prev.condition !==withTs.condition)  f.push({k:"Condition", v:withTs.condition});
+      if(prev.severity  !==withTs.severity||prev.probability!==withTs.probability)
+        f.push({k:"Score", v:`C${withTs.severity}×P${withTs.probability}`});
+      if(prev.status    !==withTs.status)     f.push({k:"Status",    v:withTs.status});
+      if(prev.legalThreshold!==withTs.legalThreshold) f.push({k:"Legal threshold", v:withTs.legalThreshold});
+      if(prev.control   !==withTs.control)    f.push({k:"Control",   v:(withTs.control||"").slice(0,60)});
+      if(prev.owner     !==withTs.owner)      f.push({k:"Owner",     v:withTs.owner});
+      return f;
+    })() : [
+      {k:"Aspect",    v:(withTs.aspect||"").slice(0,80)},
+      {k:"Phase",     v:withTs.phase},
+      {k:"Area",      v:withTs.area},
+      {k:"Condition", v:withTs.condition},
+      {k:"Score",     v:`C${withTs.severity}×P${withTs.probability}`},
+    ];
     onChange({ ...project, aspects:updated,
                changelog:logChange(isEdit?"Edited aspect":"Added aspect",
-                 `${ref}: ${(withTs.aspect||"").slice(0,60)}`) });
+                 `${ref} — ${(withTs.aspect||"").slice(0,60)}`, aspFields) });
     setEditAspect(null);
   };
   const saveOpp = o => {
@@ -2182,41 +2205,61 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const updated = isEdit ? opps.map(x=>x.id===o.id?withTs:x)
                            : [...opps,{...withTs,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
     const ref = isEdit ? o.ref : nextRef(opps,"OPP");
+    const oppFields = isEdit ? (() => {
+      const prev = opps.find(x=>x.id===o.id)||{};
+      const f = [];
+      if(prev.type        !==withTs.type)        f.push({k:"Type",        v:(withTs.type||"").slice(0,60)});
+      if(prev.description !==withTs.description) f.push({k:"Description", v:(withTs.description||"").slice(0,80)});
+      if(prev.materiality !==withTs.materiality) f.push({k:"Materiality", v:withTs.materiality});
+      if(prev.envValue!==withTs.envValue||prev.bizValue!==withTs.bizValue||prev.feasibility!==withTs.feasibility)
+        f.push({k:"Score", v:`Env${withTs.envValue}×Biz${withTs.bizValue}×Feas${withTs.feasibility}=${calcOppScore(withTs)}`});
+      if(prev.status      !==withTs.status)      f.push({k:"Status",      v:withTs.status});
+      if(prev.owner       !==withTs.owner)       f.push({k:"Owner",       v:withTs.owner});
+      if((prev.ghgPhases||[]).length!==(withTs.ghgPhases||[]).length)
+        f.push({k:"GHG phases", v:`${(withTs.ghgPhases||[]).length} phase(s)`});
+      if((prev.qualPhases||[]).length!==(withTs.qualPhases||[]).length)
+        f.push({k:"Qual phases", v:`${(withTs.qualPhases||[]).length} phase(s)`});
+      return f;
+    })() : [
+      {k:"Type",        v:(withTs.type||"").slice(0,60)},
+      {k:"Description", v:(withTs.description||"").slice(0,80)},
+      {k:"Score",       v:`Env${withTs.envValue}×Biz${withTs.bizValue}×Feas${withTs.feasibility}=${calcOppScore(withTs)}`},
+    ];
     onChange({ ...project, opportunities:updated,
                changelog:logChange(isEdit?"Edited opportunity":"Added opportunity",
-                 `${ref}: ${(withTs.description||"").slice(0,60)}`) });
+                 `${ref} — ${(withTs.type||withTs.description||"").slice(0,60)}`, oppFields) });
     setEditOpp(null);
   };
   const deleteAspect = (a) => {
     onChange({ ...project, aspects:aspects.filter(x=>x.id!==a.id),
-               changelog:logChange("Deleted aspect", `${a.ref}: ${(a.aspect||"").slice(0,60)}`) });
+               changelog:logChange("Deleted aspect", `${a.ref} — ${(a.aspect||"").slice(0,60)}`,[{k:"Phase",v:a.phase},{k:"Area",v:a.area},{k:"Significance",v:calcSig(a)||"—"}]) });
   };
   const deleteOpp = (o) => {
     onChange({ ...project, opportunities:opps.filter(x=>x.id!==o.id),
-               changelog:logChange("Deleted opportunity", `${o.ref}: ${(o.description||"").slice(0,60)}`) });
+               changelog:logChange("Deleted opportunity", `${o.ref} — ${(o.type||o.description||"").slice(0,60)}`,[{k:"Score",v:String(calcOppScore(o))}]) });
   };
 
   const bulkDeleteAspects = () => {
     const kept = aspects.filter(a=>!selectedAsp.has(a.id));
-    const log  = logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed");
+    const log  = logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed",[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
     onChange({ ...project, aspects:kept, changelog:[...(project.changelog||[]), log] });
     setSelectedAsp(new Set());
   };
   const bulkSetAspStatus = (status) => {
     const updated = aspects.map(a => selectedAsp.has(a.id) ? { ...a, status } : a);
-    const log  = logChange("Bulk updated status", selectedAsp.size+" aspect(s) set to "+status);
+    const log  = logChange("Bulk updated status", `${selectedAsp.size} aspect(s) → ${status}`,[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
     onChange({ ...project, aspects:updated, changelog:[...(project.changelog||[]), log] });
     setSelectedAsp(new Set());
   };
   const bulkDeleteOpps = () => {
     const kept = opps.filter(o=>!selectedOpp.has(o.id));
-    const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed");
+    const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed",[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
     onChange({ ...project, opps:kept, changelog:[...(project.changelog||[]), log] });
     setSelectedOpp(new Set());
   };
   const bulkSetOppStatus = (status) => {
     const updated = opps.map(o => selectedOpp.has(o.id) ? { ...o, status } : o);
-    const log  = logChange("Bulk updated opp status", selectedOpp.size+" opportunity(s) set to "+status);
+    const log  = logChange("Bulk updated opp status", `${selectedOpp.size} opportunity(s) → ${status}`,[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
     onChange({ ...project, opps:updated, changelog:[...(project.changelog||[]), log] });
     setSelectedOpp(new Set());
   };
@@ -3012,26 +3055,40 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                 const dateStr  = ts.toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
                 const timeStr  = ts.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
                 return (
-                  <div key={entry.id} style={{ display:"flex", gap:12, padding:"12px 16px",
+                  <div key={entry.id} style={{ display:"flex", gap:12, padding:"10px 16px",
                                                borderBottom: i < changelog.length-1 ? "1px solid "+T.rowBd : "none",
                                                alignItems:"flex-start" }}>
-                    <div style={{ width:8, height:8, borderRadius:"50%", background:dot, marginTop:5, flexShrink:0 }}/>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:dot, marginTop:6, flexShrink:0 }}/>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+                      {/* Action badge + detail on same line */}
+                      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:4, flexWrap:"wrap" }}>
                         <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500,
-                                       color: isAdd?T.teal:isEdit?T.amber:T.red,
-                                       background: isAdd?T.tealBg:isEdit?T.amberBg:T.redBg,
-                                       padding:"1px 6px", borderRadius:3 }}>
+                                       color: isAdd?T.teal:isDel?T.red:T.amber,
+                                       background: isAdd?T.tealBg:isDel?T.redBg:T.amberBg,
+                                       padding:"1px 6px", borderRadius:3, flexShrink:0 }}>
                           {entry.action}
                         </span>
+                        <span style={{ fontSize:12, color:T.text, fontWeight:500 }}>
+                          {entry.detail}
+                        </span>
                       </div>
-                      <p style={{ margin:0, fontSize:12, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {entry.detail}
-                      </p>
+                      {/* Field pills */}
+                      {(entry.fields||[]).length>0&&(
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                          {(entry.fields||[]).filter(f=>f.v).map((f,fi)=>(
+                            <span key={fi} style={{ fontSize:11, padding:"1px 7px", borderRadius:10,
+                                                    background:T.surface2, border:"1px solid "+T.border,
+                                                    color:T.muted, display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ color:T.faint, fontSize:10 }}>{f.k}</span>
+                              <span style={{ color:T.text }}>{f.v}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div style={{ flexShrink:0, textAlign:"right" }}>
                       <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{dateStr}</p>
-                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{timeStr}</p>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"1px 0 0" }}>{timeStr}</p>
                     </div>
                   </div>
                 );
