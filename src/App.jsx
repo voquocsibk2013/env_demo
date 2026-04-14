@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PHASES        = ["Concept / FEED","Construction","Drilling","Operations","Maintenance","Decommissioning","Commissioning"];
+const PHASES        = ["Engineering","Procurement","Construction","Installation","Commissioning","Operations & Maintenance","Decommissioning"];
 const CONDITIONS    = ["Normal","Abnormal","Emergency"];
 const SENSITIVITIES = ["High","Medium","Low"];
 const SCALES        = ["Global","Regional","Local"];
@@ -2172,18 +2172,19 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const aspFields = isEdit ? (() => {
       const prev = aspects.find(x=>x.id===a.id)||{};
       const f = [];
-      if(prev.aspect    !==withTs.aspect)     f.push({k:"Aspect",    v:(withTs.aspect||"").slice(0,80)});
-      if(prev.phase     !==withTs.phase)      f.push({k:"Phase",     v:withTs.phase});
-      if(prev.area      !==withTs.area)       f.push({k:"Area",      v:withTs.area});
-      if(prev.activity  !==withTs.activity)   f.push({k:"Activity",  v:(withTs.activity||"").slice(0,60)});
-      if(prev.impact    !==withTs.impact)     f.push({k:"Impact",    v:(withTs.impact||"").slice(0,80)});
-      if(prev.condition !==withTs.condition)  f.push({k:"Condition", v:withTs.condition});
-      if(prev.severity  !==withTs.severity||prev.probability!==withTs.probability)
-        f.push({k:"Score", v:`C${withTs.severity}×P${withTs.probability}`});
-      if(prev.status    !==withTs.status)     f.push({k:"Status",    v:withTs.status});
-      if(prev.legalThreshold!==withTs.legalThreshold) f.push({k:"Legal threshold", v:withTs.legalThreshold});
-      if(prev.control   !==withTs.control)    f.push({k:"Control",   v:(withTs.control||"").slice(0,60)});
-      if(prev.owner     !==withTs.owner)      f.push({k:"Owner",     v:withTs.owner});
+      const d = (k,pv,nv,fmt) => { if(pv!==nv) f.push({k,from:(fmt?fmt(pv):pv)||"—",to:(fmt?fmt(nv):nv)||"—"}); };
+      d("Aspect",    prev.aspect,    withTs.aspect,    v=>v&&v.slice(0,60));
+      d("Phase",     prev.phase,     withTs.phase);
+      d("Area",      prev.area,      withTs.area,      v=>v&&v.slice(0,40));
+      d("Activity",  prev.activity,  withTs.activity,  v=>v&&v.slice(0,40));
+      d("Impact",    prev.impact,    withTs.impact,    v=>v&&v.slice(0,60));
+      d("Condition", prev.condition, withTs.condition);
+      if(prev.severity!==withTs.severity||prev.probability!==withTs.probability)
+        f.push({k:"Score",from:`C${prev.severity||"?"}×P${prev.probability||"?"}`,to:`C${withTs.severity}×P${withTs.probability}`});
+      d("Status",          prev.status,         withTs.status);
+      d("Legal threshold", prev.legalThreshold, withTs.legalThreshold);
+      d("Control",  prev.control,  withTs.control,  v=>v&&v.slice(0,50));
+      d("Owner",    prev.owner,    withTs.owner);
       return f;
     })() : [
       {k:"Aspect",    v:(withTs.aspect||"").slice(0,80)},
@@ -2208,17 +2209,23 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const oppFields = isEdit ? (() => {
       const prev = opps.find(x=>x.id===o.id)||{};
       const f = [];
-      if(prev.type        !==withTs.type)        f.push({k:"Type",        v:(withTs.type||"").slice(0,60)});
-      if(prev.description !==withTs.description) f.push({k:"Description", v:(withTs.description||"").slice(0,80)});
-      if(prev.materiality !==withTs.materiality) f.push({k:"Materiality", v:withTs.materiality});
+      const d = (k,pv,nv,fmt) => { if(pv!==nv) f.push({k,from:(fmt?fmt(pv):pv)||"—",to:(fmt?fmt(nv):nv)||"—"}); };
+      d("Type",        prev.type,        withTs.type,        v=>v&&v.slice(0,50));
+      d("Description", prev.description, withTs.description, v=>v&&v.slice(0,60));
+      d("Materiality", prev.materiality, withTs.materiality);
       if(prev.envValue!==withTs.envValue||prev.bizValue!==withTs.bizValue||prev.feasibility!==withTs.feasibility)
-        f.push({k:"Score", v:`Env${withTs.envValue}×Biz${withTs.bizValue}×Feas${withTs.feasibility}=${calcOppScore(withTs)}`});
-      if(prev.status      !==withTs.status)      f.push({k:"Status",      v:withTs.status});
-      if(prev.owner       !==withTs.owner)       f.push({k:"Owner",       v:withTs.owner});
-      if((prev.ghgPhases||[]).length!==(withTs.ghgPhases||[]).length)
-        f.push({k:"GHG phases", v:`${(withTs.ghgPhases||[]).length} phase(s)`});
-      if((prev.qualPhases||[]).length!==(withTs.qualPhases||[]).length)
-        f.push({k:"Qual phases", v:`${(withTs.qualPhases||[]).length} phase(s)`});
+        f.push({k:"Score",from:`${calcOppScore(prev)}`,to:`${calcOppScore(withTs)}`});
+      d("Status", prev.status, withTs.status);
+      d("Owner",  prev.owner,  withTs.owner);
+      const pGhg=(prev.ghgPhases||[]).length, nGhg=(withTs.ghgPhases||[]).length;
+      if(pGhg!==nGhg) f.push({k:"GHG phases",from:String(pGhg),to:String(nGhg)});
+      const pQual=(prev.qualPhases||[]).length, nQual=(withTs.qualPhases||[]).length;
+      if(pQual!==nQual) f.push({k:"Qual phases",from:String(pQual),to:String(nQual)});
+      // GHG saving change
+      const pSav=calcGhgTotal(prev), nSav=calcGhgTotal(withTs);
+      if(pSav!==nSav) f.push({k:"GHG saving",
+        from:pSav?(pSav>=1000?(pSav/1000).toFixed(1)+"t":pSav.toFixed(0)+"kg")+" CO₂e":"—",
+        to:  nSav?(nSav>=1000?(nSav/1000).toFixed(1)+"t":nSav.toFixed(0)+"kg")+" CO₂e":"—"});
       return f;
     })() : [
       {k:"Type",        v:(withTs.type||"").slice(0,60)},
@@ -2272,6 +2279,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const watchCount = aspects.filter(a=>calcSig(a)==="WATCH").length;
   const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
   const highOpps   = opps.filter(o=>calcOppScore(o)>=75).length;
+  const totalGhgSaving = opps.reduce((s,o)=>{ const g=calcGhgTotal(o); return s+(g||0); }, 0);
+  const fmtGhg = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t CO₂e":kg>0?kg.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg CO₂e":"—";
   const statusCounts = STATUSES.reduce((acc,s) => {
     acc[s] = aspects.filter(a=>a.status===s).length; return acc;
   }, {});
@@ -2310,6 +2319,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
     if (oppSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(oppSort.col==="score"){va=calcOppScore(a);vb=calcOppScore(b);}
+      else if(oppSort.col==="ghgSaving"){va=calcGhgTotal(a)||0;vb=calcGhgTotal(b)||0;}
       else{va=(a[oppSort.col]||"").toLowerCase();vb=(b[oppSort.col]||"").toLowerCase();}
       return oppSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
     return r;
@@ -2501,7 +2511,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <OSTH col="description" label="Description"/>
           <OSTH col="score" label="Score"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority</th>
-          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>GHG saving</th>
+          <OSTH col="ghgSaving" label="GHG saving"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
           <OSTH col="createdAt" label="Created"/>
           <OSTH col="updatedAt" label="Modified"/>
@@ -2580,12 +2590,22 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       {tab === "dashboard" && (
         <div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
-            <StatCard label="All aspects"   value={aspects.length} filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
-            <StatCard label="Significant"   value={sigCount}       filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
-            <StatCard label="Watch"         value={watchCount}     filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
-            <StatCard label="Low"           value={lowCount}       filterId="low"   color={T.green}  border={T.greenBd}  bg={T.greenBg}/>
-            <StatCard label="Opportunities" value={opps.length}    filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
+            <StatCard label="All aspects"   value={aspects.length}  filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
+            <StatCard label="Significant"   value={sigCount}        filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
+            <StatCard label="Watch"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Opportunities" value={opps.length}     filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
+            <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
+
+          {/* GHG saving strip */}
+          {opps.length > 0 && totalGhgSaving > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:16, padding:"10px 16px", marginBottom:"1rem",
+                           background:T.tealBg, border:"1px solid "+T.tealBd, borderRadius:7 }}>
+              <span style={{ fontSize:11, color:T.teal, fontWeight:500 }}>Identified GHG savings (all opportunities)</span>
+              <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:500, color:T.tealDark }}>{fmtGhg(totalGhgSaving)}</span>
+              <span style={{ fontSize:11, color:T.teal, marginLeft:"auto" }}>{opps.filter(o=>calcGhgTotal(o)).length} of {opps.length} opp{opps.length!==1?"s":""} quantified</span>
+            </div>
+          )}
 
           {/* Status progress bar */}
           {aspects.length > 0 && (
@@ -3032,21 +3052,54 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           </div>
         );
       })()}
-      {tab === "changes" && (
+      {tab === "changes" && (() => {
+        // Week filter state (local to changes tab render)
+        const now = new Date();
+        const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()); weekStart.setHours(0,0,0,0);
+        const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6); weekEnd.setHours(23,59,59,999);
+        const [clFrom, setClFrom] = useState(weekStart.toISOString().slice(0,10));
+        const [clTo,   setClTo  ] = useState(weekEnd.toISOString().slice(0,10));
+        const fromMs = new Date(clFrom).getTime();
+        const toMs   = new Date(clTo+"T23:59:59").getTime();
+        const filtered = [...changelog].reverse().filter(e=>{
+          const t = new Date(e.ts).getTime();
+          return t>=fromMs && t<=toMs;
+        });
+        return (
         <div>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1rem", flexWrap:"wrap" }}>
             <div>
               <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:600, fontFamily:T.sans }}>Change log</h3>
-              <p style={{ margin:0, fontSize:12, color:T.muted }}>{changelog.length} recorded change{changelog.length!==1?"s":""}</p>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>{filtered.length} change{filtered.length!==1?"s":""} in range · {changelog.length} total</p>
+            </div>
+            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <span style={{ fontSize:11, color:T.muted }}>From</span>
+              <input type="date" value={clFrom} onChange={e=>setClFrom(e.target.value)}
+                style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
+              <span style={{ fontSize:11, color:T.muted }}>to</span>
+              <input type="date" value={clTo} onChange={e=>setClTo(e.target.value)}
+                style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
+              <button onClick={()=>{setClFrom(weekStart.toISOString().slice(0,10));setClTo(weekEnd.toISOString().slice(0,10));}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.tealBd, background:T.tealBg, color:T.teal, cursor:"pointer", fontFamily:T.sans }}>
+                This week
+              </button>
+              <button onClick={()=>{const m=new Date(now); m.setDate(1); setClFrom(m.toISOString().slice(0,10)); const me=new Date(now.getFullYear(),now.getMonth()+1,0); setClTo(me.toISOString().slice(0,10));}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                This month
+              </button>
+              <button onClick={()=>{const y=now.getFullYear(); setClFrom(y+"-01-01"); setClTo(y+"-12-31");}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                This year
+              </button>
             </div>
           </div>
-          {changelog.length === 0 ? (
+          {filtered.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              No changes recorded yet. Changes are logged automatically when you add, edit, or delete aspects and opportunities.
+              No changes in this date range.{changelog.length>0?" Adjust the date range to see older entries.":""}
             </div>
           ) : (
             <div style={{ background:T.surface, borderRadius:8, border:"1px solid "+T.border, overflow:"hidden" }}>
-              {[...changelog].reverse().map((entry, i) => {
+              {filtered.map((entry, i) => {
                 const isAdd    = entry.action.startsWith("Added");
                 const isEdit   = entry.action.startsWith("Edited");
                 const isDel    = entry.action.startsWith("Deleted");
@@ -3056,7 +3109,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                 const timeStr  = ts.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
                 return (
                   <div key={entry.id} style={{ display:"flex", gap:12, padding:"10px 16px",
-                                               borderBottom: i < changelog.length-1 ? "1px solid "+T.rowBd : "none",
+                                               borderBottom: i < filtered.length-1 ? "1px solid "+T.rowBd : "none",
                                                alignItems:"flex-start" }}>
                     <div style={{ width:8, height:8, borderRadius:"50%", background:dot, marginTop:6, flexShrink:0 }}/>
                     <div style={{ flex:1, minWidth:0 }}>
@@ -3072,15 +3125,19 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                           {entry.detail}
                         </span>
                       </div>
-                      {/* Field pills */}
+                      {/* Field pills — supports both v (new value) and from/to */}
                       {(entry.fields||[]).length>0&&(
                         <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                          {(entry.fields||[]).filter(f=>f.v).map((f,fi)=>(
-                            <span key={fi} style={{ fontSize:11, padding:"1px 7px", borderRadius:10,
+                          {(entry.fields||[]).filter(f=>f.v||f.to).map((f,fi)=>(
+                            <span key={fi} style={{ fontSize:11, padding:"2px 8px", borderRadius:10,
                                                     background:T.surface2, border:"1px solid "+T.border,
                                                     color:T.muted, display:"flex", alignItems:"center", gap:4 }}>
                               <span style={{ color:T.faint, fontSize:10 }}>{f.k}</span>
-                              <span style={{ color:T.text }}>{f.v}</span>
+                              {f.from!==undefined
+                                ? <><span style={{ color:T.muted, textDecoration:"line-through", fontSize:10 }}>{f.from}</span>
+                                    <span style={{ color:T.faint, fontSize:9 }}>→</span>
+                                    <span style={{ color:T.text }}>{f.to}</span></>
+                                : <span style={{ color:T.text }}>{f.v}</span>}
                             </span>
                           ))}
                         </div>
@@ -3096,7 +3153,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {tab === "settings" && (() => {
         // Collect existing contract names for datalist
@@ -3324,12 +3382,12 @@ function PortfolioView({ projects, onClose, onSelect }) {
       {/* Stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:10, marginBottom:"1.5rem" }}>
         {[
-          { label:"Projects",      val:visibleProjects.length, bg:"var(--surface)",   c:"var(--text)",   bd:"var(--border)"    },
-          { label:"Total aspects", val:visAspects.length,      bg:"var(--surface)",   c:"var(--text)",   bd:"var(--border)"    },
-          { label:"Significant",   val:visSig,                 bg:"var(--red-bg)",    c:"var(--red)",    bd:"var(--red-bd)"    },
-          { label:"Watch",         val:visWatch,               bg:"var(--amber-bg)",  c:"var(--amber)",  bd:"var(--amber-bd)"  },
-          { label:"Open",          val:openAsp,                bg:"var(--red-bg)",    c:"var(--red)",    bd:"var(--red-bd)"    },
-          { label:"Opportunities", val:visOpps.length,         bg:"var(--purple-bg)", c:"var(--purple)", bd:"var(--purple-bd)" },
+          { label:"Projects",        val:visibleProjects.length, bg:"var(--surface)",    c:"var(--text)",    bd:"var(--border)"     },
+          { label:"Significant",     val:visSig,                 bg:"var(--red-bg)",     c:"var(--red)",     bd:"var(--red-bd)"     },
+          { label:"Open aspects",    val:openAsp,                bg:"var(--red-bg)",     c:"var(--red)",     bd:"var(--red-bd)"     },
+          { label:"Opportunities",   val:visOpps.length,         bg:"var(--purple-bg)",  c:"var(--purple)",  bd:"var(--purple-bd)"  },
+          { label:"High priority",   val:visHigh,                bg:"var(--teal-bg)",    c:"var(--teal)",    bd:"var(--teal-bd)"    },
+          { label:"GHG identified",  val:(()=>{ const t=visOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0); return t>=1000?(t/1000).toFixed(1)+"t":t>0?t.toFixed(0)+"kg":"—"; })(), bg:"var(--teal-bg)", c:"var(--teal-dk)", bd:"var(--teal-bd)" },
         ].map(({ label, val, bg, c, bd }) => (
           <div key={label} style={{ background:bg, borderRadius:8, padding:"10px 12px", border:"1px solid "+bd }}>
             <p style={{ fontSize:9, fontWeight:600, color:c, margin:"0 0 5px", letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
