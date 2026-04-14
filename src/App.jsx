@@ -1677,6 +1677,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const [toast, setToast]             = useState("");
   const [screenSearch, setScreenSearch] = useState("");
   const [noxWarn, setNoxWarn]         = useState(false);
+  // Session-only skip state — tracks which items were consciously passed over
+  const [skipped, setSkipped]         = useState({});
+  const toggleSkip = id => setSkipped(p=>({...p,[id]:!p[id]}));
+  // Track which items have been added this session (by item id → aspect ref)
+  const addedItems = {};
+  (project.aspects||[]).forEach(a=>{ if(a._screeningId) addedItems[a._screeningId]=a.ref; });
 
   const isRisks = mode === "risks";
   const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
@@ -1707,8 +1713,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
       type, description, _color:color||"",
       ghgPhases: ghgIds&&ghgIds.length>0 ? [emptyGhgPhase("Phase 1", null)] : [],
     };
-    // Store prefillGhgIds transiently on the object for form init (not persisted)
     newOpp.prefillGhgIds = ghgIds||[];
+    // _screeningId persisted so checklist can detect this opp was added from screening
+    newOpp._screeningId = ghgIds&&ghgIds.length>0 ? ghgIds[0]
+      : OPP_SCOPE2_BUTTONS.find(b=>type.includes(b.label.split(",")[0]))?.id
+        || OPP_SCOPE3_BUTTONS.find(b=>type.includes(b.label.replace("\n"," ").split("/")[0].trim()))?.id
+        || null;
     setOppForm(newOpp);
     setNoxWarn(!!warn);
     setView("form");
@@ -1792,52 +1802,122 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
       {/* ── Content ── */}
       <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
 
-        {/* ══ RISKS GUIDE — category-based, mirrors opportunities layout ══════════ */}
+        {/* ══ RISKS GUIDE — checklist layout ═══════════════════════════════════ */}
         {view === "guide" && isRisks && (() => {
-          // Filter across all categories/items
           const q = screenSearch.trim().toLowerCase();
-          const filtered = RISK_CATEGORIES.map(cat => ({
+          const filtered = RISK_CATEGORIES.map(cat=>({
             ...cat,
-            items: q ? cat.items.filter(it =>
-              it.sub.toLowerCase().includes(q) ||
-              it.hint.toLowerCase().includes(q) ||
+            items: q ? cat.items.filter(it=>
+              it.sub.toLowerCase().includes(q)||
+              it.hint.toLowerCase().includes(q)||
               it.aspect.toLowerCase().includes(q)
             ) : cat.items
-          })).filter(cat => cat.items.length > 0);
+          })).filter(cat=>cat.items.length>0);
+
+          const totalAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.length,0);
+          const addedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>addedItems[it.id]).length,0);
+          const skippedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>skipped[it.id]).length,0);
+          const pct = totalAll>0?Math.round((addedAll+skippedAll)/totalAll*100):0;
 
           return (
             <div>
-              {filtered.length === 0 && (
-                <div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>
-                  No aspects match your search.
+              {/* Overall progress */}
+              <div style={{ marginBottom:"1rem" }}>
+                <div style={{ height:4, background:T.border, borderRadius:2, overflow:"hidden", marginBottom:5 }}>
+                  <div style={{ height:4, width:pct+"%", background:T.teal, borderRadius:2, transition:"width 0.3s" }}/>
                 </div>
-              )}
-              {filtered.map(cat => {
-                const col = COLOR_MAP[cat.color]||COLOR_MAP.gray;
-                const key = "risk_cat_"+cat.cat;
-                const open = q ? true : expanded[key]!==false;
-                return (
-                  <div key={cat.cat} style={{ marginBottom:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} aspects addressed</span>
+                  {skippedAll>0&&<span style={{ fontSize:11, color:T.faint }}>{skippedAll} skipped</span>}
+                </div>
+              </div>
+
+              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No aspects match your search.</div>}
+
+              {filtered.map(cat=>{
+                const col=COLOR_MAP[cat.color]||COLOR_MAP.gray;
+                const key="risk_cat_"+cat.cat;
+                const open=q?true:expanded[key]!==false;
+                const addedCt=cat.items.filter(it=>addedItems[it.id]).length;
+                const skippedCt=cat.items.filter(it=>skipped[it.id]).length;
+                const addressed=addedCt+skippedCt;
+                return(
+                  <div key={cat.cat} style={{ marginBottom:6 }}>
+                    {/* Category header */}
                     <div onClick={()=>toggleCat(key)}
-                      style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                               padding:"8px 16px", background:col.head, borderRadius:5,
-                               cursor:"pointer", userSelect:"none", marginBottom:open?7:0 }}>
-                      <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{cat.cat}</span>
-                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                        <span style={{ fontSize:10, color:"rgba(255,255,255,0.6)" }}>{cat.items.length} aspects</span>
-                        <span style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>{open?"▾":"▸"}</span>
-                      </div>
+                      style={{ display:"flex", alignItems:"center", gap:10,
+                               padding:"8px 14px", background:col.bg,
+                               border:"1px solid "+col.border,
+                               borderLeft:"3px solid "+col.head,
+                               borderRadius:6, cursor:"pointer", userSelect:"none",
+                               marginBottom:open?2:0 }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:col.head, flex:1 }}>{cat.cat}</span>
+                      <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10,
+                                     background:addressed===cat.items.length?T.greenBg:addressed>0?T.tealBg:T.slateBg,
+                                     color:addressed===cat.items.length?T.green:addressed>0?T.teal:T.faint,
+                                     border:"1px solid "+(addressed===cat.items.length?T.greenBd:addressed>0?T.tealBd:T.border) }}>
+                        {addressed}/{cat.items.length}
+                      </span>
+                      <span style={{ fontSize:11, color:T.faint }}>{open?"▾":"▸"}</span>
                     </div>
-                    {open && (
-                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
-                        {cat.items.map((item,i) => (
-                          <ScopeBtn key={i}
-                            label={item.sub} sub={item.hint} color={col}
-                            onClick={()=>{
-                              setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub, _color:cat.color});
-                              setView("form");
-                            }}/>
-                        ))}
+
+                    {/* Item list */}
+                    {open&&(
+                      <div style={{ borderLeft:"3px solid "+col.border, marginLeft:6, paddingLeft:4 }}>
+                        {cat.items.map((item,i)=>{
+                          const isAdded=!!addedItems[item.id];
+                          const isSkipped=!!skipped[item.id];
+                          return(
+                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                                                   padding:"6px 10px", borderRadius:5,
+                                                   background:isAdded||isSkipped?"transparent":undefined,
+                                                   opacity:isAdded?0.6:1,
+                                                   borderBottom:"1px solid "+T.rowBd }}>
+                              {/* Status dot */}
+                              <div style={{ width:12, height:12, borderRadius:"50%", flexShrink:0,
+                                             background:isAdded?T.green:isSkipped?T.border:T.surface,
+                                             border:"1.5px solid "+(isAdded?T.greenBd:isSkipped?T.muted:T.muted) }}/>
+                              {/* Text */}
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <span style={{ fontSize:12, fontWeight:500, color:T.text,
+                                               textDecoration:isSkipped?"line-through":undefined,
+                                               marginRight:8 }}>{item.sub}</span>
+                                {!isAdded&&!isSkipped&&<span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>}
+                              </div>
+                              {/* Reference badge or actions */}
+                              {isAdded&&addedItems[item.id]&&(
+                                <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 6px",
+                                               borderRadius:3, background:T.tealBg, color:T.teal,
+                                               border:"1px solid "+T.tealBd, flexShrink:0 }}>
+                                  {addedItems[item.id]}
+                                </span>
+                              )}
+                              {!isAdded&&(
+                                <>
+                                  <button onClick={()=>toggleSkip(item.id)}
+                                    style={{ fontSize:11, padding:"2px 8px", borderRadius:12,
+                                             border:"1px solid "+T.border, background:"transparent",
+                                             color:isSkipped?T.muted:T.faint, cursor:"pointer",
+                                             flexShrink:0, fontFamily:T.sans }}>
+                                    {isSkipped?"undo":"skip"}
+                                  </button>
+                                  {!isSkipped&&<button
+                                    onClick={()=>{
+                                      setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub,
+                                                   _color:cat.color, _screeningId:item.id});
+                                      setView("form");
+                                    }}
+                                    style={{ fontSize:11, padding:"3px 10px", borderRadius:12,
+                                             border:"1px solid "+col.head, background:col.bg,
+                                             color:col.head, cursor:"pointer", flexShrink:0,
+                                             fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap" }}>
+                                    + Add
+                                  </button>}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1854,43 +1934,120 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             (b.label||"").toLowerCase().includes(q) ||
             (b.sub||"").toLowerCase().includes(q) ||
             (b.desc||"").toLowerCase().includes(q);
-          const s1 = OPP_SCOPE1_BUTTONS.filter(matchBtn);
-          const s2 = OPP_SCOPE2_BUTTONS.filter(matchBtn);
-          const s3 = OPP_SCOPE3_BUTTONS.filter(matchBtn);
-          // Helper: render one scope block inline (not as a component, avoids remount on search)
-          const renderScope = (skey, col, title, sub, btns, mkOnClick) => {
-            if (q && btns.length===0) return null;
-            const open = (q&&btns.length>0) ? true : expanded[skey]!==false;
-            return (
-              <div key={skey} style={{marginBottom:8}}>
+
+          const ALL_OPP_BTNS = [
+            ...OPP_SCOPE1_BUTTONS.map(b=>({...b,scopeKey:"opp_scope1",scopeColor:"red"})),
+            ...OPP_SCOPE2_BUTTONS.map(b=>({...b,scopeKey:"opp_scope2",scopeColor:"blue"})),
+            ...OPP_SCOPE3_BUTTONS.map(b=>({...b,scopeKey:"opp_scope3",scopeColor:"teal"})),
+          ];
+          const totalOpp=ALL_OPP_BTNS.length;
+          const addedOpp=ALL_OPP_BTNS.filter(b=>(project.opportunities||project.opps||[]).some(o=>o._screeningId===b.id)).length;
+          const skippedOpp=ALL_OPP_BTNS.filter(b=>skipped["opp_"+b.id]).length;
+          const pctOpp=totalOpp>0?Math.round((addedOpp+skippedOpp)/totalOpp*100):0;
+
+          const renderScopeChecklist = (skey, col, title, scopeSub, btns, mkOnClick) => {
+            const filtered2=btns.filter(matchBtn);
+            if(q&&filtered2.length===0) return null;
+            const open=(q&&filtered2.length>0)?true:expanded[skey]!==false;
+            const addedCt=filtered2.filter(b=>(project.opportunities||project.opps||[]).some(o=>o._screeningId===b.id)).length;
+            const skippedCt=filtered2.filter(b=>skipped["opp_"+b.id]).length;
+            const addr=addedCt+skippedCt;
+            return(
+              <div key={skey} style={{marginBottom:6}}>
                 <div onClick={()=>toggleCat(skey)}
-                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                    padding:"8px 16px",background:col.head,borderRadius:5,cursor:"pointer",
-                    userSelect:"none",marginBottom:open?7:0}}>
-                  <div>
-                    <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{title}</span>
-                    <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginLeft:12}}>{sub}</span>
+                  style={{display:"flex",alignItems:"center",gap:10,
+                    padding:"8px 14px",background:col.bg,
+                    border:"1px solid "+col.border,
+                    borderLeft:"3px solid "+col.head,
+                    borderRadius:6,cursor:"pointer",userSelect:"none",
+                    marginBottom:open?2:0}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:13,fontWeight:600,color:col.head}}>{title}</span>
+                    <span style={{fontSize:11,color:T.faint,marginLeft:10}}>{scopeSub}</span>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:10,color:"rgba(255,255,255,0.6)"}}>{btns.length} options</span>
-                    <span style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{open?"▾":"▸"}</span>
-                  </div>
+                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,flexShrink:0,
+                    background:addr===filtered2.length&&filtered2.length>0?T.greenBg:addr>0?T.tealBg:T.slateBg,
+                    color:addr===filtered2.length&&filtered2.length>0?T.green:addr>0?T.teal:T.faint,
+                    border:"1px solid "+(addr===filtered2.length&&filtered2.length>0?T.greenBd:addr>0?T.tealBd:T.border)}}>
+                    {addr}/{filtered2.length}
+                  </span>
+                  <span style={{fontSize:11,color:T.faint}}>{open?"▾":"▸"}</span>
                 </div>
-                {open&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                  {btns.map(btn=><ScopeBtn key={btn.id} label={btn.label.replace("\n"," ")} sub={btn.sub} color={col} onClick={mkOnClick(btn)}/>)}
-                </div>}
+                {open&&(
+                  <div style={{borderLeft:"3px solid "+col.border,marginLeft:6,paddingLeft:4}}>
+                    {filtered2.map((btn,i)=>{
+                      const isAdded=(project.opportunities||project.opps||[]).some(o=>o._screeningId===btn.id);
+                      const isSkipped=!!skipped["opp_"+btn.id];
+                      const addedOpp2=(project.opportunities||project.opps||[]).find(o=>o._screeningId===btn.id);
+                      return(
+                        <div key={btn.id} style={{display:"flex",alignItems:"center",gap:8,
+                          padding:"6px 10px",borderRadius:5,
+                          opacity:isAdded?0.6:1,
+                          borderBottom:"1px solid "+T.rowBd}}>
+                          <div style={{width:12,height:12,borderRadius:"50%",flexShrink:0,
+                            background:isAdded?T.green:isSkipped?T.border:T.surface,
+                            border:"1.5px solid "+(isAdded?T.greenBd:isSkipped?T.muted:T.muted)}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <span style={{fontSize:12,fontWeight:500,color:T.text,
+                              textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
+                              {btn.label.replace("\n"," ")}
+                            </span>
+                            {!isAdded&&!isSkipped&&<span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>}
+                          </div>
+                          {isAdded&&addedOpp2&&(
+                            <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
+                              borderRadius:3,background:T.purpleBg,color:T.purple,
+                              border:"1px solid "+T.purpleBd,flexShrink:0}}>
+                              {addedOpp2.ref}
+                            </span>
+                          )}
+                          {!isAdded&&(
+                            <>
+                              <button onClick={()=>setSkipped(p=>({...p,["opp_"+btn.id]:!p["opp_"+btn.id]}))}
+                                style={{fontSize:11,padding:"2px 8px",borderRadius:12,
+                                  border:"1px solid "+T.border,background:"transparent",
+                                  color:isSkipped?T.muted:T.faint,cursor:"pointer",
+                                  flexShrink:0,fontFamily:T.sans}}>
+                                {isSkipped?"undo":"skip"}
+                              </button>
+                              {!isSkipped&&<button onClick={mkOnClick(btn)}
+                                style={{fontSize:11,padding:"3px 10px",borderRadius:12,
+                                  border:"1px solid "+col.head,background:col.bg,
+                                  color:col.head,cursor:"pointer",flexShrink:0,
+                                  fontFamily:T.sans,fontWeight:500,whiteSpace:"nowrap"}}>
+                                + Add
+                              </button>}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           };
-          if (q && s1.length===0 && s2.length===0 && s3.length===0)
+
+          if(q&&!OPP_SCOPE1_BUTTONS.some(matchBtn)&&!OPP_SCOPE2_BUTTONS.some(matchBtn)&&!OPP_SCOPE3_BUTTONS.some(matchBtn))
             return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.faint,fontSize:12}}>No opportunities match your search.</div>;
-          return (
+
+          return(
             <div>
-              {renderScope("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",s1,
+              {/* Overall progress */}
+              <div style={{marginBottom:"1rem"}}>
+                <div style={{height:4,background:T.border,borderRadius:2,overflow:"hidden",marginBottom:5}}>
+                  <div style={{height:4,width:pctOpp+"%",background:T.purple,borderRadius:2,transition:"width 0.3s"}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,color:T.faint}}>{addedOpp+skippedOpp} of {totalOpp} opportunities addressed</span>
+                  {skippedOpp>0&&<span style={{fontSize:11,color:T.faint}}>{skippedOpp} skipped</span>}
+                </div>
+              </div>
+              {renderScopeChecklist("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",OPP_SCOPE1_BUTTONS,
                 btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn))}
-              {renderScope("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",s2,
+              {renderScopeChecklist("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",OPP_SCOPE2_BUTTONS,
                 btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false))}
-              {renderScope("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",s3,
+              {renderScopeChecklist("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",OPP_SCOPE3_BUTTONS,
                 btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false))}
             </div>
           );
