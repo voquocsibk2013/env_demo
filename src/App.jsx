@@ -2150,6 +2150,14 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [selectedAsp, setSelectedAsp]     = useState(new Set());
   const [selectedOpp, setSelectedOpp]     = useState(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [clFrom, setClFrom] = useState(() => {
+    const d=new Date(); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0);
+    return d.toISOString().slice(0,10);
+  });
+  const [clTo, setClTo] = useState(() => {
+    const d=new Date(); d.setDate(d.getDate()+(6-d.getDay())); d.setHours(23,59,59,999);
+    return d.toISOString().slice(0,10);
+  });
 
   const aspects = project.aspects || [];
   const opps    = project.opportunities || project.opps || [];
@@ -3052,20 +3060,17 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           </div>
         );
       })()}
-      {tab === "changes" && (() => {
-        // Week filter state (local to changes tab render)
+      {tab === "changes" && (()=>{
         const now = new Date();
         const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()); weekStart.setHours(0,0,0,0);
-        const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6); weekEnd.setHours(23,59,59,999);
-        const [clFrom, setClFrom] = useState(weekStart.toISOString().slice(0,10));
-        const [clTo,   setClTo  ] = useState(weekEnd.toISOString().slice(0,10));
+        const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
         const fromMs = new Date(clFrom).getTime();
         const toMs   = new Date(clTo+"T23:59:59").getTime();
         const filtered = [...changelog].reverse().filter(e=>{
           const t = new Date(e.ts).getTime();
           return t>=fromMs && t<=toMs;
         });
-        return (
+        return(
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1rem", flexWrap:"wrap" }}>
             <div>
@@ -3079,7 +3084,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
               <span style={{ fontSize:11, color:T.muted }}>to</span>
               <input type="date" value={clTo} onChange={e=>setClTo(e.target.value)}
                 style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
-              <button onClick={()=>{setClFrom(weekStart.toISOString().slice(0,10));setClTo(weekEnd.toISOString().slice(0,10));}}
+              <button onClick={()=>{setClFrom(weekStart.toISOString().slice(0,10));setClTo(weekEnd.toISOString().slice(0,10)+"".slice(0,10));const wd=new Date(now);wd.setDate(now.getDate()+(6-now.getDay()));setClTo(wd.toISOString().slice(0,10));}}
                 style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.tealBd, background:T.tealBg, color:T.teal, cursor:"pointer", fontFamily:T.sans }}>
                 This week
               </button>
@@ -3466,6 +3471,110 @@ function PortfolioView({ projects, onClose, onSelect }) {
           </div>
         </div>
       )}
+
+      {/* Opportunities summary bar + high-priority list */}
+      {visOpps.length > 0 && (() => {
+        const visHigh2 = visOpps.filter(o=>calcOppScore(o)>=75);
+        const visMed   = visOpps.filter(o=>{ const s=calcOppScore(o); return s>=30&&s<75; });
+        const visLow2  = visOpps.filter(o=>calcOppScore(o)>0&&calcOppScore(o)<30);
+        const visNone  = visOpps.filter(o=>calcOppScore(o)===0);
+        const totalGhg = visOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
+        const fmtKg = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t":kg.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg";
+        return (
+          <div style={{ marginBottom:"1.5rem" }}>
+            {/* Priority bar */}
+            <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)",
+                           padding:"14px 20px", marginBottom:"0.75rem" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ fontSize:11, fontWeight:500, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                  Opportunities — priority breakdown
+                </span>
+                {totalGhg>0&&<span style={{ fontFamily:"var(--mono)", fontSize:12, fontWeight:500, color:"var(--teal-dk)" }}>
+                  {fmtKg(totalGhg)} CO₂e identified
+                </span>}
+              </div>
+              <div style={{ display:"flex", borderRadius:5, overflow:"hidden", height:10, background:"var(--border)", gap:"1px", marginBottom:7 }}>
+                {visHigh2.length>0&&<div title={"High: "+visHigh2.length} style={{ flex:visHigh2.length, background:"var(--teal-bd)", minWidth:2 }}/>}
+                {visMed.length>0  &&<div title={"Medium: "+visMed.length}  style={{ flex:visMed.length,   background:"var(--amber-bd)", minWidth:2 }}/>}
+                {visLow2.length>0 &&<div title={"Low: "+visLow2.length}    style={{ flex:visLow2.length,  background:"var(--purple-bd)", minWidth:2 }}/>}
+                {visNone.length>0 &&<div title={"Unscored: "+visNone.length} style={{ flex:visNone.length, background:"var(--border)", minWidth:2 }}/>}
+              </div>
+              <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+                {[{l:"High priority",v:visHigh2.length,c:"var(--teal)"},{l:"Medium",v:visMed.length,c:"var(--amber)"},{l:"Low",v:visLow2.length,c:"var(--purple)"},{l:"Unscored",v:visNone.length,c:"var(--faint)"}]
+                  .filter(x=>x.v>0).map(({l,v,c})=>(
+                  <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11 }}>
+                    <span style={{ width:8, height:8, borderRadius:"50%", background:c, display:"inline-block" }}/>
+                    <span style={{ color:"var(--muted)" }}>{l}</span>
+                    <strong style={{ color:"var(--text)" }}>{v}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* High priority list */}
+            {visHigh2.length > 0 && (
+              <div>
+                <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.5rem", color:"var(--muted)",
+                               textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                  High priority opportunities ({visHigh2.length})
+                </h2>
+                <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)", overflow:"hidden" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead>
+                      <tr style={{ background:"var(--surface2)" }}>
+                        {["Contract","Project","Ref","Opportunity","Type","Score","GHG saving","Status"].map(h=>(
+                          <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:9, fontWeight:600,
+                                               color:"var(--muted)", borderBottom:"1px solid var(--border)",
+                                               textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleProjects.flatMap(p=>
+                        (p.opportunities||p.opps||[])
+                          .filter(o=>calcOppScore(o)>=75)
+                          .map(o=>({...o,_proj:p}))
+                      ).sort((a,b)=>calcOppScore(b)-calcOppScore(a))
+                      .map((o,i)=>{
+                        const score=calcOppScore(o);
+                        const ghg=calcGhgTotal(o);
+                        const sc={bg:"var(--teal-bg)",c:"var(--teal-dk)",bd:"var(--teal-bd)"};
+                        return(
+                          <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)", borderLeft:"3px solid var(--teal-bd)" }}>
+                            <td style={{ padding:"8px 12px", fontSize:11, color:"var(--faint)" }}>{o._proj.contract||"—"}</td>
+                            <td style={{ padding:"8px 12px", fontSize:11, color:"var(--muted)" }}>{o._proj.name||"Unnamed"}</td>
+                            <td style={{ padding:"8px 12px" }}><span style={{ fontFamily:"monospace", fontSize:10, fontWeight:600, color:"var(--purple)" }}>{o.ref}</span></td>
+                            <td style={{ padding:"8px 12px", fontWeight:500, color:"var(--text)", maxWidth:200 }}>
+                              <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={o.description}>{o.description||o.type||"—"}</div>
+                            </td>
+                            <td style={{ padding:"8px 12px" }}>
+                              {o.type&&<span style={{ fontSize:9, padding:"2px 6px", borderRadius:3, background:"var(--teal-bg)", color:"var(--teal)", border:"1px solid var(--teal-bd)", whiteSpace:"nowrap" }}>{o.type.slice(0,30)}</span>}
+                            </td>
+                            <td style={{ padding:"8px 12px" }}>
+                              <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:700, padding:"2px 7px", borderRadius:3,
+                                             background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score}</span>
+                            </td>
+                            <td style={{ padding:"8px 12px" }}>
+                              {ghg?<span style={{ fontFamily:"monospace", fontSize:11, fontWeight:600, color:"var(--teal-dk)" }}>{fmtKg(ghg)} CO₂e</span>:<span style={{ color:"var(--faint)" }}>—</span>}
+                            </td>
+                            <td style={{ padding:"8px 12px" }}>
+                              <span style={{ fontSize:9, padding:"2px 5px", borderRadius:3,
+                                background:o.status==="Closed"?"var(--green-bg)":o.status==="In Progress"?"var(--amber-bg)":"var(--red-bg)",
+                                color:o.status==="Closed"?"var(--green)":o.status==="In Progress"?"var(--amber)":"var(--red)" }}>
+                                {o.status||"Open"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Project cards */}
       <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.6rem", color:"var(--muted)",
