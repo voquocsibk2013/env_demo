@@ -311,7 +311,75 @@ const OPP_SCOPE3_BUTTONS = [
 // ── Environmental risk categories (from aspects reference library) ──────────
 const RISK_CATEGORIES = [
   {
-    cat: '1. Ecology & Biodiversity',
+    cat: '1. Emission to Air',
+    color: 'red',
+    items: [
+      { id:'air_01', sub: 'Stack / vent emissions', hint: 'Combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
+      { id:'air_02', sub: 'Diesel plant emissions', hint: 'Generators, construction plant, crane engines', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
+      { id:'air_03', sub: 'Flaring volumes & composition', hint: 'Commissioning purge, emergency relief, production upsets', aspect: 'Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability' },
+      { id:'air_04', sub: 'NOₓ emissions & NOₓ tax', hint: 'Gas turbines, engines, flaring, process heaters — offshore and nearshore', aspect: 'NOₓ emissions subject to Norwegian NOₓ tax (kr/kg NOₓ); obligation to join NOₓ Fund or pay full rate' },
+      { id:'air_05', sub: 'CO₂ emissions & CO₂ tax / ETS', hint: 'All combustion, flaring, venting, process releases from offshore installations', aspect: 'CO₂ emissions subject to Norwegian CO₂ tax and Norwegian ETS (kvotesystemet)' },
+      { id:'air_06', sub: 'GHG / CO₂ reporting', hint: 'All combustion, venting, flaring, process releases — all active phases', aspect: 'GHG emissions contributing to national inventory, carbon reporting, and regulatory/fiscal obligations' },
+      { id:'air_07', sub: 'Fugitive VOC & hydrocarbon emissions', hint: 'Flanges, valve stems, loading operations, tank venting', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
+      { id:'air_08', sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
+      { id:'air_09', sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
+      { id:'air_10', sub: 'Atmospheric dispersion modelling', hint: 'Stack design, siting near sensitive receptors', aspect: 'Air quality impact on community or ecological receptors' },
+      { id:'air_11', sub: 'Odour', hint: 'Wastewater treatment, waste handling, produced water, solvents, construction waste', aspect: 'Odour nuisance affecting community receptors' },
+      { id:'air_11', sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
+      { id:'air_12', sub: 'Paint & surface treatment VOCs', hint: 'Maintenance painting, blasting, coating operations', aspect: 'VOC emissions from solvents; contaminated blast grit; paint waste' },
+      { id:'air_13', sub: 'Air quality baseline monitoring', hint: 'Facilities near sensitive receptors (residential, schools, hospitals); emission permit applications under Forurensningsloven §11; EIA', aspect: 'Permit refused or inappropriate emission limit set without pre-project background data; inability to attribute project contribution' },
+    ],
+  },
+  {
+    cat: '2. Discharge to Water & Marine Environment',
+    color: 'blue',
+    items: [
+      { id:'wat_01', sub: 'Ballast water (vessels)', hint: 'Vessel operations, installation support vessels', aspect: 'Introduction of non-indigenous species via ballast water exchange' },
+      { id:'wat_02', sub: 'Vessel fuel & lubricants', hint: 'Marine support operations, installation vessels', aspect: 'Accidental oil discharge from vessel machinery or fuel transfer' },
+      { id:'wat_03', sub: 'Grey water & sewage (vessels)', hint: 'Crew vessels, installation vessels, FPSOs', aspect: 'Sewage discharge within 12 nm or in special areas' },
+      { id:'wat_04', sub: 'Cooling water thermal discharge', hint: 'Power plant cooling, electrolyser cooling, process cooling', aspect: 'Elevated temperature affecting dissolved oxygen and species behaviour in receiving water' },
+      { id:'wat_05', sub: 'Produced water', hint: 'Oil & gas production operations', aspect: 'Discharge of produced water with hydrocarbons, scale inhibitors, NORM' },
+      { id:'wat_06', sub: 'Process wastewater design', hint: 'Chemical injection, utility systems, drains', aspect: 'Design of wastewater streams — volume, composition, treatment route' },
+      { id:'wat_07', sub: 'Seabed sediment disturbance', hint: 'Dredging, trenching, anchor dragging, jetting, structure installation', aspect: 'Sediment plume; burial of benthic communities; contaminant resuspension' },
+      { id:'wat_08', sub: 'Water quality baseline', hint: 'Onshore watercourse crossings; discharge permitting under Forurensningsloven §11; offshore produced water permitting', aspect: 'Permit refused or inappropriate conditions set without baseline evidence; inability to demonstrate no deterioration under WFD Art. 4' },
+      { id:'wat_09', sub: 'Marine baseline survey *(benthic, ROV, seabed characterisation)*', hint: 'Offshore installation, pipeline or cable routing, anchor deployment, dredging', aspect: 'Unable to demonstrate pre-installation seabed condition; permit refused; unexpected sensitive habitat (cold-water coral, maerl) triggering stop-work' },
+      { id:'wat_10', sub: 'Geophysical / UXO survey', hint: 'Offshore seabed operations; pipeline or cable route survey; anchor pattern; jack-up preloading; construction in former conflict areas', aspect: 'Unknown seabed obstacles, contamination, UXO, or unstable ground; dropped object risk; unexpected habitat disturbance; jack-up punch-through' },
+    ],
+  },
+  {
+    cat: '3. Waste, Materials & Chemicals',
+    color: 'amber',
+    items: [
+      { id:'wst_01', sub: 'Hazardous substance inventory & REACH', hint: 'Chemical specification, procurement, materials selection', aspect: 'Failure to register or control SVHCs; non-compliant use of restricted substances' },
+      { id:'wst_02', sub: 'Waste hierarchy — materials selection', hint: 'Design decisions, material specification', aspect: 'Generation of excess or non-recyclable waste due to poor design choices' },
+      { id:'wst_03', sub: 'Hazardous waste', hint: 'Excavated contaminated soil, chemical containers, insulation, first-fill residues', aspect: 'Improper storage, transport, or disposal of hazardous waste categories' },
+      { id:'wst_04', sub: 'Packaging waste', hint: 'Procurement of equipment, materials, consumables', aspect: 'Non-recyclable or excessive packaging waste volumes' },
+      { id:'wst_05', sub: 'Refrigerants & blowing agents (F-gas)', hint: 'HVAC design, insulation foam specification, fire suppression systems', aspect: 'Use of high-GWP HFCs; F-gas leakage and loss' },
+      { id:'wst_06', sub: 'Asbestos', hint: 'Legacy equipment, pipe lagging, insulation removal in older facilities', aspect: 'Asbestos fibre release during maintenance or demolition' },
+      { id:'wst_06', sub: 'NORM — naturally occurring radioactive material', hint: 'Produced water scaling, pigging returns, sand production, deposition in vessels', aspect: 'Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste' },
+      { id:'wst_07', sub: 'Radioactive measurement sources', hint: 'Density gauges, level gauges, nuclear logging tools', aspect: 'Loss, damage, or disposal of sealed radioactive sources' },
+      { id:'wst_08', sub: 'Heavy metals in systems', hint: 'Legacy coating systems (lead paint), alloy materials, anti-corrosion anodes', aspect: 'Release of lead, cadmium, mercury, or chromium during maintenance or decommissioning' },
+      { id:'wst_09', sub: 'Chemical flushing & pigging', hint: 'Commissioning clean-up, pipeline maintenance, change of service', aspect: 'Generation of chemically contaminated flush water requiring treatment and disposal' },
+      { id:'wst_10', sub: 'Tank cleaning', hint: 'Tank inspection, change of service, decommissioning', aspect: 'Oily sludge or chemical residue requiring hazardous waste disposal' },
+      { id:'wst_11', sub: 'Subsea structure removal', hint: 'Decommissioning of pipelines, umbilicals, templates, jackets', aspect: 'Contaminated materials, marine litter, seabed disturbance' },
+    ],
+  },
+  {
+    cat: '4. Land, Soil & Contamination',
+    color: 'brown',
+    items: [
+      { id:'land_01', sub: 'Bulk excavation', hint: 'Site preparation, foundation works, cable trenching', aspect: 'Loss of topsoil; disturbance of contaminated ground; peat or organic soil release' },
+      { id:'land_02', sub: 'Topsoil management', hint: 'Stripping, stockpiling, and reinstatement of topsoil', aspect: 'Loss of topsoil quality; failure to reinstate appropriate substrate for habitat recovery' },
+      { id:'land_03', sub: 'Soil erosion & sediment control', hint: 'Graded surfaces, unpaved haul roads, stockpiles, borrow pits', aspect: 'Sediment runoff to watercourse; loss of topsoil from disturbed areas' },
+      { id:'land_04', sub: 'Land contamination survey', hint: 'Previous industrial use, infilled land, leaking USTs', aspect: 'Contamination of soil or groundwater; worker and receptor exposure' },
+      { id:'land_05', sub: 'Floodplain encroachment', hint: 'Facility siting, bund design, drainage routing', aspect: 'Increased flood risk to third parties; loss of flood storage volume' },
+      { id:'land_06', sub: 'Habitat reinstatement', hint: 'Post-construction restoration, decommissioning, site clearance', aspect: 'Failure to reinstate disturbed ground to pre-existing or agreed habitat quality' },
+      { id:'land_07', sub: 'Concrete demolition waste', hint: 'Structure removal, decommissioning of onshore facilities', aspect: 'Alkaline debris; potential contamination; high volume for disposal or recycling' },
+      { id:'land_08', sub: 'Ground disturbance near infrastructure', hint: 'Pipeline crossings, road crossings, utility corridors', aspect: 'Damage to existing buried services; unplanned releases from third-party infrastructure' },
+    ],
+  },
+  {
+    cat: '5. Ecology & Biodiversity',
     color: 'green',
     items: [
       { id:'eco_01', sub: 'Protected habitat & designations', hint: 'Siting, ground clearance, cable/pipeline routing', aspect: 'Loss of or disturbance to Natura 2000, RAMSAR, or nationally protected habitat' },
@@ -334,74 +402,6 @@ const RISK_CATEGORIES = [
       { id:'eco_18', sub: 'Underwater noise — pile driving', hint: 'Offshore monopile installation, jacket installation, subsea piling', aspect: 'Acoustic injury or disturbance to fish and marine mammals' },
       { id:'eco_19', sub: 'Artificial light at night', hint: 'Floodlighting, flare stacks, platform lighting, construction lighting', aspect: 'Disruption to nocturnal wildlife (bats, insects, seabirds); community visual intrusion' },
       { id:'eco_20', sub: 'Noise baseline survey', hint: 'Projects near sensitive receptors (residential, schools); Forurensningsloven §11 permit trigger; construction noise impact prediction', aspect: 'Permit conditions set without pre-project background; complaint risk; inadequate noise limits in contract or planning consent' },
-    ],
-  },
-  {
-    cat: '2. Discharge to Water & Marine Environment',
-    color: 'blue',
-    items: [
-      { id:'wat_01', sub: 'Ballast water (vessels)', hint: 'Vessel operations, installation support vessels', aspect: 'Introduction of non-indigenous species via ballast water exchange' },
-      { id:'wat_02', sub: 'Vessel fuel & lubricants', hint: 'Marine support operations, installation vessels', aspect: 'Accidental oil discharge from vessel machinery or fuel transfer' },
-      { id:'wat_03', sub: 'Grey water & sewage (vessels)', hint: 'Crew vessels, installation vessels, FPSOs', aspect: 'Sewage discharge within 12 nm or in special areas' },
-      { id:'wat_04', sub: 'Cooling water thermal discharge', hint: 'Power plant cooling, electrolyser cooling, process cooling', aspect: 'Elevated temperature affecting dissolved oxygen and species behaviour in receiving water' },
-      { id:'wat_05', sub: 'Produced water', hint: 'Oil & gas production operations', aspect: 'Discharge of produced water with hydrocarbons, scale inhibitors, NORM' },
-      { id:'wat_06', sub: 'Process wastewater design', hint: 'Chemical injection, utility systems, drains', aspect: 'Design of wastewater streams — volume, composition, treatment route' },
-      { id:'wat_07', sub: 'Seabed sediment disturbance', hint: 'Dredging, trenching, anchor dragging, jetting, structure installation', aspect: 'Sediment plume; burial of benthic communities; contaminant resuspension' },
-      { id:'wat_08', sub: 'Water quality baseline', hint: 'Onshore watercourse crossings; discharge permitting under Forurensningsloven §11; offshore produced water permitting', aspect: 'Permit refused or inappropriate conditions set without baseline evidence; inability to demonstrate no deterioration under WFD Art. 4' },
-      { id:'wat_09', sub: 'Marine baseline survey *(benthic, ROV, seabed characterisation)*', hint: 'Offshore installation, pipeline or cable routing, anchor deployment, dredging', aspect: 'Unable to demonstrate pre-installation seabed condition; permit refused; unexpected sensitive habitat (cold-water coral, maerl) triggering stop-work' },
-      { id:'wat_10', sub: 'Geophysical / UXO survey', hint: 'Offshore seabed operations; pipeline or cable route survey; anchor pattern; jack-up preloading; construction in former conflict areas', aspect: 'Unknown seabed obstacles, contamination, UXO, or unstable ground; dropped object risk; unexpected habitat disturbance; jack-up punch-through' },
-    ],
-  },
-  {
-    cat: '3. Emission to Air',
-    color: 'red',
-    items: [
-      { id:'air_01', sub: 'Stack / vent emissions', hint: 'Combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
-      { id:'air_02', sub: 'Diesel plant emissions', hint: 'Generators, construction plant, crane engines', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
-      { id:'air_03', sub: 'Flaring volumes & composition', hint: 'Commissioning purge, emergency relief, production upsets', aspect: 'Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability' },
-      { id:'air_04', sub: 'NOₓ emissions & NOₓ tax', hint: 'Gas turbines, engines, flaring, process heaters — offshore and nearshore', aspect: 'NOₓ emissions subject to Norwegian NOₓ tax (kr/kg NOₓ); obligation to join NOₓ Fund or pay full rate' },
-      { id:'air_05', sub: 'CO₂ emissions & CO₂ tax / ETS', hint: 'All combustion, flaring, venting, process releases from offshore installations', aspect: 'CO₂ emissions subject to Norwegian CO₂ tax and Norwegian ETS (kvotesystemet)' },
-      { id:'air_06', sub: 'GHG / CO₂ reporting', hint: 'All combustion, venting, flaring, process releases — all active phases', aspect: 'GHG emissions contributing to national inventory, carbon reporting, and regulatory/fiscal obligations' },
-      { id:'air_07', sub: 'Fugitive VOC & hydrocarbon emissions', hint: 'Flanges, valve stems, loading operations, tank venting', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
-      { id:'air_08', sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
-      { id:'air_09', sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
-      { id:'air_10', sub: 'Atmospheric dispersion modelling', hint: 'Stack design, siting near sensitive receptors', aspect: 'Air quality impact on community or ecological receptors' },
-      { id:'air_11', sub: 'Odour', hint: 'Wastewater treatment, waste handling, produced water, solvents, construction waste', aspect: 'Odour nuisance affecting community receptors' },
-      { id:'air_11', sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
-      { id:'air_12', sub: 'Paint & surface treatment VOCs', hint: 'Maintenance painting, blasting, coating operations', aspect: 'VOC emissions from solvents; contaminated blast grit; paint waste' },
-      { id:'air_13', sub: 'Air quality baseline monitoring', hint: 'Facilities near sensitive receptors (residential, schools, hospitals); emission permit applications under Forurensningsloven §11; EIA', aspect: 'Permit refused or inappropriate emission limit set without pre-project background data; inability to attribute project contribution' },
-    ],
-  },
-  {
-    cat: '4. Waste, Materials & Chemicals',
-    color: 'amber',
-    items: [
-      { id:'wst_01', sub: 'Hazardous substance inventory & REACH', hint: 'Chemical specification, procurement, materials selection', aspect: 'Failure to register or control SVHCs; non-compliant use of restricted substances' },
-      { id:'wst_02', sub: 'Waste hierarchy — materials selection', hint: 'Design decisions, material specification', aspect: 'Generation of excess or non-recyclable waste due to poor design choices' },
-      { id:'wst_03', sub: 'Hazardous waste', hint: 'Excavated contaminated soil, chemical containers, insulation, first-fill residues', aspect: 'Improper storage, transport, or disposal of hazardous waste categories' },
-      { id:'wst_04', sub: 'Packaging waste', hint: 'Procurement of equipment, materials, consumables', aspect: 'Non-recyclable or excessive packaging waste volumes' },
-      { id:'wst_05', sub: 'Refrigerants & blowing agents (F-gas)', hint: 'HVAC design, insulation foam specification, fire suppression systems', aspect: 'Use of high-GWP HFCs; F-gas leakage and loss' },
-      { id:'wst_06', sub: 'Asbestos', hint: 'Legacy equipment, pipe lagging, insulation removal in older facilities', aspect: 'Asbestos fibre release during maintenance or demolition' },
-      { id:'wst_06', sub: 'NORM — naturally occurring radioactive material', hint: 'Produced water scaling, pigging returns, sand production, deposition in vessels', aspect: 'Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste' },
-      { id:'wst_07', sub: 'Radioactive measurement sources', hint: 'Density gauges, level gauges, nuclear logging tools', aspect: 'Loss, damage, or disposal of sealed radioactive sources' },
-      { id:'wst_08', sub: 'Heavy metals in systems', hint: 'Legacy coating systems (lead paint), alloy materials, anti-corrosion anodes', aspect: 'Release of lead, cadmium, mercury, or chromium during maintenance or decommissioning' },
-      { id:'wst_09', sub: 'Chemical flushing & pigging', hint: 'Commissioning clean-up, pipeline maintenance, change of service', aspect: 'Generation of chemically contaminated flush water requiring treatment and disposal' },
-      { id:'wst_10', sub: 'Tank cleaning', hint: 'Tank inspection, change of service, decommissioning', aspect: 'Oily sludge or chemical residue requiring hazardous waste disposal' },
-      { id:'wst_11', sub: 'Subsea structure removal', hint: 'Decommissioning of pipelines, umbilicals, templates, jackets', aspect: 'Contaminated materials, marine litter, seabed disturbance' },
-    ],
-  },
-  {
-    cat: '5. Land, Soil & Contamination',
-    color: 'brown',
-    items: [
-      { id:'land_01', sub: 'Bulk excavation', hint: 'Site preparation, foundation works, cable trenching', aspect: 'Loss of topsoil; disturbance of contaminated ground; peat or organic soil release' },
-      { id:'land_02', sub: 'Topsoil management', hint: 'Stripping, stockpiling, and reinstatement of topsoil', aspect: 'Loss of topsoil quality; failure to reinstate appropriate substrate for habitat recovery' },
-      { id:'land_03', sub: 'Soil erosion & sediment control', hint: 'Graded surfaces, unpaved haul roads, stockpiles, borrow pits', aspect: 'Sediment runoff to watercourse; loss of topsoil from disturbed areas' },
-      { id:'land_04', sub: 'Land contamination survey', hint: 'Previous industrial use, infilled land, leaking USTs', aspect: 'Contamination of soil or groundwater; worker and receptor exposure' },
-      { id:'land_05', sub: 'Floodplain encroachment', hint: 'Facility siting, bund design, drainage routing', aspect: 'Increased flood risk to third parties; loss of flood storage volume' },
-      { id:'land_06', sub: 'Habitat reinstatement', hint: 'Post-construction restoration, decommissioning, site clearance', aspect: 'Failure to reinstate disturbed ground to pre-existing or agreed habitat quality' },
-      { id:'land_07', sub: 'Concrete demolition waste', hint: 'Structure removal, decommissioning of onshore facilities', aspect: 'Alkaline debris; potential contamination; high volume for disposal or recycling' },
-      { id:'land_08', sub: 'Ground disturbance near infrastructure', hint: 'Pipeline crossings, road crossings, utility corridors', aspect: 'Damage to existing buried services; unplanned releases from third-party infrastructure' },
     ],
   },
   {
@@ -437,8 +437,9 @@ const RISK_CATEGORIES = [
       { id:'emg_04', sub: 'Dropped objects — marine', hint: 'Offshore lifting, crane operations, deck work, personnel transfer', aspect: 'Loss of equipment or materials to seabed; marine debris' },
       { id:'emg_05', sub: 'Emergency venting & blowdown', hint: 'Process upsets, ESD activation, commissioning activities', aspect: 'Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes' },
     ],
-  },
+  }
 ];
+
 
 // ── Color map for guide word categories ──────────────────────────────────────
 const COLOR_MAP = {
@@ -1314,15 +1315,16 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   // Biggest identified across all phases is the canonical figure — never show minus
   const SnapDiff = ({prev,curr}) => {
     const pT=snapKg(prev),cT=snapKg(curr);
-    // For identified: only show increase (biggest number wins, never decrease)
     const dI=cT.identified-pT.identified;
     const dA=cT.actual-pT.actual;
-    const hasChange=dA!==0||(dI>0); // only show positive identified change
-    if(!hasChange&&dA===0) return <span style={{fontSize:11,color:T.faint}}>Values carried forward.</span>;
-    return(<span style={{fontSize:11}}>
-      {dI>0&&<span style={{color:T.teal,marginRight:8}}>Identified +{fmt(dI)}</span>}
-      {dA>0&&<span style={{color:T.teal,marginRight:8}}>Actual +{fmt(dA)}</span>}
-      {dA<0&&<span style={{color:T.amber}}>Actual {fmt(dA)} vs prev</span>}
+    if(dI===0&&dA===0) return <span style={{fontSize:11,color:T.faint}}>Values carried forward.</span>;
+    const fmtD = v => {
+      const kg=Math.abs(v); const sign=v>=0?"+":"−";
+      return sign+(kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t CO₂e":Math.round(kg)+" kg CO₂e");
+    };
+    return(<span style={{fontSize:11,display:"flex",gap:10,flexWrap:"wrap"}}>
+      {dI!==0&&<span style={{color:dI>0?T.teal:T.amber,fontWeight:500}}>Identified {fmtD(dI)}</span>}
+      {dA!==0&&<span style={{color:dA>0?T.teal:T.amber,fontWeight:500}}>Actual {fmtD(dA)}</span>}
     </span>);
   };
 
@@ -1729,18 +1731,14 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   };
 
   // New prefill for scope-based opp buttons
-  const prefillOppScope = (type, ghgIds, description, color, warn) => {
+  const prefillOppScope = (type, ghgIds, description, color, warn, btnId) => {
     const newOpp = {
       ...emptyOpp(),
       type, description, _color:color||"",
       ghgPhases: ghgIds&&ghgIds.length>0 ? [emptyGhgPhase("Phase 1", null)] : [],
     };
     newOpp.prefillGhgIds = ghgIds||[];
-    // _screeningId persisted so checklist can detect this opp was added from screening
-    newOpp._screeningId = ghgIds&&ghgIds.length>0 ? ghgIds[0]
-      : OPP_SCOPE2_BUTTONS.find(b=>type.includes(b.label.split(",")[0]))?.id
-        || OPP_SCOPE3_BUTTONS.find(b=>type.includes(b.label.replace("\n"," ").split("/")[0].trim()))?.id
-        || null;
+    newOpp._screeningId = btnId||null;  // use the button id directly — no mismatch
     setOppForm(newOpp);
     setNoxWarn(!!warn);
     setView("form");
@@ -2066,11 +2064,11 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 </div>
               </div>
               {renderScopeChecklist("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",OPP_SCOPE1_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn))}
+                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn,btn.id))}
               {renderScopeChecklist("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",OPP_SCOPE2_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false))}
+                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false,btn.id))}
               {renderScopeChecklist("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",OPP_SCOPE3_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false))}
+                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false,btn.id))}
             </div>
           );
         })()}
@@ -3269,6 +3267,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 function PortfolioView({ projects, onClose, onSelect }) {
   const fmtKg = kg => kg>=1000?(kg/1000).toFixed(1)+" t CO2e":kg>0?Math.round(kg)+" kg CO2e":"--";
   const fmtSc = v => v>=1000?(v/1000).toFixed(1)+"t":Math.round(v)+"kg";
+  const [activeContract, setActiveContract] = useState("__all__");
 
   const contractMap = {};
   projects.forEach(p => {
@@ -3279,6 +3278,9 @@ function PortfolioView({ projects, onClose, onSelect }) {
   const contractGroups = Object.entries(contractMap).sort(([a],[b]) =>
     a==="__none__" ? 1 : b==="__none__" ? -1 : a.localeCompare(b)
   );
+  const visibleGroups = activeContract==="__all__"
+    ? contractGroups
+    : contractGroups.filter(([k])=>k===activeContract);
   const allAspects = projects.flatMap(p=>p.aspects||[]);
   const allOpps    = projects.flatMap(p=>p.opportunities||p.opps||[]);
   const totalGhg   = allOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
@@ -3482,7 +3484,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
 
   return (
     <div style={{ padding:"1.5rem 1.75rem",background:"var(--bg)",minHeight:"100%",fontFamily:"var(--sans,system-ui)" }}>
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem" }}>
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem" }}>
         <div>
           <h1 style={{ margin:"0 0 3px",fontSize:18,fontWeight:700,color:"var(--text)" }}>Portfolio overview</h1>
           <p style={{ margin:0,fontSize:12,color:"var(--muted)" }}>
@@ -3493,7 +3495,26 @@ function PortfolioView({ projects, onClose, onSelect }) {
         <button onClick={onClose} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",cursor:"pointer",fontSize:12 }}>Close</button>
       </div>
 
-      {contractGroups.map(([key,ps])=>(
+      {/* Contract filter tabs */}
+      {contractGroups.length > 1 && (
+        <div style={{ display:"flex",gap:0,flexWrap:"wrap",marginBottom:"1.25rem",
+                      borderBottom:"2px solid var(--border)" }}>
+          {[["__all__","All contracts"],...contractGroups.map(([k])=>[k,k==="__none__"?"No contract":k])].map(([key,label])=>(
+            <button key={key} onClick={()=>setActiveContract(key)}
+              style={{ padding:"7px 16px",fontSize:12,fontWeight:500,cursor:"pointer",
+                       border:"none",background:"transparent",fontFamily:"var(--sans,system-ui)",
+                       borderBottom:"2px solid "+(activeContract===key?"var(--teal)":"transparent"),
+                       marginBottom:"-2px",color:activeContract===key?"var(--teal)":"var(--muted)" }}>
+              {label}
+              {key!=="__all__"&&<span style={{ marginLeft:6,fontSize:10,color:"var(--faint)" }}>
+                ({(contractMap[key]||[]).length})
+              </span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visibleGroups.map(([key,ps])=>(
         <ContractSection key={key} contractKey={key} ps={ps}/>
       ))}
 
@@ -3536,6 +3557,24 @@ function PortfolioView({ projects, onClose, onSelect }) {
 
 
 function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate, onPortfolio, portfolioActive }) {
+  const [collapsed, setCollapsed] = useState(false);
+  if (collapsed) return (
+    <div style={{ width:40, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column",
+                   minHeight:"100vh", alignItems:"center", paddingTop:12, gap:8 }}>
+      <div style={{ width:24, height:24, background:T.teal, borderRadius:4, display:"flex", alignItems:"center",
+                     justifyContent:"center", flexShrink:0, marginBottom:4 }}>
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="white" strokeWidth="1.5"/>
+          <path d="M7 4v3.5l2 1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <button onClick={()=>setCollapsed(false)} title="Expand sidebar"
+        style={{ background:"transparent", border:"none", cursor:"pointer", color:T.sbMuted,
+                 fontSize:16, lineHeight:1, padding:"4px 0" }}>
+        ›
+      </button>
+    </div>
+  );
   return (
     <div style={{ width:215, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
       <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid "+T.sbBd }}>
@@ -3551,6 +3590,11 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
             <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:0, letterSpacing:"0.07em" }}>TOOLKIT</p>
           </div>
           <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
+          <button onClick={()=>setCollapsed(true)} title="Collapse sidebar"
+            style={{ background:"transparent", border:"none", cursor:"pointer", color:T.sbFaint,
+                     fontSize:16, lineHeight:1, padding:"2px 0", marginLeft:2 }}>
+            ‹
+          </button>
         </div>
         <button onClick={onPortfolio}
           style={{ width:"100%", marginTop:8, padding:"6px 10px", borderRadius:5,
