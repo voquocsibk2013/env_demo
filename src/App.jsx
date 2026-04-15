@@ -645,6 +645,28 @@ function calcGhgTotal(o) {
   return maxId>0 ? maxId : null;
 }
 
+// ── Scope savings breakdown ───────────────────────────────────────────────────
+function calcScopeSavings(o) {
+  const phases = o.ghgPhases||o.ghgSnapshots||[];
+  if (!phases.length) return {s1:0, s2:0, s3:0};
+  // sum across ALL phases (max-identified already done by calcGhgTotal; here we want per-scope total)
+  const allLines = phases.flatMap(ph=>ph.lines||[]);
+  const red = l => parseFloat(l.reduction||l.qty||0);
+  const s1 = allLines.filter(l=>(l.scope||l.id||"").includes("Scope 1")||(l.id||"").startsWith("s1"))
+    .reduce((s,l)=>s+red(l)*(parseFloat(l.cf)||0),0);
+  const s2 = allLines.filter(l=>(l.scope||l.id||"").includes("Scope 2")||(l.id||"").startsWith("s2"))
+    .reduce((s,l)=>s+red(l)*(parseFloat(l.cf)||0),0);
+  const s3 = allLines.filter(l=>(l.scope||l.id||"").includes("Scope 3")||(l.id||"").startsWith("s3"))
+    .reduce((s,l)=>s+red(l)*(parseFloat(l.cf)||0),0);
+  return {s1, s2, s3};
+}
+function calcPortfolioScopeSavings(opps) {
+  return (opps||[]).reduce((acc,o)=>{
+    const {s1,s2,s3} = calcScopeSavings(o);
+    return {s1:acc.s1+s1, s2:acc.s2+s2, s3:acc.s3+s3};
+  }, {s1:0,s2:0,s3:0});
+}
+
 function inferOppType(oppText) {
   if (!oppText) return "";
   const lower = oppText.toLowerCase();
@@ -2605,15 +2627,36 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
 
-          {/* GHG saving strip */}
-          {opps.length > 0 && totalGhgSaving > 0 && (
-            <div style={{ display:"flex", alignItems:"center", gap:16, padding:"10px 16px", marginBottom:"1rem",
-                           background:T.tealBg, border:"1px solid "+T.tealBd, borderRadius:7 }}>
-              <span style={{ fontSize:11, color:T.teal, fontWeight:500 }}>Identified GHG savings (all opportunities)</span>
-              <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:500, color:T.tealDark }}>{fmtGhg(totalGhgSaving)}</span>
-              <span style={{ fontSize:11, color:T.teal, marginLeft:"auto" }}>{opps.filter(o=>calcGhgTotal(o)).length} of {opps.length} opp{opps.length!==1?"s":""} quantified</span>
-            </div>
-          )}
+          {/* tCO₂e saving strip with scope breakdown */}
+          {opps.length > 0 && totalGhgSaving > 0 && (() => {
+            const sc = calcPortfolioScopeSavings(opps);
+            const fmtT = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t":Math.round(kg)+" kg";
+            return (
+              <div style={{ padding:"11px 16px", marginBottom:"1rem",
+                             background:T.tealBg, border:"1px solid "+T.tealBd, borderRadius:7 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
+                  <span style={{ fontSize:11, color:T.teal, fontWeight:500 }}>tCO₂e savings identified</span>
+                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:500, color:T.tealDark }}>{fmtGhg(totalGhgSaving)}</span>
+                  <span style={{ fontSize:11, color:T.teal, marginLeft:"auto" }}>
+                    {opps.filter(o=>calcGhgTotal(o)).length}/{opps.length} quantified
+                  </span>
+                </div>
+                {(sc.s1+sc.s2+sc.s3)>0 && (
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {[{l:"Scope 1",v:sc.s1,bg:T.redBg,c:T.red,bd:T.redBd},
+                      {l:"Scope 2",v:sc.s2,bg:T.blueBg,c:T.blue,bd:T.blueBd},
+                      {l:"Scope 3",v:sc.s3,bg:T.tealBg,c:T.teal,bd:T.tealBd}]
+                      .filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                      <span key={l} style={{ fontSize:11, padding:"2px 10px", borderRadius:4,
+                                              background:bg, color:c, border:"1px solid "+bd }}>
+                        {l}: <strong style={{ fontFamily:T.mono }}>{fmtT(v)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Status progress bar */}
           {aspects.length > 0 && (
