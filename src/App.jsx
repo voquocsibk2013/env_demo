@@ -3224,9 +3224,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
 // ── Portfolio Overview ────────────────────────────────────────────────────────
 function PortfolioView({ projects, onClose, onSelect }) {
-  const [activeContract, setActiveContract] = useState("__all__");
+  const fmtKg = kg => kg>=1000?(kg/1000).toFixed(1)+" t CO2e":kg>0?Math.round(kg)+" kg CO2e":"--";
+  const fmtSc = v => v>=1000?(v/1000).toFixed(1)+"t":Math.round(v)+"kg";
 
-  // Build contract list
   const contractMap = {};
   projects.forEach(p => {
     const key = (p.contract||"").trim() || "__none__";
@@ -3236,391 +3236,249 @@ function PortfolioView({ projects, onClose, onSelect }) {
   const contractGroups = Object.entries(contractMap).sort(([a],[b]) =>
     a==="__none__" ? 1 : b==="__none__" ? -1 : a.localeCompare(b)
   );
-
-  const visibleProjects = activeContract==="__all__" ? projects
-    : projects.filter(p => (activeContract==="__none__" ? !(p.contract||"").trim() : (p.contract||"").trim()===activeContract));
-  const visAspects = visibleProjects.flatMap(p=>p.aspects||[]);
-  const visOpps    = visibleProjects.flatMap(p=>p.opportunities||p.opps||[]);
-  const visSig     = visAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
-  const visWatch   = visAspects.filter(a=>calcSig(a)==="WATCH").length;
-  const visLow     = visAspects.filter(a=>calcSig(a)==="Low").length;
-  const visHigh    = visOpps.filter(o=>calcOppScore(o)>=75).length;
-  const openAsp    = visAspects.filter(a=>a.status==="Open").length;
-  const inProgAsp  = visAspects.filter(a=>a.status==="In Progress").length;
-  const closedAsp  = visAspects.filter(a=>a.status==="Closed").length;
+  const allAspects = projects.flatMap(p=>p.aspects||[]);
+  const allOpps    = projects.flatMap(p=>p.opportunities||p.opps||[]);
+  const totalGhg   = allOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
 
   const MiniDonut = ({ segments, size=52, strokeW=9 }) => {
-    const r = (size-strokeW)/2; const circ = 2*Math.PI*r;
-    const total = segments.reduce((s,g)=>s+g.v,0)||1;
-    let offset = 0;
+    const r=(size-strokeW)/2; const circ=2*Math.PI*r;
+    const total=segments.reduce((s,g)=>s+g.v,0)||1;
+    let offset=0;
     return (
       <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={strokeW}/>
-        {segments.map((g,i) => {
-          const len = (g.v/total)*circ;
-          const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
+        {segments.map((g,i)=>{
+          const len=(g.v/total)*circ;
+          const el=<circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
             stroke={g.c} strokeWidth={strokeW} strokeDasharray={len+" "+(circ-len)}
             strokeDashoffset={-offset} strokeLinecap="butt"/>;
-          offset += len; return el;
+          offset+=len; return el;
         })}
       </svg>
     );
   };
 
   const ProjectCard = ({ p }) => {
-    const asp   = p.aspects||[];
-    const opp   = p.opportunities||p.opps||[];
-    const sig   = asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
-    const watch = asp.filter(a=>calcSig(a)==="WATCH").length;
-    const low   = asp.filter(a=>calcSig(a)==="Low").length;
-    const openN = asp.filter(a=>a.status==="Open").length;
-    const inProg= asp.filter(a=>a.status==="In Progress").length;
-    const closed= asp.filter(a=>a.status==="Closed").length;
-    const hi    = opp.filter(o=>calcOppScore(o)>=75).length;
-    const tot   = asp.length;
+    const asp=p.aspects||[]; const opp=p.opportunities||p.opps||[];
+    const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+    const watch=asp.filter(a=>calcSig(a)==="WATCH").length;
+    const low=asp.filter(a=>calcSig(a)==="Low").length;
+    const openN=asp.filter(a=>a.status==="Open").length;
+    const inProg=asp.filter(a=>a.status==="In Progress").length;
+    const closed=asp.filter(a=>a.status==="Closed").length;
+    const hi=opp.filter(o=>calcOppScore(o)>=75).length;
+    const tot=asp.length;
     return (
-      <div onClick={()=>{ onSelect(p.id); onClose(); }}
-        style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:10,
-                 padding:"14px 16px", cursor:"pointer", transition:"border-color 0.15s",
-                 display:"grid", gridTemplateColumns:"1fr auto", gap:"12px 20px", alignItems:"start" }}
+      <div onClick={()=>{onSelect(p.id);onClose();}}
+        style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:10,
+                 padding:"14px 16px",cursor:"pointer",transition:"border-color 0.15s",
+                 display:"grid",gridTemplateColumns:"1fr auto",gap:"12px 20px",alignItems:"start" }}
         onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal-bd)"}
         onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
-        {/* Left: text */}
         <div>
-          <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:8, flexWrap:"wrap" }}>
-            <span style={{ fontSize:14, fontWeight:600, color:"var(--text)" }}>{p.name||"Unnamed"}</span>
-            {p.projectId && <span style={{ fontFamily:"var(--mono,monospace)", fontSize:10, color:"var(--faint)" }}>{p.projectId}</span>}
-            {p.company && <span style={{ fontSize:12, color:"var(--muted)" }}>{p.company}</span>}
-            <div style={{ display:"flex", gap:5, marginLeft:"auto" }}>
-              {p.type  && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--slate-bg)", color:"var(--slate)", border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
-              {p.phase && <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:"var(--blue-bg)", color:"var(--blue)", border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
+          <div style={{ display:"flex",alignItems:"baseline",gap:10,marginBottom:8,flexWrap:"wrap" }}>
+            <span style={{ fontSize:14,fontWeight:600,color:"var(--text)" }}>{p.name||"Unnamed"}</span>
+            {p.projectId&&<span style={{ fontFamily:"var(--mono,monospace)",fontSize:10,color:"var(--faint)" }}>{p.projectId}</span>}
+            {p.company&&<span style={{ fontSize:12,color:"var(--muted)" }}>{p.company}</span>}
+            <div style={{ display:"flex",gap:5,marginLeft:"auto" }}>
+              {p.type&&<span style={{ fontSize:9,padding:"2px 7px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)",border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
+              {p.phase&&<span style={{ fontSize:9,padding:"2px 7px",borderRadius:3,background:"var(--blue-bg)",color:"var(--blue)",border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
             </div>
           </div>
-          {/* Significance bar */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-              <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Significance</span>
-              <span style={{ fontSize:10, color:"var(--faint)" }}>{tot} aspect{tot!==1?"s":""}</span>
+            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+              <span style={{ fontSize:10,color:"var(--muted)",fontWeight:500 }}>Significance</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{tot} aspect{tot!==1?"s":""}</span>
             </div>
-            {tot>0 ? <div style={{ display:"flex", height:7, borderRadius:4, overflow:"hidden", gap:"1px" }}>
-              {sig   > 0 && <div style={{ flex:sig,   background:"var(--red-bd)",   minWidth:4 }} title={"Significant: "+sig}/>}
-              {watch > 0 && <div style={{ flex:watch, background:"var(--amber-bd)", minWidth:4 }} title={"Watch: "+watch}/>}
-              {low   > 0 && <div style={{ flex:low,   background:"var(--green-bd)", minWidth:4 }} title={"Low: "+low}/>}
-              {(asp.length-sig-watch-low) > 0 && <div style={{ flex:asp.length-sig-watch-low, background:"var(--border)", minWidth:2 }}/>}
-            </div> : <div style={{ height:7, borderRadius:4, background:"var(--border)" }}/>}
-            <div style={{ display:"flex", gap:8, marginTop:5 }}>
+            {tot>0?<div style={{ display:"flex",height:7,borderRadius:4,overflow:"hidden",gap:"1px" }}>
+              {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }} title={"Significant: "+sig}/>}
+              {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }} title={"Watch: "+watch}/>}
+              {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }} title={"Low: "+low}/>}
+            </div>:<div style={{ height:7,borderRadius:4,background:"var(--border)" }}/>}
+            <div style={{ display:"flex",gap:8,marginTop:5 }}>
               {[{l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
                 {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
                 {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].map(({l,v,bg,c,bd})=>(
-                <span key={l} style={{ fontSize:10, display:"inline-flex", alignItems:"center", gap:3,
-                                       padding:"1px 6px", borderRadius:3, background:bg, color:c, border:"1px solid "+bd }}>
+                <span key={l} style={{ fontSize:10,display:"inline-flex",alignItems:"center",gap:3,
+                                       padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                   {l} <strong style={{ fontWeight:700 }}>{v}</strong>
                 </span>
               ))}
             </div>
           </div>
-          {/* Opportunities row */}
-          {opp.length > 0 && <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <span style={{ fontSize:10, color:"var(--muted)", fontWeight:500 }}>Opportunities:</span>
-            <span style={{ fontSize:10, color:"var(--muted)" }}>Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong></span>
-            <span style={{ fontSize:10, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
-              <span style={{ width:7, height:7, borderRadius:"50%", background:"var(--teal)", display:"inline-block" }}/>
+          {opp.length>0&&<div style={{ display:"flex",gap:8,alignItems:"center" }}>
+            <span style={{ fontSize:10,color:"var(--muted)",fontWeight:500 }}>Opportunities:</span>
+            <span style={{ fontSize:10,color:"var(--muted)" }}>Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong></span>
+            <span style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:3 }}>
+              <span style={{ width:7,height:7,borderRadius:"50%",background:"var(--teal)",display:"inline-block" }}/>
               High <strong style={{ color:"var(--text)" }}>{hi}</strong>
             </span>
           </div>}
         </div>
-        {/* Right: status donut */}
-        {tot > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:60 }}>
+        {tot>0&&(
+          <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:60 }}>
             <div style={{ position:"relative" }}>
-              <MiniDonut segments={[
-                {v:openN,  c:"var(--red)"},
-                {v:inProg, c:"var(--amber)"},
-                {v:closed, c:"var(--green)"},
-              ]}/>
-              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center",
-                             justifyContent:"center", flexDirection:"column" }}>
-                <span style={{ fontSize:11, fontWeight:700, color:"var(--text)", lineHeight:1 }}>{tot}</span>
+              <MiniDonut segments={[{v:openN,c:"var(--red)"},{v:inProg,c:"var(--amber)"},{v:closed,c:"var(--green)"}]}/>
+              <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column" }}>
+                <span style={{ fontSize:11,fontWeight:700,color:"var(--text)",lineHeight:1 }}>{tot}</span>
               </div>
             </div>
-            <span style={{ fontSize:9, color:"var(--faint)", textAlign:"center" }}>aspects</span>
+            <span style={{ fontSize:9,color:"var(--faint)",textAlign:"center" }}>aspects</span>
           </div>
         )}
       </div>
     );
   };
 
-  return (
-    <div style={{ padding:"1.5rem 1.75rem", background:"var(--bg)", minHeight:"100%", fontFamily:"var(--sans, system-ui)" }}>
-      {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
-        <div>
-          <h1 style={{ margin:"0 0 3px", fontSize:18, fontWeight:700, color:"var(--text)" }}>Portfolio overview</h1>
-          <p style={{ margin:0, fontSize:12, color:"var(--muted)" }}>{projects.length} project{projects.length!==1?"s":""} · {visAspects.length} aspects · {visOpps.length} opportunities</p>
+  const ContractSection = ({ contractKey, ps }) => {
+    const asp=ps.flatMap(p=>p.aspects||[]);
+    const opp=ps.flatMap(p=>p.opportunities||p.opps||[]);
+    const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+    const watch=asp.filter(a=>calcSig(a)==="WATCH").length;
+    const low=asp.filter(a=>calcSig(a)==="Low").length;
+    const openN=asp.filter(a=>a.status==="Open").length;
+    const inP=asp.filter(a=>a.status==="In Progress").length;
+    const cls=asp.filter(a=>a.status==="Closed").length;
+    const hiOpp=opp.filter(o=>calcOppScore(o)>=75).length;
+    const medOpp=opp.filter(o=>{const s=calcOppScore(o);return s>=30&&s<75;}).length;
+    const ghg=opp.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
+    const sc=calcPortfolioScopeSavings(opp);
+    return (
+      <div style={{ marginBottom:"2rem" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:"0.75rem",
+                       paddingBottom:8,borderBottom:"2px solid var(--border)" }}>
+          <h2 style={{ margin:0,fontSize:14,fontWeight:600,color:"var(--text)" }}>
+            {contractKey==="__none__"?"No contract assigned":contractKey}
+          </h2>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>{ps.length} project{ps.length!==1?"s":""}</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>&middot;</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>{asp.length} aspect{asp.length!==1?"s":""}</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>&middot;</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>{opp.length} opportunit{opp.length!==1?"ies":"y"}</span>
+          {ghg>0&&<span style={{ marginLeft:"auto",fontFamily:"var(--mono)",fontSize:12,fontWeight:500,color:"var(--teal-dk)" }}>{fmtKg(ghg)}</span>}
         </div>
-        <button onClick={onClose}
-          style={{ padding:"6px 14px", borderRadius:6, border:"1px solid var(--border)", background:"transparent",
-                   color:"var(--muted)", cursor:"pointer", fontSize:12 }}>
-          Close
-        </button>
-      </div>
 
-      {/* Contract filter tabs */}
-      {contractGroups.length > 1 && (
-        <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:"1.25rem",
-                      borderBottom:"2px solid var(--border)", paddingBottom:0 }}>
-          {[["__all__","All contracts"],...contractGroups.map(([k,ps])=>[k,k==="__none__"?"No contract":k])].map(([key,label])=>(
-            <button key={key} onClick={()=>setActiveContract(key)}
-              style={{ padding:"7px 14px", fontSize:12, fontWeight:500, cursor:"pointer",
-                       border:"none", background:"transparent", fontFamily:"var(--sans,system-ui)",
-                       borderBottom:"2px solid "+(activeContract===key?"var(--teal)":"transparent"),
-                       marginBottom:"-2px", color:activeContract===key?"var(--teal)":"var(--muted)" }}>
-              {label}
-              {key!=="__all__" && <span style={{ marginLeft:6, fontSize:10, color:"var(--faint)" }}>
-                ({(contractMap[key]||[]).length})
-              </span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Stat cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:10, marginBottom:"1.5rem" }}>
-        {[
-          { label:"Projects",        val:visibleProjects.length, bg:"var(--surface)",    c:"var(--text)",    bd:"var(--border)"     },
-          { label:"Significant",     val:visSig,                 bg:"var(--red-bg)",     c:"var(--red)",     bd:"var(--red-bd)"     },
-          { label:"Open aspects",    val:openAsp,                bg:"var(--red-bg)",     c:"var(--red)",     bd:"var(--red-bd)"     },
-          { label:"Opportunities",   val:visOpps.length,         bg:"var(--purple-bg)",  c:"var(--purple)",  bd:"var(--purple-bd)"  },
-          { label:"High priority",   val:visHigh,                bg:"var(--teal-bg)",    c:"var(--teal)",    bd:"var(--teal-bd)"    },
-          { label:"GHG identified",  val:(()=>{ const t=visOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0); return t>=1000?(t/1000).toFixed(1)+"t":t>0?t.toFixed(0)+"kg":"—"; })(), bg:"var(--teal-bg)", c:"var(--teal-dk)", bd:"var(--teal-bd)" },
-        ].map(({ label, val, bg, c, bd }) => (
-          <div key={label} style={{ background:bg, borderRadius:8, padding:"10px 12px", border:"1px solid "+bd }}>
-            <p style={{ fontSize:9, fontWeight:600, color:c, margin:"0 0 5px", letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
-            <p style={{ fontSize:20, fontWeight:700, margin:0, color:c, lineHeight:1 }}>{val}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Portfolio donut row */}
-      {visAspects.length > 0 && (
-        <div style={{ display:"flex", gap:20, flexWrap:"wrap", marginBottom:"1.5rem",
-                      background:"var(--surface)", borderRadius:10, padding:"14px 20px",
-                      border:"1px solid var(--border)", alignItems:"center" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ position:"relative" }}>
-              <svg width={72} height={72} style={{ transform:"rotate(-90deg)" }}>
-                {(() => {
-                  const r=26; const circ=2*Math.PI*r; const tot=visAspects.length||1;
-                  const segs=[{v:visSig,c:"var(--red-bd)"},{v:visWatch,c:"var(--amber-bd)"},{v:visLow,c:"var(--green-bd)"}];
-                  let off=0; return segs.map((g,i)=>{
-                    const len=(g.v/tot)*circ;
-                    const el=<circle key={i} cx={36} cy={36} r={r} fill="none" stroke={g.c} strokeWidth={12}
-                      strokeDasharray={len+" "+(circ-len)} strokeDashoffset={-off}/>;
-                    off+=len; return el;
-                  });
-                })()}
-                <circle cx={36} cy={36} r={26} fill="none" stroke="var(--border)" strokeWidth={12} opacity={0.3}/>
-              </svg>
-              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column",
-                             alignItems:"center", justifyContent:"center" }}>
-                <span style={{ fontSize:14, fontWeight:700, color:"var(--text)", lineHeight:1 }}>{visAspects.length}</span>
-                <span style={{ fontSize:8, color:"var(--faint)" }}>aspects</span>
-              </div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:"1rem" }}>
+          {/* Aspects bar */}
+          <div style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 14px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+              <span style={{ fontSize:11,fontWeight:500,color:"var(--muted)" }}>Aspects — significance</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{asp.length} total</span>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              {[{l:"Significant",v:visSig,c:"var(--red)"},{l:"Watch",v:visWatch,c:"var(--amber)"},{l:"Low",v:visLow,c:"var(--green)"}].map(({l,v,c})=>(
-                <div key={l} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
-                  <span style={{ width:8, height:8, borderRadius:"50%", background:c, display:"inline-block", flexShrink:0 }}/>
-                  <span style={{ color:"var(--muted)", minWidth:70 }}>{l}</span>
-                  <strong style={{ color:"var(--text)", minWidth:20, textAlign:"right" }}>{v}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ width:"1px", background:"var(--border)", alignSelf:"stretch", margin:"0 4px" }}/>
-          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ position:"relative" }}>
-              <svg width={72} height={72} style={{ transform:"rotate(-90deg)" }}>
-                {(() => {
-                  const r=26; const circ=2*Math.PI*r; const tot=visAspects.length||1;
-                  const segs=[{v:openAsp,c:"var(--red-bd)"},{v:inProgAsp,c:"var(--amber-bd)"},{v:closedAsp,c:"var(--green-bd)"}];
-                  let off=0; return segs.map((g,i)=>{
-                    const len=(g.v/tot)*circ;
-                    const el=<circle key={i} cx={36} cy={36} r={r} fill="none" stroke={g.c} strokeWidth={12}
-                      strokeDasharray={len+" "+(circ-len)} strokeDashoffset={-off}/>;
-                    off+=len; return el;
-                  });
-                })()}
-                <circle cx={36} cy={36} r={26} fill="none" stroke="var(--border)" strokeWidth={12} opacity={0.3}/>
-              </svg>
-              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column",
-                             alignItems:"center", justifyContent:"center" }}>
-                <span style={{ fontSize:14, fontWeight:700, color:"var(--text)", lineHeight:1 }}>{openAsp}</span>
-                <span style={{ fontSize:8, color:"var(--faint)" }}>open</span>
+            {asp.length>0?<>
+              <div style={{ display:"flex",height:8,borderRadius:4,overflow:"hidden",gap:"1px",marginBottom:6 }}>
+                {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }}/>}
+                {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }}/>}
+                {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }}/>}
+                {asp.length-sig-watch-low>0&&<div style={{ flex:asp.length-sig-watch-low,background:"var(--border)",minWidth:2 }}/>}
               </div>
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              {[{l:"Open",v:openAsp,c:"var(--red)"},{l:"In Progress",v:inProgAsp,c:"var(--amber)"},{l:"Closed",v:closedAsp,c:"var(--green)"}].map(({l,v,c})=>(
-                <div key={l} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
-                  <span style={{ width:8, height:8, borderRadius:"50%", background:c, display:"inline-block", flexShrink:0 }}/>
-                  <span style={{ color:"var(--muted)", minWidth:70 }}>{l}</span>
-                  <strong style={{ color:"var(--text)", minWidth:20, textAlign:"right" }}>{v}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Opportunities summary bar + high-priority list */}
-      {visOpps.length > 0 && (() => {
-        const visHigh2 = visOpps.filter(o=>calcOppScore(o)>=75);
-        const visMed   = visOpps.filter(o=>{ const s=calcOppScore(o); return s>=30&&s<75; });
-        const visLow2  = visOpps.filter(o=>calcOppScore(o)>0&&calcOppScore(o)<30);
-        const visNone  = visOpps.filter(o=>calcOppScore(o)===0);
-        const totalGhg = visOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
-        const fmtKg = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t":kg.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg";
-        return (
-          <div style={{ marginBottom:"1.5rem" }}>
-            {/* Priority bar */}
-            <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)",
-                           padding:"14px 20px", marginBottom:"0.75rem" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                <span style={{ fontSize:11, fontWeight:500, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                  Opportunities — priority breakdown
-                </span>
-                {totalGhg>0&&<span style={{ fontFamily:"var(--mono)", fontSize:12, fontWeight:500, color:"var(--teal-dk)" }}>
-                  {fmtKg(totalGhg)} CO₂e identified
-                </span>}
-              </div>
-              <div style={{ display:"flex", borderRadius:5, overflow:"hidden", height:10, background:"var(--border)", gap:"1px", marginBottom:7 }}>
-                {visHigh2.length>0&&<div title={"High: "+visHigh2.length} style={{ flex:visHigh2.length, background:"var(--teal-bd)", minWidth:2 }}/>}
-                {visMed.length>0  &&<div title={"Medium: "+visMed.length}  style={{ flex:visMed.length,   background:"var(--amber-bd)", minWidth:2 }}/>}
-                {visLow2.length>0 &&<div title={"Low: "+visLow2.length}    style={{ flex:visLow2.length,  background:"var(--purple-bd)", minWidth:2 }}/>}
-                {visNone.length>0 &&<div title={"Unscored: "+visNone.length} style={{ flex:visNone.length, background:"var(--border)", minWidth:2 }}/>}
-              </div>
-              <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
-                {[{l:"High priority",v:visHigh2.length,c:"var(--teal)"},{l:"Medium",v:visMed.length,c:"var(--amber)"},{l:"Low",v:visLow2.length,c:"var(--purple)"},{l:"Unscored",v:visNone.length,c:"var(--faint)"}]
-                  .filter(x=>x.v>0).map(({l,v,c})=>(
-                  <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11 }}>
-                    <span style={{ width:8, height:8, borderRadius:"50%", background:c, display:"inline-block" }}/>
-                    <span style={{ color:"var(--muted)" }}>{l}</span>
-                    <strong style={{ color:"var(--text)" }}>{v}</strong>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
+                {[{l:"Significant",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
+                  {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                  {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                  <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
+                    {l} <strong>{v}</strong>
                   </span>
                 ))}
               </div>
-            </div>
-
-            {/* High priority list */}
-            {visHigh2.length > 0 && (
-              <div>
-                <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.5rem", color:"var(--muted)",
-                               textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                  High priority opportunities ({visHigh2.length})
-                </h2>
-                <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)", overflow:"hidden" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                    <thead>
-                      <tr style={{ background:"var(--surface2)" }}>
-                        {["Contract","Project","Ref","Opportunity","Type","Score","GHG saving","Status"].map(h=>(
-                          <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:9, fontWeight:600,
-                                               color:"var(--muted)", borderBottom:"1px solid var(--border)",
-                                               textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleProjects.flatMap(p=>
-                        (p.opportunities||p.opps||[])
-                          .filter(o=>calcOppScore(o)>=75)
-                          .map(o=>({...o,_proj:p}))
-                      ).sort((a,b)=>calcOppScore(b)-calcOppScore(a))
-                      .map((o,i)=>{
-                        const score=calcOppScore(o);
-                        const ghg=calcGhgTotal(o);
-                        const sc={bg:"var(--teal-bg)",c:"var(--teal-dk)",bd:"var(--teal-bd)"};
-                        return(
-                          <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)", borderLeft:"3px solid var(--teal-bd)" }}>
-                            <td style={{ padding:"8px 12px", fontSize:11, color:"var(--faint)" }}>{o._proj.contract||"—"}</td>
-                            <td style={{ padding:"8px 12px", fontSize:11, color:"var(--muted)" }}>{o._proj.name||"Unnamed"}</td>
-                            <td style={{ padding:"8px 12px" }}><span style={{ fontFamily:"monospace", fontSize:10, fontWeight:600, color:"var(--purple)" }}>{o.ref}</span></td>
-                            <td style={{ padding:"8px 12px", fontWeight:500, color:"var(--text)", maxWidth:200 }}>
-                              <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={o.description}>{o.description||o.type||"—"}</div>
-                            </td>
-                            <td style={{ padding:"8px 12px" }}>
-                              {o.type&&<span style={{ fontSize:9, padding:"2px 6px", borderRadius:3, background:"var(--teal-bg)", color:"var(--teal)", border:"1px solid var(--teal-bd)", whiteSpace:"nowrap" }}>{o.type.slice(0,30)}</span>}
-                            </td>
-                            <td style={{ padding:"8px 12px" }}>
-                              <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:700, padding:"2px 7px", borderRadius:3,
-                                             background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score}</span>
-                            </td>
-                            <td style={{ padding:"8px 12px" }}>
-                              {ghg?<span style={{ fontFamily:"monospace", fontSize:11, fontWeight:600, color:"var(--teal-dk)" }}>{fmtKg(ghg)} CO₂e</span>:<span style={{ color:"var(--faint)" }}>—</span>}
-                            </td>
-                            <td style={{ padding:"8px 12px" }}>
-                              <span style={{ fontSize:9, padding:"2px 5px", borderRadius:3,
-                                background:o.status==="Closed"?"var(--green-bg)":o.status==="In Progress"?"var(--amber-bg)":"var(--red-bg)",
-                                color:o.status==="Closed"?"var(--green)":o.status==="In Progress"?"var(--amber)":"var(--red)" }}>
-                                {o.status||"Open"}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+              <div style={{ display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:"1px",marginBottom:5 }}>
+                {openN>0&&<div style={{ flex:openN,background:"var(--red-bd)",minWidth:3 }}/>}
+                {inP>0&&<div style={{ flex:inP,background:"var(--amber-bd)",minWidth:3 }}/>}
+                {cls>0&&<div style={{ flex:cls,background:"var(--green-bd)",minWidth:3 }}/>}
               </div>
-            )}
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                {[{l:"Open",v:openN,c:"var(--red)"},{l:"In progress",v:inP,c:"var(--amber)"},{l:"Closed",v:cls,c:"var(--green)"}].filter(x=>x.v>0).map(({l,v,c})=>(
+                  <span key={l} style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:4 }}>
+                    <span style={{ width:7,height:7,borderRadius:"50%",background:c,display:"inline-block" }}/>{l} <strong style={{ color:"var(--text)" }}>{v}</strong>
+                  </span>
+                ))}
+              </div>
+            </>:<span style={{ fontSize:11,color:"var(--faint)",fontStyle:"italic" }}>No aspects yet</span>}
           </div>
-        );
-      })()}
 
-      {/* Project cards */}
-      <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.6rem", color:"var(--muted)",
-                   textTransform:"uppercase", letterSpacing:"0.06em" }}>
-        {activeContract==="__all__" ? "All projects" : activeContract==="__none__" ? "No contract assigned" : activeContract}
-        <span style={{ marginLeft:8, fontWeight:400, color:"var(--faint)" }}>({visibleProjects.length})</span>
-      </h2>
-      <div style={{ display:"grid", gap:8, marginBottom:"1.75rem" }}>
-        {visibleProjects.map(p => <ProjectCard key={p.id} p={p}/>)}
+          {/* Opportunities bar */}
+          <div style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 14px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+              <span style={{ fontSize:11,fontWeight:500,color:"var(--muted)" }}>Opportunities — priority</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{opp.length} total</span>
+            </div>
+            {opp.length>0?<>
+              <div style={{ display:"flex",height:8,borderRadius:4,overflow:"hidden",gap:"1px",marginBottom:6 }}>
+                {hiOpp>0&&<div style={{ flex:hiOpp,background:"var(--teal-bd)",minWidth:4 }}/>}
+                {medOpp>0&&<div style={{ flex:medOpp,background:"var(--amber-bd)",minWidth:4 }}/>}
+                {opp.length-hiOpp-medOpp>0&&<div style={{ flex:opp.length-hiOpp-medOpp,background:"var(--border)",minWidth:3 }}/>}
+              </div>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
+                {[{l:"High",v:hiOpp,bg:"var(--teal-bg)",c:"var(--teal)",bd:"var(--teal-bd)"},
+                  {l:"Medium",v:medOpp,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                  {l:"Low/None",v:opp.length-hiOpp-medOpp,bg:"var(--slate-bg)",c:"var(--slate)",bd:"var(--border)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                  <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
+                    {l} <strong>{v}</strong>
+                  </span>
+                ))}
+              </div>
+              {(sc.s1+sc.s2+sc.s3)>0&&(
+                <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>
+                  {[{l:"S1",v:sc.s1,c:"var(--red)"},{l:"S2",v:sc.s2,c:"var(--blue)"},{l:"S3",v:sc.s3,c:"var(--teal)"}].filter(x=>x.v>0).map(({l,v,c})=>(
+                    <span key={l} style={{ fontSize:11,color:c,fontFamily:"var(--mono)" }}>
+                      {l}: <strong>{fmtSc(v)}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>:<span style={{ fontSize:11,color:"var(--faint)",fontStyle:"italic" }}>No opportunities yet</span>}
+          </div>
+        </div>
+
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10 }}>
+          {ps.map(p=><ProjectCard key={p.id} p={p}/>)}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding:"1.5rem 1.75rem",background:"var(--bg)",minHeight:"100%",fontFamily:"var(--sans,system-ui)" }}>
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem" }}>
+        <div>
+          <h1 style={{ margin:"0 0 3px",fontSize:18,fontWeight:700,color:"var(--text)" }}>Portfolio overview</h1>
+          <p style={{ margin:0,fontSize:12,color:"var(--muted)" }}>
+            {projects.length} project{projects.length!==1?"s":""} &middot; {allAspects.length} aspects &middot; {allOpps.length} opportunities
+            {totalGhg>0&&<span style={{ marginLeft:12,color:"var(--teal-dk)",fontFamily:"var(--mono)",fontWeight:500 }}>{fmtKg(totalGhg)}</span>}
+          </p>
+        </div>
+        <button onClick={onClose} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",cursor:"pointer",fontSize:12 }}>Close</button>
       </div>
 
-      {/* Cross-portfolio significant aspects */}
-      {visSig > 0 && (
-        <div>
-          <h2 style={{ fontSize:13, fontWeight:600, margin:"0 0 0.6rem", color:"var(--muted)",
-                       textTransform:"uppercase", letterSpacing:"0.06em" }}>
-            Significant aspects ({visSig})
+      {contractGroups.map(([key,ps])=>(
+        <ContractSection key={key} contractKey={key} ps={ps}/>
+      ))}
+
+      {allAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length>0&&(
+        <div style={{ marginTop:"0.5rem" }}>
+          <h2 style={{ fontSize:13,fontWeight:600,margin:"0 0 0.6rem",color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.06em" }}>
+            Significant aspects ({allAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length})
           </h2>
-          <div style={{ background:"var(--surface)", borderRadius:8, border:"1px solid var(--border)", overflow:"hidden" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-              <thead>
-                <tr style={{ background:"var(--surface2)" }}>
-                  {["Contract","Project","ID","Ref","Aspect","Score","Phase","Status"].map(h => (
-                    <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:9, fontWeight:600,
-                                         color:"var(--muted)", borderBottom:"1px solid var(--border)",
-                                         textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
+          <div style={{ background:"var(--surface)",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden" }}>
+            <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
+              <thead><tr style={{ background:"var(--surface2)" }}>
+                {["Contract","Project","ID","Ref","Aspect","Score","Phase","Status"].map(h=>(
+                  <th key={h} style={{ padding:"8px 12px",textAlign:"left",fontSize:9,fontWeight:600,color:"var(--muted)",borderBottom:"1px solid var(--border)",textTransform:"uppercase",letterSpacing:"0.07em",whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr></thead>
               <tbody>
-                {visibleProjects.flatMap(p =>
-                  (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").map(a=>({...a,_proj:p}))
-                ).map((a,i) => {
-                  const score = calcScore(a);
-                  return (
-                    <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)", borderLeft:"3px solid var(--red-bd)" }}>
-                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--faint)" }}>{a._proj.contract||"—"}</td>
-                      <td style={{ padding:"8px 12px", fontSize:11, color:"var(--muted)" }}>{a._proj.name||"Unnamed"}</td>
-                      <td style={{ padding:"8px 12px" }}><span style={{ fontFamily:"monospace", fontSize:10, color:"var(--faint)" }}>{a._proj.projectId||"—"}</span></td>
-                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:10, fontWeight:600, color:"var(--teal)" }}>{a.ref}</span></td>
-                      <td style={{ padding:"8px 12px", fontWeight:500, color:"var(--text)", maxWidth:180 }}>
-                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.aspect}>{a.aspect||"—"}</div>
-                      </td>
-                      <td style={{ padding:"8px 12px", fontWeight:700, color:"var(--red)", whiteSpace:"nowrap" }}>{score!==null?score:"—"}</td>
-                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9, padding:"2px 5px", borderRadius:3, background:"var(--slate-bg)", color:"var(--slate)" }}>{a.phase||"—"}</span></td>
-                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9, padding:"2px 5px", borderRadius:3, background:"var(--red-bg)", color:"var(--red)" }}>{a.status||"Open"}</span></td>
+                {projects.flatMap(p=>(p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").map(a=>({...a,_proj:p}))).map((a,i)=>{
+                  const score=calcScore(a);
+                  return(
+                    <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)",borderLeft:"3px solid var(--red-bd)" }}>
+                      <td style={{ padding:"8px 12px",fontSize:11,color:"var(--faint)" }}>{a._proj.contract||"--"}</td>
+                      <td style={{ padding:"8px 12px",fontSize:11,color:"var(--muted)" }}>{a._proj.name||"Unnamed"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontFamily:"monospace",fontSize:10,color:"var(--faint)" }}>{a._proj.projectId||"--"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:10,fontWeight:600,color:"var(--teal)" }}>{a.ref}</span></td>
+                      <td style={{ padding:"8px 12px",fontWeight:500,color:"var(--text)",maxWidth:180 }}><div style={{ overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }} title={a.aspect}>{a.aspect||"--"}</div></td>
+                      <td style={{ padding:"8px 12px",fontWeight:700,color:"var(--red)",whiteSpace:"nowrap" }}>{score!==null?score:"--"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9,padding:"2px 5px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)" }}>{a.phase||"--"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9,padding:"2px 5px",borderRadius:3,background:"var(--red-bg)",color:"var(--red)" }}>{a.status||"Open"}</span></td>
                     </tr>
                   );
                 })}
@@ -3632,6 +3490,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     </div>
   );
 }
+
 
 function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate, onPortfolio, portfolioActive }) {
   return (
