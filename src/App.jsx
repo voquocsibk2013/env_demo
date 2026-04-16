@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -2592,7 +2593,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     </div>
   );
 
-  const TABS = ["dashboard","screening","aspects","opportunities","matrix","changes","settings"];
+  const TABS = ["dashboard","screening","aspects","opportunities","matrix","footprint","changes","settings"];
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
@@ -3202,6 +3203,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         );
       })()}
 
+      {tab === "footprint" && (
+        <FootprintTab project={project} onChange={updateProject}/>
+      )}
+
       {tab === "settings" && (() => {
         // Collect existing contract names for datalist
         const existingContracts = [...new Set((allProjects||[]).map(p=>p.contract||"").filter(Boolean))];
@@ -3676,6 +3681,643 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
     </div>
   );
 }
+
+
+// ── COR Lookup — embedded reference table ─────────────────────────────────────
+const COR_LOOKUP = [
+  {code:"BCA",cat:"Architect",desc:"Wall/Cladding",ef:13},{code:"BCB",cat:"Architect",desc:"Floor",ef:13},
+  {code:"BCC",cat:"Architect",desc:"Roof",ef:13},{code:"BCD",cat:"Architect",desc:"Doors & windows",ef:13},
+  {code:"BCE",cat:"Architect",desc:"Furniture & interior",ef:13},{code:"BCF",cat:"Architect",desc:"Signs",ef:13},
+  {code:"BCG",cat:"Architect",desc:"Insulation",ef:13},{code:"BCH",cat:"Architect",desc:"Prefabricated modules",ef:13},
+  {code:"BCZ",cat:"Architect",desc:"Other Architecture & Building Bulk",ef:13},
+  {code:"BJA",cat:"Instrument",desc:"Instrument",ef:24},{code:"BJB",cat:"Instrument",desc:"Instrument valves",ef:7.2},
+  {code:"BJCA",cat:"Instrument",desc:"Group 1 - Instrument Cables",ef:6.8},{code:"BJCB",cat:"Instrument",desc:"Group 2 - Instrument Cables",ef:6.8},
+  {code:"BJCC",cat:"Instrument",desc:"Group 3 - Instrument Cables",ef:6.8},{code:"BJCD",cat:"Instrument",desc:"Group 4 - Instrument Cables",ef:6.8},
+  {code:"BJCE",cat:"Instrument",desc:"Group 5 - Instrument Cables",ef:6.8},{code:"BJCF",cat:"Instrument",desc:"Group 6 - Instrument Cables",ef:6.8},
+  {code:"BTCA",cat:"Instrument",desc:"Group 1 - Coaxial Cables (all sizes)",ef:6.8},{code:"BTCB",cat:"Instrument",desc:"Group 2 - CCTV Cables (all sizes)",ef:6.8},
+  {code:"BTCC",cat:"Instrument",desc:"Group 3 - Optical Cables (all sizes)",ef:6.8},{code:"BTCD",cat:"Instrument",desc:"Group 4 - Comp. Data Cables (all sizes)",ef:6.8},
+  {code:"BJD",cat:"Instrument",desc:"Instrument Junction boxes",ef:7.2},{code:"BTD",cat:"Instrument",desc:"Telecom Junction boxes",ef:7.2},
+  {code:"BJTD",cat:"Instrument",desc:"Junction boxes",ef:7.2},{code:"Umbilicals",cat:"Instrument",desc:"Topside Umbilicals",ef:6.8},
+  {code:"BJE",cat:"Instrument",desc:"Instrument tubes/Tubing",ef:7.2},{code:"BTA",cat:"Instrument",desc:"Telecom. Apparatus",ef:24},
+  {code:"BJG",cat:"Instrument",desc:"Accessories",ef:7.2},{code:"BJZ",cat:"Instrument",desc:"Other instrument bulk",ef:7.2},
+  {code:"BTZ",cat:"Instrument",desc:"Other telecom bulk",ef:7.2},{code:"BJTZ",cat:"Instrument",desc:"Other instrument/telecom bulk",ef:7.2},
+  {code:"BEAA",cat:"Electro",desc:"Group 1 - Electric Cable",ef:6.8},{code:"BEAB",cat:"Electro",desc:"Group 2 - Electric Cable",ef:6.8},
+  {code:"BEAC",cat:"Electro",desc:"Group 3 - Electric Cable",ef:6.8},{code:"BEAD",cat:"Electro",desc:"Group 4 - Electric Cable",ef:6.8},
+  {code:"BEAE",cat:"Electro",desc:"Group 5 - Electric Cable",ef:6.8},{code:"BEAF",cat:"Electro",desc:"Group 6 - Heating cable",ef:6.8},
+  {code:"BEAG",cat:"Electro",desc:"Group 7 - Heating cable",ef:6.8},{code:"BEB",cat:"Electro",desc:"Cable trays, conduit & suspension",ef:7.2},
+  {code:"BEC",cat:"Electro",desc:"Lights",ef:18},{code:"BED",cat:"Electro",desc:"Junction boxes",ef:5.6},
+  {code:"BEE",cat:"Electro",desc:"Accessories",ef:5.2},{code:"BEZ",cat:"Electro",desc:"Other electrical bulk",ef:5.2},
+  {code:"BHB",cat:"HVAC",desc:"Inline items and dampers",ef:7.2},
+  {code:"BMA_Struktur",cat:"Surface treatment",desc:"Structures",ef:6.6},{code:"BMA_Vegger",cat:"Surface treatment",desc:"Walls",ef:6.6},
+  {code:"BMA_Tak",cat:"Surface treatment",desc:"Roof surfaces",ef:6.6},{code:"BMA_Dekksflater",cat:"Surface treatment",desc:"Deck surfaces",ef:6.6},
+  {code:"BMA_Dorer",cat:"Surface treatment",desc:"Doors",ef:6.6},{code:"BMA_Ror_OD_4",cat:"Surface treatment",desc:"Pipes OD<4\"",ef:6.6},
+  {code:"BMA_Ror_OD_4_OD_10",cat:"Surface treatment",desc:"Pipes 4\"<OD<10\"",ef:6.6},{code:"BMA_Ror_OD_10",cat:"Surface treatment",desc:"Pipes OD>10\"",ef:6.6},
+  {code:"BMA_Utstyr",cat:"Surface treatment",desc:"Equipment",ef:6.6},{code:"BMA_Tanker_utvendig",cat:"Surface treatment",desc:"Outside tanks",ef:6.6},
+  {code:"BMA_Tanker_invendig",cat:"Surface treatment",desc:"Inside tanks",ef:6.6},{code:"BMA_Kanaler",cat:"Surface treatment",desc:"Channels",ef:6.6},
+  {code:"BMA_Isolerte_flater",cat:"Surface treatment",desc:"Isolated surfaces",ef:6.6},
+  {code:"EJ",cat:"Instrument",desc:"Instrument",ef:24},{code:"EE",cat:"Electro",desc:"Electro",ef:34},
+  {code:"EG",cat:"HVAC",desc:"HVAC",ef:7.2},{code:"ES",cat:"Safety",desc:"Safety",ef:7.2},
+  {code:"EZ",cat:"Mechanical",desc:"In-line equipment",ef:7.2},{code:"EZR",cat:"Mechanical",desc:"Mechanical rotating",ef:7.2},
+  {code:"BLA",cat:"Piping",desc:"Pipes, flanges & fittings",ef:3},{code:"BLB",cat:"Piping",desc:"Valves",ef:3},
+  {code:"BLC",cat:"Piping",desc:"Supports",ef:3},{code:"BLD",cat:"Piping",desc:"Insulation (INS)",ef:3},
+  {code:"BLZ",cat:"Piping",desc:"Other piping bulk",ef:3},{code:"BLD_Klasse_1",cat:"Insulation",desc:"Insulation class 1 - Heat conservation",ef:-1},
+  {code:"BNAA",cat:"Structure",desc:"Primary Structures",ef:10},{code:"BNAB",cat:"Structure",desc:"Secondary Structures",ef:10},
+  {code:"BNAC",cat:"Structure",desc:"Outfitting: Access platforms/structures",ef:10},{code:"BNAD",cat:"Structure",desc:"Outfitting: Wall & Eq. support above deck",ef:10},
+  {code:"BNAE",cat:"Structure",desc:"Outfitting: Walkways",ef:10},{code:"BNAF",cat:"Structure",desc:"Outfitting: Monorails",ef:10},
+  {code:"BNAG",cat:"Structure",desc:"Outfitting: Handrails",ef:10},{code:"BNAH",cat:"Structure",desc:"Outfitting: Sleeves",ef:10},
+  {code:"BNAJ",cat:"Structure",desc:"Outfitting: Dropped object protection",ef:10},{code:"BNAK",cat:"Structure",desc:"Outfitting: Grating",ef:10},
+  {code:"BNAL",cat:"Structure",desc:"Other Outfitting Structures",ef:10},{code:"BNC",cat:"Structure",desc:"Temporary installation aids",ef:10},
+  {code:"BND",cat:"Structure",desc:"Grillage/seafastening/load out",ef:10},{code:"BNZ",cat:"Structure",desc:"Other structural bulk",ef:10},
+  {code:"CS",cat:"Material",desc:"Carbon Steel",ef:10},{code:"SS",cat:"Material",desc:"Stainless Steel",ef:10},
+  {code:"AL",cat:"Material",desc:"Aluminium",ef:10},{code:"GRP",cat:"Material",desc:"Glassfiber reinforced plastics",ef:10},
+];
+const COR_MAP = {};
+COR_LOOKUP.forEach(r => { COR_MAP[r.code] = r; });
+
+// ── Footprint helpers ─────────────────────────────────────────────────────────
+const MTO_COLS = ["Weight Item Descr.","Material","Cost Code COR","Mod. Handl. Code","Gross Dry Weight (kg)"];
+const MEL_COLS = ["Equipment type Description","Cost Code COR","Mod. Handl. Code","Gross Dry Weight (kg)"];
+
+function normHeader(h) { return String(h||"").replace(/\s+/g," ").trim(); }
+function hasAllCols(headers, required) { return required.every(r => headers.includes(r)); }
+function detectSheetType(headers) {
+  const nh = headers.map(normHeader);
+  if (hasAllCols(nh, MTO_COLS)) return "MTO";
+  if (hasAllCols(nh, MEL_COLS))  return "MEL";
+  return null;
+}
+
+function parseSheets(wb) {
+  // Returns { mto: [{...row, _sheet, _row}], mel: [...], sheets: [{name, type}] }
+  const result = { mto: [], mel: [], sheets: [], allSheetNames: wb.SheetNames };
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+    if (raw.length < 2) continue;
+    const headers = raw[0].map(normHeader);
+    const type = detectSheetType(headers);
+    if (!type) continue;
+    result.sheets.push({ name, type });
+    const rows = raw.slice(1).map((rowArr, i) => {
+      const obj = { _sheet: name, _row: i + 2 };
+      headers.forEach((h, j) => { obj[h] = rowArr[j]; });
+      return obj;
+    }).filter(r => {
+      // Skip entirely blank rows
+      const vals = Object.entries(r).filter(([k]) => !k.startsWith("_")).map(([,v]) => v);
+      return vals.some(v => v !== "" && v !== null && v !== undefined);
+    });
+    if (type === "MTO") result.mto.push(...rows);
+    else result.mel.push(...rows);
+  }
+  return result;
+}
+
+function validateAndCalc(rows, sheetType) {
+  const validRows = [], errors = [];
+  for (const row of rows) {
+    const errs = [];
+    const cor = String(row["Cost Code COR"] ?? "").trim();
+    const weightRaw = row["Gross Dry Weight (kg)"];
+    const mhc = String(row["Mod. Handl. Code"] ?? "").trim();
+    const desc = sheetType === "MTO" ? row["Weight Item Descr."] : row["Equipment type Description"];
+    const material = sheetType === "MTO" ? row["Material"] : undefined;
+
+    if (!cor) errs.push({ col:"Cost Code COR", val: cor, msg:"Cost Code COR is blank." });
+    else if (!COR_MAP[cor]) errs.push({ col:"Cost Code COR", val: cor, msg:`COR code '${cor}' not found in lookup.`, notFound: true });
+    if (weightRaw === "" || weightRaw === null || weightRaw === undefined) {
+      errs.push({ col:"Gross Dry Weight (kg)", val: weightRaw, msg:"Gross Dry Weight (kg) is blank." });
+    } else if (isNaN(Number(weightRaw))) {
+      errs.push({ col:"Gross Dry Weight (kg)", val: weightRaw, msg:`Gross Dry Weight (kg) = '${weightRaw}' is not numeric.` });
+    }
+    if (!mhc) errs.push({ col:"Mod. Handl. Code", val: mhc, msg:"Mod. Handl. Code is blank." });
+
+    const weight = Number(weightRaw);
+    const corEntry = COR_MAP[cor];
+    let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
+    if (!errs.length && corEntry) {
+      emissionFactor = corEntry.ef;
+      category = corEntry.cat;
+      corDesc = corEntry.desc;
+      emissionTco2e = (weight * emissionFactor) / 1000;
+    }
+
+    const rowResult = {
+      source: sheetType, sheet: row._sheet, rowNum: row._row,
+      desc: String(desc ?? ""), material: material ? String(material) : undefined,
+      cor, mhc, weight: errs.find(e=>e.col==="Gross Dry Weight (kg)") ? null : weight,
+      category, corDesc, emissionFactor, emissionTco2e,
+      status: errs.length ? "ERROR" : "VALID",
+      errors: errs,
+    };
+    if (errs.length) errors.push({ sheet: row._sheet, row: row._row, desc: String(desc??""), cor, errs });
+    validRows.push(rowResult);
+  }
+  return { rows: validRows, errors };
+}
+
+function runFootprintCalc(wb) {
+  const parsed = parseSheets(wb);
+  if (parsed.mto.length === 0 && parsed.mel.length === 0) {
+    return { success: false, fatalError: "No MTO or MEL sheets detected. Ensure your workbook has sheets with the required column headers.", sheets: parsed.allSheetNames };
+  }
+  const mtoCalc = validateAndCalc(parsed.mto, "MTO");
+  const melCalc = validateAndCalc(parsed.mel, "MEL");
+  const allRows = [...mtoCalc.rows, ...melCalc.rows];
+  const allErrors = [...mtoCalc.errors, ...melCalc.errors];
+  const mtoTotal = mtoCalc.rows.filter(r=>r.status==="VALID").reduce((s,r)=>s+(r.emissionTco2e||0),0);
+  const melTotal = melCalc.rows.filter(r=>r.status==="VALID").reduce((s,r)=>s+(r.emissionTco2e||0),0);
+  const hasErrors = allErrors.length > 0;
+  // Collect unique unknown COR codes for AI suggestion
+  const unknownCors = [...new Set(allErrors.flatMap(e => e.errs.filter(r=>r.notFound).map(r=>r.val)))].filter(Boolean);
+  return {
+    success: true,
+    status: hasErrors ? "completed_with_errors" : "success",
+    mtoTotal, melTotal, combined: mtoTotal + melTotal,
+    mtoRows: mtoCalc.rows, melRows: melCalc.rows, allRows,
+    errors: allErrors, unknownCors,
+    sheets: parsed.sheets,
+  };
+}
+
+// ── FootprintTab ──────────────────────────────────────────────────────────────
+function FootprintTab({ project, onChange }) {
+  const [dragOver, setDragOver] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [result, setResult] = useState(project.footprint || null);
+  const [fileName, setFileName] = useState(project.footprintFile || "");
+  const [activeView, setActiveView] = useState("summary"); // summary | detail | errors
+  const [suggestions, setSuggestions] = useState(project.footprintSuggestions || {});
+  const [loadingSug, setLoadingSug] = useState({});
+  const [detailFilter, setDetailFilter] = useState("ALL");
+  const [detailSearch, setDetailSearch] = useState("");
+
+  const fmtTco2e = v => v === null || v === undefined ? "—"
+    : v >= 1 ? v.toLocaleString("nb-NO",{maximumFractionDigits:3})+" tCO₂e"
+    : (v*1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" kgCO₂e";
+
+  const fmtNum = v => v == null ? "—" : Number(v).toLocaleString("nb-NO",{maximumFractionDigits:2});
+
+  const processFile = async (file) => {
+    setProcessing(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type:"array" });
+      const calc = runFootprintCalc(wb);
+      setResult(calc);
+      setFileName(file.name);
+      setSuggestions({});
+      const upd = { ...project, footprint: calc, footprintFile: file.name, footprintSuggestions: {} };
+      onChange(upd);
+    } catch(e) {
+      setResult({ success: false, fatalError: "Could not read file: "+e.message });
+    }
+    setProcessing(false);
+    setActiveView("summary");
+  };
+
+  const onFileChange = e => { if (e.target.files[0]) processFile(e.target.files[0]); };
+  const onDrop = e => {
+    e.preventDefault(); setDragOver(false);
+    if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+  };
+
+  const suggestCOR = async (unknownCode, rowsWithCode) => {
+    if (suggestions[unknownCode] || loadingSug[unknownCode]) return;
+    setLoadingSug(p => ({...p, [unknownCode]: true}));
+    try {
+      const examples = rowsWithCode.slice(0,3).map(r => r.desc || r.cor).join("; ");
+      const corList = COR_LOOKUP.map(c => `${c.code} (${c.cat} — ${c.desc}, EF=${c.ef})`).join("\n");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:400,
+          system:"You are an expert in materials and CO2 footprint calculations for oil & gas projects. Return ONLY a valid JSON array of 3 objects, no markdown, no preamble. Each object: {code, category, description, ef, reason}.",
+          messages:[{ role:"user", content:
+            `The COR code '${unknownCode}' is used in an MTO/MEL with these items: "${examples}".\n`+
+            `Find the 3 best-matching COR codes from this reference list:\n${corList}\n`+
+            `Return JSON array of 3 best matches with fields: code, category, description, ef (emission factor), reason (1 sentence why it fits).`
+          }]
+        })
+      });
+      const d = await res.json();
+      const text = (d.content?.[0]?.text||"").replace(/```json|```/g,"").trim();
+      const parsed = JSON.parse(text);
+      const newSugs = {...suggestions, [unknownCode]: Array.isArray(parsed)?parsed:[]};
+      setSuggestions(newSugs);
+      onChange({...project, footprint: result, footprintFile: fileName, footprintSuggestions: newSugs});
+    } catch(e) {
+      setSuggestions(p => ({...p, [unknownCode]: [{code:"—", category:"Error", description:"Could not fetch suggestions", ef:"—", reason:e.message}]}));
+    }
+    setLoadingSug(p => ({...p, [unknownCode]: false}));
+  };
+
+  const catColors = {
+    "Architect": {bg:T.slateBg, c:T.slate, bd:T.slateBd},
+    "Instrument": {bg:T.blueBg, c:T.blue, bd:T.blueBd},
+    "Electro": {bg:T.amberBg, c:T.amber, bd:T.amberBd},
+    "HVAC": {bg:T.tealBg, c:T.teal, bd:T.tealBd},
+    "Surface treatment": {bg:T.purpleBg, c:T.purple, bd:T.purpleBd},
+    "Mechanical": {bg:T.greenBg, c:T.green, bd:T.greenBd},
+    "Piping": {bg:T.redBg, c:T.red, bd:T.redBd},
+    "Structure": {bg:T.slateBg, c:T.slate, bd:T.slateBd},
+    "Material": {bg:T.tealBg, c:T.tealDark, bd:T.tealBd},
+    "Safety": {bg:T.amberBg, c:T.amber, bd:T.amberBd},
+    "Insulation": {bg:T.blueBg, c:T.blue, bd:T.blueBd},
+  };
+
+  // ── Upload zone ──
+  const UploadZone = () => (
+    <div onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+         onDragLeave={()=>setDragOver(false)} onDrop={onDrop}
+      style={{ border:`2px dashed ${dragOver?T.teal:T.border}`, borderRadius:12,
+               padding:"2.5rem 2rem", textAlign:"center", transition:"all 0.2s",
+               background: dragOver ? T.tealBg : T.surface, cursor:"pointer" }}
+      onClick={()=>document.getElementById("fp-file-input-"+project.id)?.click()}>
+      <input id={"fp-file-input-"+project.id} type="file" accept=".xlsx,.xls"
+             onChange={onFileChange} style={{display:"none"}}/>
+      <div style={{fontSize:32,marginBottom:8}}>📊</div>
+      <p style={{fontSize:14,fontWeight:600,color:T.text,margin:"0 0 6px"}}>
+        {processing ? "Processing…" : "Drop MTO/MEL workbook here"}
+      </p>
+      <p style={{fontSize:12,color:T.muted,margin:"0 0 14px"}}>
+        Supports .xlsx files containing MTO and/or MEL sheets. Auto-detects sheets by column headers.
+      </p>
+      {!processing && <Btn variant="primary">Browse file</Btn>}
+    </div>
+  );
+
+  // ── Summary cards ──
+  const SummaryCards = () => {
+    if (!result?.success) return null;
+    const by_cat = {};
+    (result.allRows||[]).filter(r=>r.status==="VALID").forEach(r=>{
+      const k=r.category||"Unknown";
+      by_cat[k] = (by_cat[k]||0) + (r.emissionTco2e||0);
+    });
+    const catEntries = Object.entries(by_cat).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    return (
+      <div>
+        {/* Status banner */}
+        <div style={{padding:"10px 16px",borderRadius:8,marginBottom:"1rem",
+          background: result.status==="success" ? T.greenBg : result.status==="completed_with_errors" ? T.amberBg : T.redBg,
+          border:`1px solid ${result.status==="success"?T.greenBd:result.status==="completed_with_errors"?T.amberBd:T.redBd}`,
+          display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:16}}>{result.status==="success"?"✅":result.status==="completed_with_errors"?"⚠️":"❌"}</span>
+          <span style={{fontSize:13,fontWeight:600,color:result.status==="success"?T.green:result.status==="completed_with_errors"?T.amber:T.red}}>
+            {result.status==="success" ? "Calculation completed successfully"
+             : result.status==="completed_with_errors" ? `Calculation completed with ${result.errors.length} error${result.errors.length!==1?"s":""} — affected rows excluded from totals`
+             : "Calculation failed"}
+          </span>
+          {fileName && <span style={{fontFamily:T.mono,fontSize:11,color:T.muted,marginLeft:"auto"}}>{fileName}</span>}
+        </div>
+        {/* Total cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:"1rem"}}>
+          {[
+            {label:"MTO Footprint",val:result.mtoTotal,cnt:(result.mtoRows||[]).filter(r=>r.status==="VALID").length,color:T.teal,bg:T.tealBg,bd:T.tealBd},
+            {label:"MEL Footprint",val:result.melTotal,cnt:(result.melRows||[]).filter(r=>r.status==="VALID").length,color:T.blue,bg:T.blueBg,bd:T.blueBd},
+            {label:"Combined Total",val:result.combined,cnt:(result.allRows||[]).filter(r=>r.status==="VALID").length,color:T.tealDark,bg:T.tealBg,bd:T.tealBd},
+          ].map(({label,val,cnt,color,bg,bd})=>(
+            <div key={label} style={{background:bg,border:`1px solid ${bd}`,borderRadius:8,padding:"14px 16px"}}>
+              <p style={{fontFamily:T.mono,fontSize:9,color,margin:"0 0 8px",letterSpacing:"0.08em",textTransform:"uppercase"}}>{label}</p>
+              <p style={{fontFamily:T.mono,fontSize:22,fontWeight:600,color,margin:"0 0 4px",lineHeight:1}}>
+                {val >= 1 ? val.toLocaleString("nb-NO",{maximumFractionDigits:3}) : (val*1000).toLocaleString("nb-NO",{maximumFractionDigits:2})}
+              </p>
+              <p style={{fontFamily:T.mono,fontSize:10,color,margin:0,opacity:0.7}}>
+                {val >= 1 ? "tCO₂e" : "kgCO₂e"} · {cnt} valid row{cnt!==1?"s":""}
+              </p>
+            </div>
+          ))}
+        </div>
+        {/* By category */}
+        {catEntries.length > 0 && (
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"14px 16px",marginBottom:"1rem"}}>
+            <p style={{fontFamily:T.mono,fontSize:9,fontWeight:600,color:T.faint,letterSpacing:"0.1em",textTransform:"uppercase",margin:"0 0 12px"}}>Breakdown by COR category</p>
+            {catEntries.map(([cat,val])=>{
+              const cc=catColors[cat]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+              const pct = result.combined > 0 ? (val/result.combined)*100 : 0;
+              return(
+                <div key={cat} style={{marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:11,fontWeight:500,padding:"1px 8px",borderRadius:3,background:cc.bg,color:cc.c,border:`1px solid ${cc.bd}`}}>{cat}</span>
+                    <span style={{fontFamily:T.mono,fontSize:11,fontWeight:600,color:T.text}}>{fmtTco2e(val)}</span>
+                  </div>
+                  <div style={{height:5,borderRadius:3,background:T.border,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:pct+"%",background:cc.c,borderRadius:3,transition:"width 0.5s"}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {/* Mod. Handl. Code subtotals */}
+        {(() => {
+          const byMHC = {};
+          (result.allRows||[]).filter(r=>r.status==="VALID"&&r.mhc).forEach(r=>{
+            byMHC[r.mhc] = (byMHC[r.mhc]||0) + (r.emissionTco2e||0);
+          });
+          const entries = Object.entries(byMHC).sort((a,b)=>b[1]-a[1]);
+          if (entries.length === 0) return null;
+          return(
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"14px 16px",marginBottom:"1rem"}}>
+              <p style={{fontFamily:T.mono,fontSize:9,fontWeight:600,color:T.faint,letterSpacing:"0.1em",textTransform:"uppercase",margin:"0 0 10px"}}>By Module Handling Code</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {entries.map(([mhc,val])=>(
+                  <div key={mhc} style={{padding:"6px 12px",borderRadius:6,background:T.surface2,border:`1px solid ${T.border}`}}>
+                    <span style={{fontFamily:T.mono,fontSize:11,fontWeight:600,color:T.text}}>{mhc}</span>
+                    <span style={{fontSize:11,color:T.muted,marginLeft:8}}>{fmtTco2e(val)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+        {/* Sheets detected */}
+        {(result.sheets||[]).length > 0 && (
+          <p style={{fontFamily:T.mono,fontSize:10,color:T.faint,margin:"0 0 1rem"}}>
+            Sheets detected: {result.sheets.map(s=>`${s.name} (${s.type})`).join(" · ")}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  // ── Calculation detail table ──
+  const DetailTable = () => {
+    if (!result?.success || !result.allRows) return null;
+    let rows = result.allRows;
+    if (detailFilter !== "ALL") rows = rows.filter(r => r.status === detailFilter || r.source === detailFilter);
+    if (detailSearch) {
+      const q = detailSearch.toLowerCase();
+      rows = rows.filter(r => (r.desc||"").toLowerCase().includes(q) || (r.cor||"").toLowerCase().includes(q) || (r.sheet||"").toLowerCase().includes(q));
+    }
+    return (
+      <div>
+        <div style={{display:"flex",gap:8,marginBottom:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
+          <input value={detailSearch} onChange={e=>setDetailSearch(e.target.value)}
+            placeholder="Search description or COR code…"
+            style={{padding:"5px 10px",fontSize:12,border:`1px solid ${T.border}`,borderRadius:6,background:T.surface,color:T.text,width:220}}/>
+          <div style={{display:"flex",gap:3}}>
+            {["ALL","MTO","MEL","VALID","ERROR"].map(f=>(
+              <button key={f} onClick={()=>setDetailFilter(f)}
+                style={{fontFamily:T.mono,fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",
+                  border:detailFilter===f?`1px solid ${T.teal}`:`1px solid ${T.border}`,
+                  background:detailFilter===f?T.tealBg:"transparent",
+                  color:detailFilter===f?T.teal:T.muted}}>{f}</button>
+            ))}
+          </div>
+          <span style={{fontFamily:T.mono,fontSize:10,color:T.faint,marginLeft:"auto"}}>{rows.length} rows</span>
+        </div>
+        <div style={{overflowX:"auto",borderRadius:8,border:`1px solid ${T.border}`,background:T.surface}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:T.sans}}>
+            <thead>
+              <tr style={{background:T.surface2}}>
+                {["Src","Sheet","Row","Description","COR Code","Category","MHC","Weight (kg)","EF","Emission (tCO₂e)","Status"].map(h=>(
+                  <th key={h} style={{padding:"7px 10px",textAlign:"left",fontFamily:T.mono,fontSize:9,fontWeight:600,
+                    color:T.muted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap",letterSpacing:"0.06em",textTransform:"uppercase"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r,i)=>{
+                const cc = catColors[r.category]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                const rowBg = r.status==="ERROR" ? T.redBg+"44" : undefined;
+                return(
+                  <tr key={i} style={{borderBottom:`1px solid ${T.rowBd}`,background:rowBg}}>
+                    <td style={{padding:"6px 10px"}}><span style={{fontFamily:T.mono,fontSize:9,padding:"1px 5px",borderRadius:3,
+                      background:r.source==="MTO"?T.tealBg:T.blueBg,color:r.source==="MTO"?T.teal:T.blue}}>{r.source}</span></td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:10,color:T.faint}}>{r.sheet}</td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:10,color:T.faint}}>{r.rowNum}</td>
+                    <td style={{padding:"6px 10px",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500,color:T.text}} title={r.desc}>{r.desc||"—"}{r.material?<span style={{color:T.faint,fontSize:10}}> · {r.material}</span>:null}</td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:10,color:r.status==="ERROR"&&r.errors?.some(e=>e.col==="Cost Code COR")?T.red:T.text}}>{r.cor||"—"}</td>
+                    <td style={{padding:"6px 10px"}}>{r.category?<span style={{fontSize:9,padding:"1px 6px",borderRadius:3,background:cc.bg,color:cc.c,border:`1px solid ${cc.bd}`}}>{r.category}</span>:<span style={{color:T.faint}}>—</span>}</td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:10,color:T.muted}}>{r.mhc||"—"}</td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:11,textAlign:"right"}}>{r.weight!=null?fmtNum(r.weight):"—"}</td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:10,textAlign:"right",color:T.muted}}>{r.emissionFactor??<span style={{color:T.faint}}>—</span>}</td>
+                    <td style={{padding:"6px 10px",fontFamily:T.mono,fontSize:11,fontWeight:r.emissionTco2e?600:400,color:r.emissionTco2e?T.teal:T.faint,textAlign:"right"}}>
+                      {r.emissionTco2e!=null ? r.emissionTco2e.toFixed(4) : "—"}
+                    </td>
+                    <td style={{padding:"6px 10px"}}>
+                      <span style={{fontFamily:T.mono,fontSize:9,padding:"1px 6px",borderRadius:3,fontWeight:500,
+                        background:r.status==="VALID"?T.greenBg:T.redBg,
+                        color:r.status==="VALID"?T.green:T.red,
+                        border:`1px solid ${r.status==="VALID"?T.greenBd:T.redBd}`}}>{r.status}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Errors panel ──
+  const ErrorsPanel = () => {
+    if (!result?.success || !result.errors?.length) return (
+      <div style={{textAlign:"center",padding:"2rem",background:T.greenBg,border:`1px solid ${T.greenBd}`,borderRadius:8,color:T.green,fontSize:13}}>
+        ✅ No errors — all rows validated successfully.
+      </div>
+    );
+    // Group errors by sheet
+    const bySheet = {};
+    (result.errors||[]).forEach(e => {
+      if (!bySheet[e.sheet]) bySheet[e.sheet] = [];
+      bySheet[e.sheet].push(e);
+    });
+    return (
+      <div>
+        {/* Unknown COR code AI suggestions */}
+        {(result.unknownCors||[]).length > 0 && (
+          <div style={{marginBottom:"1.25rem",padding:"14px 16px",borderRadius:8,
+            background:T.purpleBg,border:`1px solid ${T.purpleBd}`}}>
+            <p style={{fontFamily:T.mono,fontSize:10,fontWeight:600,color:T.purple,margin:"0 0 6px",letterSpacing:"0.06em",textTransform:"uppercase"}}>
+              Unknown COR codes — AI best-fit suggestions
+            </p>
+            <p style={{fontSize:12,color:T.muted,margin:"0 0 12px"}}>
+              The following COR codes were not found in the lookup table. Click to get AI-powered suggestions for the closest matching COR codes.
+            </p>
+            {(result.unknownCors||[]).map(code => {
+              const rowsWithCode = (result.allRows||[]).filter(r=>r.cor===code);
+              const hasSugs = suggestions[code]?.length > 0;
+              const isLoading = !!loadingSug[code];
+              return(
+                <div key={code} style={{marginBottom:"1rem",background:T.surface,borderRadius:8,border:`1px solid ${T.purpleBd}`,overflow:"hidden"}}>
+                  <div style={{padding:"10px 14px",background:T.purpleBg,borderBottom:`1px solid ${T.purpleBd}`,
+                    display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.purple}}>{code}</span>
+                    <span style={{fontSize:11,color:T.muted}}>{rowsWithCode.length} row{rowsWithCode.length!==1?"s":""} affected</span>
+                    <span style={{fontSize:11,color:T.muted,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      e.g. {rowsWithCode[0]?.desc || "—"}
+                    </span>
+                    {!hasSugs && <button onClick={()=>suggestCOR(code, rowsWithCode)}
+                      disabled={isLoading}
+                      style={{padding:"5px 14px",borderRadius:6,border:"none",
+                        background:isLoading?"transparent":T.purple,
+                        color:isLoading?T.muted:"#fff",cursor:isLoading?"not-allowed":"pointer",
+                        fontSize:11,fontWeight:500,fontFamily:T.sans,opacity:isLoading?0.6:1}}>
+                      {isLoading ? "Asking AI…" : "✦ Suggest best-fit COR"}
+                    </button>}
+                  </div>
+                  {hasSugs && (
+                    <div style={{padding:"12px 14px"}}>
+                      <p style={{fontFamily:T.mono,fontSize:9,fontWeight:600,color:T.faint,letterSpacing:"0.08em",textTransform:"uppercase",margin:"0 0 10px"}}>
+                        AI suggested matches (apply manually in source file)
+                      </p>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {(suggestions[code]||[]).map((s,i)=>{
+                          const cc = catColors[s.category]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                          return(
+                            <div key={i} style={{flex:1,minWidth:180,padding:"10px 12px",borderRadius:7,
+                              background:cc.bg,border:`1px solid ${cc.bd}`}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                                <span style={{fontFamily:T.mono,fontSize:13,fontWeight:700,color:cc.c}}>{s.code}</span>
+                                <span style={{fontSize:9,padding:"1px 6px",borderRadius:3,background:cc.bg,color:cc.c,border:`1px solid ${cc.bd}`}}>{s.category}</span>
+                                <span style={{fontFamily:T.mono,fontSize:11,color:cc.c,marginLeft:"auto"}}>EF={s.ef}</span>
+                              </div>
+                              <p style={{fontSize:11,fontWeight:500,color:T.text,margin:"0 0 4px"}}>{s.description}</p>
+                              <p style={{fontSize:11,color:T.muted,margin:0,lineHeight:1.5}}>{s.reason}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Per-row errors */}
+        {Object.entries(bySheet).map(([sheet, errs])=>(
+          <div key={sheet} style={{marginBottom:"1rem",background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+            <div style={{padding:"8px 14px",background:T.redBg,borderBottom:`1px solid ${T.redBd}`,
+              display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,fontWeight:600,color:T.red}}>Sheet: {sheet}</span>
+              <span style={{fontFamily:T.mono,fontSize:10,color:T.red,opacity:0.7}}>{errs.length} row{errs.length!==1?"s":""} with errors</span>
+            </div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead><tr style={{background:T.surface2}}>
+                {["Row","Description","COR Code","Error details"].map(h=>(
+                  <th key={h} style={{padding:"6px 12px",textAlign:"left",fontFamily:T.mono,fontSize:9,fontWeight:600,
+                    color:T.muted,borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {errs.map((e,i)=>(
+                  <tr key={i} style={{borderBottom:`1px solid ${T.rowBd}`}}>
+                    <td style={{padding:"7px 12px",fontFamily:T.mono,fontSize:10,color:T.faint}}>{e.row}</td>
+                    <td style={{padding:"7px 12px",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.text}} title={e.desc}>{e.desc||"—"}</td>
+                    <td style={{padding:"7px 12px",fontFamily:T.mono,fontSize:11,color:T.red}}>{e.cor||<span style={{color:T.faint}}>blank</span>}</td>
+                    <td style={{padding:"7px 12px"}}>
+                      {e.errs.map((er,j)=>(
+                        <div key={j} style={{marginBottom:j<e.errs.length-1?4:0}}>
+                          <span style={{fontFamily:T.mono,fontSize:9,color:T.red,marginRight:6,padding:"1px 5px",
+                            borderRadius:3,background:T.redBg,border:`1px solid ${T.redBd}`}}>{er.col}</span>
+                          <span style={{fontSize:11,color:T.muted}}>{er.msg}</span>
+                          {er.val && <span style={{fontFamily:T.mono,fontSize:10,color:T.faint,marginLeft:6}}>value: "{er.val}"</span>}
+                        </div>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const hasResult = result?.success;
+  const errorCount = result?.errors?.length || 0;
+
+  return (
+    <div style={{padding:"1.25rem",background:T.bg,minHeight:"100%"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.25rem",flexWrap:"wrap"}}>
+        <div>
+          <h2 style={{margin:"0 0 2px",fontSize:15,fontWeight:700,color:T.teal,fontFamily:T.sans}}>
+            CO₂ Footprint Calculator
+          </h2>
+          <p style={{margin:0,fontSize:12,color:T.muted}}>
+            Upload an MTO/MEL Excel workbook · emission factors per COR code · tCO₂e output
+          </p>
+        </div>
+        {hasResult && (
+          <label style={{marginLeft:"auto",padding:"6px 14px",borderRadius:6,background:T.teal,color:"#fff",
+            fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:T.sans}}>
+            ↑ Upload new file
+            <input type="file" accept=".xlsx,.xls" onChange={onFileChange} style={{display:"none"}}/>
+          </label>
+        )}
+      </div>
+
+      {/* Upload zone — always show if no result */}
+      {!hasResult && !processing && <UploadZone/>}
+      {processing && (
+        <div style={{textAlign:"center",padding:"3rem",background:T.tealBg,borderRadius:12,border:`1px solid ${T.tealBd}`}}>
+          <div style={{fontSize:28,marginBottom:10}}>⚙️</div>
+          <p style={{fontSize:13,fontWeight:600,color:T.teal,margin:0}}>Processing {fileName}…</p>
+          <p style={{fontSize:12,color:T.muted,margin:"4px 0 0"}}>Detecting sheets · validating rows · calculating emissions</p>
+        </div>
+      )}
+
+      {/* Fatal error */}
+      {result && !result.success && (
+        <div style={{padding:"16px",background:T.redBg,border:`1px solid ${T.redBd}`,borderRadius:8,marginTop:"1rem"}}>
+          <p style={{fontSize:13,fontWeight:600,color:T.red,margin:"0 0 6px"}}>❌ Cannot process file</p>
+          <p style={{fontSize:12,color:T.muted,margin:"0 0 12px"}}>{result.fatalError}</p>
+          {result.sheets && result.sheets.length > 0 && (
+            <p style={{fontFamily:T.mono,fontSize:11,color:T.muted,margin:"0 0 10px"}}>
+              Sheets found: {result.sheets.join(", ")}
+            </p>
+          )}
+          <p style={{fontSize:11,color:T.faint,margin:0}}>
+            Required MTO columns: {MTO_COLS.join(" · ")}<br/>
+            Required MEL columns: {MEL_COLS.join(" · ")}
+          </p>
+          <div style={{marginTop:12}}>
+            <label style={{padding:"6px 14px",borderRadius:6,background:T.teal,color:"#fff",
+              fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:T.sans}}>
+              Try another file
+              <input type="file" accept=".xlsx,.xls" onChange={onFileChange} style={{display:"none"}}/>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {hasResult && (
+        <div>
+          {/* Tab bar */}
+          <div style={{display:"flex",gap:0,borderBottom:`2px solid ${T.border}`,marginBottom:"1.25rem"}}>
+            {[
+              {id:"summary",label:"Summary"},
+              {id:"detail",label:`Row detail (${(result.allRows||[]).length})`},
+              {id:"errors",label:`Errors${errorCount>0?" ("+errorCount+")":""}`,warn:errorCount>0},
+            ].map(({id,label,warn})=>(
+              <button key={id} onClick={()=>setActiveView(id)}
+                style={{padding:"7px 16px",fontSize:12,cursor:"pointer",fontFamily:T.sans,
+                  fontWeight:500,border:"none",background:"transparent",
+                  borderBottom:`2px solid ${activeView===id?(warn?T.red:T.teal):"transparent"}`,
+                  marginBottom:"-2px",
+                  color:activeView===id?(warn?T.red:T.teal):(warn?T.red:T.muted)}}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {activeView==="summary" && <SummaryCards/>}
+          {activeView==="detail" && <DetailTable/>}
+          {activeView==="errors" && <ErrorsPanel/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
