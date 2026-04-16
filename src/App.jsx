@@ -3927,7 +3927,7 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── Upload zone ──
-  const UploadZone = () => (
+  const renderUploadZone = () => (
     <div onDragOver={e=>{e.preventDefault();setDragOver(true);}}
          onDragLeave={()=>setDragOver(false)} onDrop={onDrop}
       style={{ border:`2px dashed ${dragOver?T.teal:T.border}`, borderRadius:12,
@@ -3948,7 +3948,7 @@ function FootprintTab({ project, onChange }) {
   );
 
   // ── Summary cards ──
-  const SummaryCards = () => {
+  const renderSummaryCards = () => {
     if (!result?.success) return null;
     const by_cat = {};
     (result.allRows||[]).filter(r=>r.status==="VALID").forEach(r=>{
@@ -4043,7 +4043,7 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── Calculation detail table ──
-  const DetailTable = () => {
+  const renderDetailTable = () => {
     if (!result?.success || !result.allRows) return null;
     let rows = result.allRows;
     if (detailFilter !== "ALL") rows = rows.filter(r => r.status === detailFilter || r.source === detailFilter);
@@ -4114,7 +4114,7 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── Errors panel ──
-  const ErrorsPanel = () => {
+  const renderErrorsPanel = () => {
     if (!result?.success || !result.errors?.length) return (
       <div style={{textAlign:"center",padding:"2rem",background:T.greenBg,border:`1px solid ${T.greenBd}`,borderRadius:8,color:T.green,fontSize:13}}>
         ✅ No errors — all rows validated successfully.
@@ -4256,7 +4256,7 @@ function FootprintTab({ project, onChange }) {
       </div>
 
       {/* Upload zone — always show if no result */}
-      {!hasResult && !processing && <UploadZone/>}
+      {!hasResult && !processing && renderUploadZone()}
       {processing && (
         <div style={{textAlign:"center",padding:"3rem",background:T.tealBg,borderRadius:12,border:`1px solid ${T.tealBd}`}}>
           <div style={{fontSize:28,marginBottom:10}}>⚙️</div>
@@ -4309,9 +4309,9 @@ function FootprintTab({ project, onChange }) {
               </button>
             ))}
           </div>
-          {activeView==="summary" && <SummaryCards/>}
-          {activeView==="detail" && <DetailTable/>}
-          {activeView==="errors" && <ErrorsPanel/>}
+          {activeView==="summary" && renderSummaryCards()}
+          {activeView==="detail" && renderDetailTable()}
+          {activeView==="errors" && renderErrorsPanel()}
         </div>
       )}
     </div>
