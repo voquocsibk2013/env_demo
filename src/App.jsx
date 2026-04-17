@@ -4025,22 +4025,100 @@ function calcSheets(wb, sheetMetas) {
   };
 }
 
+// ── applyOverrides — pure function, applies user COR overrides to a result ────
+function applyOverrides(calcResult, overrides) {
+  if (!calcResult || !calcResult.allRows || !overrides || Object.keys(overrides).length === 0) return calcResult;
+  const newAllRows = calcResult.allRows.map(row => {
+    const key = row.sheet + "|" + row.rowNum;
+    const oc  = overrides[key];
+    if (!oc) return row;
+    const entry = COR_MAP[oc];
+    if (!entry || row.weight == null || isNaN(Number(row.weight))) return row;
+    const ef  = entry.ef;
+    const tco = (Number(row.weight) * ef) / 1000;
+    return { ...row, cor: oc, category: entry.cat, corDesc: entry.desc,
+             emissionFactor: ef, emissionTco2e: tco, status: "VALID", errors: [], _overridden: true };
+  });
+  const mtoRows = newAllRows.filter(r => r.source === "MTO");
+  const melRows = newAllRows.filter(r => r.source === "MEL");
+  const mtoTotal = mtoRows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const melTotal = melRows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const errs = newAllRows.filter(r => r.status === "ERROR").map(r => ({
+    sheet: r.sheet, row: r.rowNum, desc: r.desc, cor: r.cor, errs: r.errors
+  }));
+  const unknownCors = [...new Set(errs.flatMap(e => (e.errs||[]).filter(x => x.notFound).map(x => x.val)))].filter(Boolean);
+  return { ...calcResult, allRows: newAllRows, mtoRows, melRows, mtoTotal, melTotal,
+           combined: mtoTotal + melTotal, errors: errs, unknownCors,
+           status: errs.length > 0 ? "completed_with_errors" : "success" };
+}
+
 // ── FootprintTab ──────────────────────────────────────────────────────────────
 function FootprintTab({ project, onChange }) {
-  const [step, setStep]           = useState("upload");  // upload | mapping | result
-  const [rawWb, setRawWb]         = useState(null);      // XLSX workbook object
+  const [step, setStep]           = useState("upload");
   const [fileName, setFileName]   = useState(project.footprintFile || "");
   const [sheetMetas, setSheetMetas] = useState(project.footprintMeta || []);
   const [result, setResult]       = useState(project.footprint || null);
-  const [aiLoading, setAiLoading] = useState({});        // sheetName -> bool
-  const [suggestions, setSuggestions] = useState(project.footprintSuggestions || {});
-  const [corLoading, setCorLoading]   = useState({});
-  const [view, setView]           = useState("summary");
-  const [dFilter, setDFilter]     = useState("ALL");
-  const [dSearch, setDSearch]     = useState("");
+  const [aiLoading, setAiLoading] = useState({});
+  const [suggestions, setSuggestions]     = useState(project.footprintSuggestions || {});
+  const [corLoading, setCorLoading]       = useState({});
+  const [corOverrides, setCorOverrides]   = useState(project.footprintCorOverrides || {});
+  const [overrideInput, setOverrideInput] = useState({});  // rowKey -> typed string
+  const [view, setView]   = useState("summary");
+  const [dFilter, setDFilter] = useState("ALL");
+  const [dSearch, setDSearch] = useState("");
+  const [colHighlight, setColHighlight] = useState(null);  // "sheetName|colName"
+  const hlTimer = React.useRef(null);
+  const wbRef   = React.useRef(null);
 
-  // Restore workbook ref on first load if we have saved meta+result
-  const wbRef = React.useRef(null);
+  // displayResult = base result with overrides applied
+  const displayResult = React.useMemo(
+    () => applyOverrides(result, corOverrides),
+    [result, corOverrides]
+  );
+
+  // ── Highlight + scroll to a mapped column ───────────────────────────────────
+  const highlightCol = (sheetName, colName) => {
+    if (!colName) return;
+    if (hlTimer.current) clearTimeout(hlTimer.current);
+    const key = sheetName + "|" + colName;
+    setColHighlight(key);
+    setTimeout(() => {
+      const id = "fp-col-" + (sheetName + "-" + colName).replace(/[^a-zA-Z0-9]/g, "_");
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }, 40);
+    hlTimer.current = setTimeout(() => setColHighlight(null), 2000);
+  };
+
+  // ── CSV export (no raw data, just calculated results) ───────────────────────
+  const exportCSV = () => {
+    if (!displayResult || !displayResult.allRows) return;
+    const hdrs = ["Source","Sheet","Row","Description","Material","COR Code","Category",
+                  "COR Description","Handling Code","Weight (kg)","Emission Factor",
+                  "Emission (tCO2e)","Status","Overridden"];
+    const rows = displayResult.allRows.map(r => [
+      r.source, r.sheet, r.rowNum, r.desc||"", r.material||"", r.cor||"",
+      r.category||"", r.corDesc||"", r.mhc||"",
+      r.weight != null ? r.weight : "",
+      r.emissionFactor != null ? r.emissionFactor : "",
+      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : "",
+      r.status, r._overridden ? "yes" : ""
+    ]);
+    rows.push([]);
+    rows.push(["SUMMARY","","","","","","","","","","",displayResult.mtoTotal.toFixed(6)+" tCO2e","MTO",""]);
+    rows.push(["SUMMARY","","","","","","","","","","",displayResult.melTotal.toFixed(6)+" tCO2e","MEL",""]);
+    rows.push(["SUMMARY","","","","","","","","","","",displayResult.combined.toFixed(6)+" tCO2e","COMBINED",""]);
+    const csv = [hdrs, ...rows]
+      .map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = (project.name || "footprint") + "_calculation.csv";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
 
   // ── File intake ──────────────────────────────────────────────────────────────
   const ingestFile = async (file) => {
@@ -4050,18 +4128,13 @@ function FootprintTab({ project, onChange }) {
     wbRef.current = wb;
     const metas = detectSheets(wb);
     if (metas.length === 0) {
-      setResult({ success: false, fatalError: "No sheets with readable column headers found." });
-      setStep("result");
-      return;
+      setResult({ success: false, fatalError: "No sheets with usable column headers found." });
+      setStep("result"); return;
     }
-    setSheetMetas(metas);
-    setResult(null);
-    setSuggestions({});
-    setStep("mapping");
+    setSheetMetas(metas); setResult(null); setSuggestions({}); setStep("mapping");
   };
-
-  const onFile  = e => { const f = e.target.files && e.target.files[0]; if (f) { ingestFile(f); e.target.value = ""; } };
-  const onDrop  = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingestFile(f); };
+  const onFile = e => { const f = e.target.files && e.target.files[0]; if (f) { ingestFile(f); e.target.value = ""; } };
+  const onDrop = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingestFile(f); };
 
   // ── AI mapping for one sheet ─────────────────────────────────────────────────
   const doAiMap = async (sheetName) => {
@@ -4077,13 +4150,10 @@ function FootprintTab({ project, onChange }) {
         Object.entries(res.mapping || {}).forEach(([k, v]) => { if (v) mapping[k] = v; });
         return { ...s, type, mapping, confidence: 1, aiMapped: true };
       }));
-    } catch (err) {
-      alert("AI mapping failed: " + err.message);
-    }
+    } catch (err) { alert("AI mapping failed: " + err.message); }
     setAiLoading(p => ({ ...p, [sheetName]: false }));
   };
 
-  // ── Update one field in a sheet mapping ──────────────────────────────────────
   const setMapping = (sheetName, field, value) => {
     setSheetMetas(prev => prev.map(s =>
       s.name === sheetName ? { ...s, mapping: { ...s.mapping, [field]: value || null } } : s
@@ -4101,7 +4171,6 @@ function FootprintTab({ project, onChange }) {
       s.name === sheetName ? { ...s, include: !s.include } : s
     ));
   };
-
   const setHeaderRow = (sheetName, rowIdx) => {
     setSheetMetas(prev => prev.map(s => {
       if (s.name !== sheetName) return s;
@@ -4111,7 +4180,7 @@ function FootprintTab({ project, onChange }) {
       const visibleHeaders = headers.filter(h => !h.startsWith("_col"));
       const mto = autoMapHeaders(visibleHeaders, "MTO");
       const mel = autoMapHeaders(visibleHeaders, "MEL");
-      const best = (s.type === "MEL" ? mel : mto);
+      const best = s.type === "MEL" ? mel : mto;
       return { ...s, headerRowIdx: rowIdx, headers: visibleHeaders, sampleRows,
                mapping: best.mapping, confidence: best.confidence, aiMapped: false };
     }));
@@ -4121,15 +4190,30 @@ function FootprintTab({ project, onChange }) {
   const doCalc = () => {
     if (!wbRef.current) return;
     const cal = calcSheets(wbRef.current, sheetMetas);
-    setResult(cal);
-    setView("summary");
-    setStep("result");
+    setResult(cal); setView("summary"); setStep("result");
+    setCorOverrides({});
     onChange({ ...project, footprint: cal, footprintFile: fileName,
-               footprintMeta: sheetMetas, footprintSuggestions: {} });
+               footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
     setSuggestions({});
   };
 
-  // ── COR code AI suggestions ──────────────────────────────────────────────────
+  // ── COR override helpers ─────────────────────────────────────────────────────
+  const setOverride = (rowKey, corCode) => {
+    if (!COR_MAP[corCode]) return;
+    const upd = { ...corOverrides, [rowKey]: corCode };
+    setCorOverrides(upd);
+    setOverrideInput(p => ({ ...p, [rowKey]: corCode }));
+    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+  };
+  const clearOverride = (rowKey) => {
+    const upd = { ...corOverrides };
+    delete upd[rowKey];
+    setCorOverrides(upd);
+    setOverrideInput(p => { const n = {...p}; delete n[rowKey]; return n; });
+    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+  };
+
+  // ── AI COR suggestion ────────────────────────────────────────────────────────
   const doSuggestCOR = async (code, affectedRows) => {
     if (suggestions[code] || corLoading[code]) return;
     setCorLoading(p => ({ ...p, [code]: true }));
@@ -4156,7 +4240,7 @@ function FootprintTab({ project, onChange }) {
     setCorLoading(p => ({ ...p, [code]: false }));
   };
 
-  // ── Colour helper ────────────────────────────────────────────────────────────
+  // ── Colour helpers ───────────────────────────────────────────────────────────
   const CC = { Architect:{bg:T.slateBg,c:T.slate,bd:T.slateBd}, Instrument:{bg:T.blueBg,c:T.blue,bd:T.blueBd},
     Electro:{bg:T.amberBg,c:T.amber,bd:T.amberBd}, HVAC:{bg:T.tealBg,c:T.teal,bd:T.tealBd},
     "Surface treatment":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}, Mechanical:{bg:T.greenBg,c:T.green,bd:T.greenBd},
@@ -4165,35 +4249,36 @@ function FootprintTab({ project, onChange }) {
     Insulation:{bg:T.blueBg,c:T.blue,bd:T.blueBd} };
   const catC = cat => CC[cat] || { bg: T.slateBg, c: T.slate, bd: T.slateBd };
   const fmt  = v => {
-    if (v === null || v === undefined || isNaN(Number(v))) return "\u2014";
+    if (v === null || v === undefined || isNaN(Number(v))) return "—";
     const n = Number(v);
-    return n >= 1 ? n.toFixed(3) + " tCO\u2082e" : (n * 1000).toFixed(2) + " kgCO\u2082e";
+    return n >= 1 ? n.toFixed(3) + " tCO₂e" : (n * 1000).toFixed(2) + " kgCO₂e";
   };
+
+  // shared button style
+  const btnSm = (active, ac, bg, bd) => ({
+    padding: "5px 12px", borderRadius: 5, fontSize: 11, fontWeight: 500, cursor: "pointer",
+    border: "1px solid " + (active ? bd : T.border),
+    background: active ? bg : "transparent",
+    color: active ? ac : T.muted, fontFamily: T.sans
+  });
 
   // ════════════════════════════════════════════════════════════════════════════
   // STEP 1 — UPLOAD
   // ════════════════════════════════════════════════════════════════════════════
-  if (step === "upload") {
+  if (step === "upload" && !result) {
     return (
       <div style={{ padding: "1.5rem" }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO\u2082 Footprint Calculator</h2>
+        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
         <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>
-          Upload any MTO or MEL workbook. Column names are matched automatically \u2014 no fixed template required.
+          Upload any MTO or MEL workbook — column names are matched automatically.
         </p>
-        <label
-          onDragOver={e => { e.preventDefault(); }}
-          onDrop={onDrop}
+        <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ display: "block", border: "2px dashed " + T.border, borderRadius: 12,
             padding: "3rem 2rem", textAlign: "center", background: T.surface, cursor: "pointer" }}>
           <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 8px" }}>Drop workbook here or click to browse</p>
-          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 6px" }}>
-            Handles any column naming \u2014 fuzzy matching + AI for ambiguous headers
-          </p>
-          <p style={{ fontSize: 11, color: T.faint, margin: 0 }}>
-            Detects MTO and MEL sheets automatically across .xlsx files
-          </p>
+          <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 8px" }}>Drop workbook or click to browse</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>Auto-detects MTO and MEL sheets · fuzzy column matching · AI fallback</p>
         </label>
         {result && !result.success && (
           <div style={{ marginTop: "1rem", padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8 }}>
@@ -4211,144 +4296,158 @@ function FootprintTab({ project, onChange }) {
     const includedSheets = sheetMetas.filter(s => s.include);
     const canCalc = includedSheets.length > 0;
 
-    // Field definitions for the assignment UI
     const MTO_FIELDS = [
-      { key: "desc",   label: "Item Description", req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
-      { key: "mat",    label: "Material",          req: false, color: T.slate,  bg: T.slateBg,  bd: T.slateBd  },
-      { key: "cor",    label: "COR Code",          req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
-      { key: "mhc",    label: "Handling Code",     req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
-      { key: "weight", label: "Weight (kg)",       req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
+      { key: "desc",   label: "Description",    req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
+      { key: "mat",    label: "Material",        req: false, color: T.slate,  bg: T.slateBg,  bd: T.slateBd  },
+      { key: "cor",    label: "COR Code",        req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
+      { key: "mhc",    label: "Handling Code",   req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
+      { key: "weight", label: "Weight (kg)",     req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
     ];
     const MEL_FIELDS = [
-      { key: "desc",   label: "Equip. Description", req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
-      { key: "cor",    label: "COR Code",            req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
-      { key: "mhc",    label: "Handling Code",       req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
-      { key: "weight", label: "Weight (kg)",         req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
+      { key: "desc",   label: "Description",     req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
+      { key: "cor",    label: "COR Code",         req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
+      { key: "mhc",    label: "Handling Code",    req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
+      { key: "weight", label: "Weight (kg)",      req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
     ];
     const getFields = type => type === "MEL" ? MEL_FIELDS : MTO_FIELDS;
 
     return (
       <div style={{ padding: "1.25rem" }}>
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
           <div>
             <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Map columns</h2>
-            <p style={{ margin: 0, fontSize: 11, color: T.muted }}>
-              {fileName} \u00b7 Click any column header in the preview to assign it to a field
-            </p>
+            <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName} · Click a field tag to jump to its column · Click a row number to set as header</p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <label style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + T.border, background: "transparent", color: T.muted, fontSize: 12, cursor: "pointer" }}>
+            <label style={{ ...btnSm(false), display: "inline-flex", alignItems: "center", padding: "6px 14px" }}>
               Different file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
             </label>
             <button onClick={doCalc} disabled={!canCalc}
-              style={{ padding: "7px 18px", borderRadius: 6, border: "none", background: canCalc ? T.teal : T.border,
-                color: canCalc ? "#fff" : T.muted, fontSize: 13, fontWeight: 600, cursor: canCalc ? "pointer" : "not-allowed" }}>
-              Calculate \u2192
+              style={{ padding: "7px 20px", borderRadius: 6, border: "none",
+                background: canCalc ? T.teal : T.border, color: canCalc ? "#fff" : T.muted,
+                fontSize: 13, fontWeight: 600, cursor: canCalc ? "pointer" : "not-allowed", minHeight: 34 }}>
+              Calculate →
             </button>
           </div>
         </div>
 
-        {/* One card per sheet */}
         {sheetMetas.map(sm => {
           const fields    = getFields(sm.type);
-          const isLoading = !!aiLoading[sm.name];
           const reqFields = fields.filter(f => f.req);
           const mappedReq = reqFields.filter(f => sm.mapping[f.key]).length;
-          // reverse map: colName -> fieldKey
-          const colToField = {};
-          Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToField[col] = fk; });
-          // field lookup by key
-          const fByKey = {};
-          fields.forEach(f => { fByKey[f.key] = f; });
+          const isLoading = !!aiLoading[sm.name];
+          const colToKey  = {};
+          Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToKey[col] = fk; });
 
           return (
             <div key={sm.name} style={{ marginBottom: "1.25rem", background: T.surface, borderRadius: 10,
-              border: "1px solid " + (sm.include ? T.border : T.faint), opacity: sm.include ? 1 : 0.5, overflow: "hidden" }}>
+              border: "1px solid " + (sm.include ? T.border : T.faint),
+              opacity: sm.include ? 1 : 0.5, overflow: "hidden" }}>
 
-              {/* ── Card header ── */}
+              {/* Card header */}
               <div style={{ padding: "10px 16px", background: T.surface2, borderBottom: "1px solid " + T.border,
                 display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <input type="checkbox" checked={sm.include} onChange={() => toggleInclude(sm.name)}
-                  style={{ width: 14, height: 14, cursor: "pointer" }} />
+                  style={{ width: 16, height: 16, cursor: "pointer", accentColor: T.teal }} />
                 <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: T.text }}>{sm.name}</span>
                 <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{sm.totalRows} rows</span>
-                {/* MTO / MEL toggle */}
-                <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid " + T.border }}>
+                <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid " + T.border }}>
                   {["MTO", "MEL"].map(t => (
                     <button key={t} onClick={() => setSheetType(sm.name, t)}
-                      style={{ padding: "3px 12px", fontSize: 11, fontWeight: 500, cursor: "pointer", border: "none",
+                      style={{ padding: "5px 14px", fontSize: 11, fontWeight: 600, cursor: "pointer", border: "none",
                         background: sm.type === t ? T.teal : "transparent",
-                        color: sm.type === t ? "#fff" : T.muted }}>{t}</button>
+                        color: sm.type === t ? "#fff" : T.muted, minHeight: 30 }}>{t}</button>
                   ))}
                 </div>
-                {/* Required-field progress */}
-                <span style={{ fontFamily: T.mono, fontSize: 10, padding: "2px 8px", borderRadius: 4,
+                <span style={{ fontFamily: T.mono, fontSize: 10, padding: "3px 10px", borderRadius: 10,
                   background: mappedReq === reqFields.length ? T.greenBg : mappedReq > 0 ? T.amberBg : T.redBg,
-                  color:      mappedReq === reqFields.length ? T.green   : mappedReq > 0 ? T.amber   : T.red,
+                  color: mappedReq === reqFields.length ? T.green : mappedReq > 0 ? T.amber : T.red,
                   border: "1px solid " + (mappedReq === reqFields.length ? T.greenBd : mappedReq > 0 ? T.amberBd : T.redBd) }}>
-                  {mappedReq}/{reqFields.length} required
+                  {mappedReq}/{reqFields.length} required fields
                 </span>
-                {sm.aiMapped && (
-                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.purple, background: T.purpleBg,
-                    padding: "2px 7px", borderRadius: 4, border: "1px solid " + T.purpleBd }}>AI</span>
-                )}
+                {sm.aiMapped && <span style={{ fontFamily: T.mono, fontSize: 9, color: T.purple, background: T.purpleBg, padding: "2px 8px", borderRadius: 10, border: "1px solid " + T.purpleBd }}>AI mapped</span>}
                 <button onClick={() => doAiMap(sm.name)} disabled={isLoading}
-                  style={{ marginLeft: "auto", padding: "4px 12px", borderRadius: 6, border: "1px solid " + T.purpleBd,
-                    background: isLoading ? T.purpleBg : "transparent", color: T.purple,
-                    fontSize: 11, fontWeight: 500, cursor: isLoading ? "not-allowed" : "pointer" }}>
-                  {isLoading ? "AI mapping\u2026" : "\u2728 Ask AI"}
+                  style={{ marginLeft: "auto", padding: "5px 14px", borderRadius: 6, minHeight: 30,
+                    border: "1px solid " + T.purpleBd, background: isLoading ? T.purpleBg : "transparent",
+                    color: T.purple, fontSize: 11, fontWeight: 500, cursor: isLoading ? "not-allowed" : "pointer" }}>
+                  {isLoading ? "AI mapping…" : "✨ Ask AI"}
                 </button>
               </div>
 
-              {/* ── Raw row picker ── */}
+              {/* Field pills — click to jump to column */}
+              <div style={{ padding: "10px 16px", borderBottom: "1px solid " + T.border,
+                display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: T.surface2 }}>
+                <span style={{ fontSize: 10, color: T.faint, marginRight: 2, whiteSpace: "nowrap" }}>Fields — click to jump:</span>
+                {fields.map(f => {
+                  const col = sm.mapping[f.key];
+                  const isLit = colHighlight === (sm.name + "|" + col);
+                  return (
+                    <div key={f.key}
+                      onClick={() => highlightCol(sm.name, col)}
+                      style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px 5px 8px",
+                        borderRadius: 20, cursor: col ? "pointer" : "default", userSelect: "none",
+                        background: isLit ? f.color : col ? f.bg : T.surface,
+                        border: "2px solid " + (isLit ? f.color : col ? f.bd : T.border),
+                        transition: "all 0.15s", minHeight: 28 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%",
+                        background: isLit ? "#fff" : col ? f.color : T.faint, flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: isLit ? "#fff" : col ? f.color : T.faint }}>
+                        {f.label}
+                      </span>
+                      {f.req && !col && <span style={{ fontSize: 9, color: T.red, fontWeight: 700 }}>*</span>}
+                      {col && (
+                        <>
+                          <span style={{ fontSize: 10, fontFamily: T.mono, color: isLit ? "#ffffffcc" : f.color, opacity: 0.85 }}>→ {col}</span>
+                          <button onClick={e => { e.stopPropagation(); setMapping(sm.name, f.key, ""); }}
+                            style={{ fontSize: 13, color: isLit ? "#fff" : f.color, background: "transparent",
+                              border: "none", cursor: "pointer", padding: "0 0 0 2px", lineHeight: 1, opacity: 0.7 }}>×</button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Raw row picker */}
               {(sm.rawPreview || []).length > 0 && (() => {
-                const rawPrev = sm.rawPreview || [];
+                const rawPrev = sm.rawPreview;
                 const hIdx    = sm.headerRowIdx != null ? sm.headerRowIdx : 0;
                 const maxCols = Math.min(Math.max(...rawPrev.map(r => r.length), 1), 20);
                 return (
                   <div style={{ borderBottom: "1px solid " + T.border }}>
-                    <div style={{ padding: "5px 14px 4px", background: T.surface2, borderBottom: "1px solid " + T.border,
+                    <div style={{ padding: "5px 14px", background: T.surface2, borderBottom: "1px solid " + T.border,
                       display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint,
-                        textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Raw file — click row number to set as header row
+                      <span style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Raw data — click a row number to set header row
                       </span>
-                      <span style={{ fontSize: 10, color: T.teal, fontWeight: 600 }}>
-                        Current header: row {hIdx + 1}
-                      </span>
+                      <span style={{ fontSize: 11, color: T.teal, fontWeight: 600 }}>Header: row {hIdx + 1}</span>
                     </div>
-                    <div style={{ overflowX: "auto", maxHeight: 240, overflowY: "auto" }}>
+                    <div style={{ overflowX: "auto", maxHeight: 220, overflowY: "auto" }}>
                       <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
                         <tbody>
                           {rawPrev.map((row, ri) => {
-                            const isHeader = ri === hIdx;
-                            const isAbove  = ri < hIdx;
+                            const isH = ri === hIdx, isA = ri < hIdx;
                             return (
                               <tr key={ri} style={{
-                                background: isHeader ? T.tealBg : isAbove ? T.surface2 : (ri % 2 === 0 ? T.surface : T.surface2),
-                                borderBottom: "1px solid " + (isHeader ? T.tealBd : T.rowBd),
-                                opacity: isAbove ? 0.45 : 1 }}>
+                                background: isH ? T.tealBg : isA ? T.surface2 : ri % 2 === 0 ? T.surface : T.surface2,
+                                borderBottom: "1px solid " + (isH ? T.tealBd : T.rowBd),
+                                opacity: isA ? 0.4 : 1 }}>
                                 <td onClick={() => setHeaderRow(sm.name, ri)}
-                                  style={{ padding: "3px 10px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
-                                    color: isHeader ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
-                                    background: isHeader ? T.tealBg : T.surface2,
-                                    borderRight: "2px solid " + (isHeader ? T.tealBd : T.border),
-                                    minWidth: 42, textAlign: "center", whiteSpace: "nowrap" }}
-                                  title={"Click to use row " + (ri + 1) + " as header"}>
-                                  {isHeader ? "▶ HDR" : ri + 1}
+                                  style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
+                                    color: isH ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
+                                    background: isH ? T.tealBg : T.surface2,
+                                    borderRight: "2px solid " + (isH ? T.tealBd : T.border),
+                                    minWidth: 44, textAlign: "center", whiteSpace: "nowrap" }}>
+                                  {isH ? "▶ HDR" : ri + 1}
                                 </td>
                                 {Array.from({ length: maxCols }, (_, ci) => {
                                   const val = String(row[ci] == null ? "" : row[ci]);
                                   return (
-                                    <td key={ci} style={{ padding: "3px 10px", fontFamily: T.mono, fontSize: 10,
-                                      fontWeight: isHeader ? 700 : 400,
-                                      color: isHeader ? T.teal : val ? T.text : T.faint,
-                                      borderRight: "1px solid " + T.rowBd,
-                                      maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                      title={val}>
-                                      {val || (isHeader ? "" : <span style={{ opacity: 0.3 }}>·</span>)}
-                                    </td>
+                                    <td key={ci} style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 10,
+                                      fontWeight: isH ? 700 : 400, color: isH ? T.teal : val ? T.text : T.faint,
+                                      borderRight: "1px solid " + T.rowBd, maxWidth: 160,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                      title={val}>{val || (isH ? "" : <span style={{ opacity: 0.25 }}>·</span>)}</td>
                                   );
                                 })}
                               </tr>
@@ -4361,119 +4460,91 @@ function FootprintTab({ project, onChange }) {
                 );
               })()}
 
-              {/* ── Column assignment ── */}
-              {sm.headers.length > 0 ? (() => {
-                const colToKey = {};
-                Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToKey[col] = fk; });
-                return (
-                  <div>
-                    {/* Field status bar */}
-                    <div style={{ padding: "8px 14px", borderBottom: "1px solid " + T.border,
-                      display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: T.surface2 }}>
-                      <span style={{ fontSize: 10, color: T.faint }}>Fields:</span>
-                      {fields.map(f => {
-                        const col = sm.mapping[f.key];
-                        return (
-                          <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 5,
-                            padding: "2px 10px 2px 7px", borderRadius: 20,
-                            background: col ? f.bg : T.surface, border: "1px solid " + (col ? f.bd : T.border) }}>
-                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: col ? f.color : T.faint, flexShrink: 0 }} />
-                            <span style={{ fontSize: 10, fontWeight: 600, color: col ? f.color : T.faint }}>{f.label}</span>
-                            {f.req && !col && <span style={{ fontSize: 9, color: T.red }}>*</span>}
-                            {col && (
-                              <>
-                                <span style={{ fontSize: 9, color: f.color, fontFamily: T.mono, opacity: 0.8 }}>→ {col}</span>
-                                <button onClick={() => setMapping(sm.name, f.key, "")}
-                                  style={{ fontSize: 10, color: f.color, background: "transparent", border: "none",
-                                    cursor: "pointer", padding: 0, marginLeft: 2, opacity: 0.6 }}>×</button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {/* Per-column table */}
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
-                        <thead>
-                          <tr>
-                            {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
-                              const fk   = colToKey[h];
-                              const fDef = fk ? fields.find(f => f.key === fk) : null;
-                              return (
-                                <th key={h} style={{ padding: 0, borderRight: "1px solid " + T.border,
-                                  borderBottom: "2px solid " + (fDef ? fDef.color : T.border),
-                                  background: fDef ? fDef.bg : T.surface2, minWidth: 130, maxWidth: 220 }}>
-                                  <div style={{ padding: "6px 8px 5px" }}>
-                                    <div style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
-                                      color: fDef ? fDef.color : T.text, whiteSpace: "nowrap",
-                                      overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, marginBottom: 4 }}
-                                      title={h}>{h}</div>
-                                    <select value={fk || ""}
-                                      onChange={e => {
-                                        const newKey = e.target.value;
-                                        setSheetMetas(prev => prev.map(s => {
-                                          if (s.name !== sm.name) return s;
-                                          const m = { ...s.mapping };
-                                          Object.keys(m).forEach(k => { if (m[k] === h) m[k] = null; });
-                                          if (newKey && m[newKey] && m[newKey] !== h) m[newKey] = null;
-                                          if (newKey) m[newKey] = h;
-                                          return { ...s, mapping: m };
-                                        }));
-                                      }}
-                                      style={{ width: "100%", fontSize: 9, padding: "2px 4px", borderRadius: 4,
-                                        border: "1px solid " + (fDef ? fDef.bd : T.border),
-                                        background: fDef ? fDef.bg : T.surface,
-                                        color: fDef ? fDef.color : T.muted,
-                                        cursor: "pointer", fontWeight: fDef ? 600 : 400 }}>
-                                      <option value="">— assign —</option>
-                                      {fields.map(f => (
-                                        <option key={f.key} value={f.key}>{f.label}{f.req ? " *" : ""}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(sm.sampleRows || []).slice(0, 6).map((row, ri) => (
-                            <tr key={ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2 }}>
-                              {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
-                                const fk   = colToKey[h];
-                                const fDef = fk ? fields.find(f => f.key === fk) : null;
-                                const val  = row[h];
-                                const disp = val == null || val === "" ? "" : String(val);
-                                return (
-                                  <td key={h} style={{ padding: "4px 8px", borderRight: "1px solid " + T.border,
-                                    borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
-                                    color: fDef ? fDef.color : T.muted,
-                                    background: fDef ? fDef.bg + "44" : undefined, fontWeight: fDef ? 500 : 400,
-                                    maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                    title={disp}>
-                                    {disp || <span style={{ color: T.faint }}>—</span>}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })() : (
+              {/* Column assignment */}
+              {sm.headers.length > 0 ? (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr>
+                        {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
+                          const fk   = colToKey[h];
+                          const fDef = fk ? fields.find(f => f.key === fk) : null;
+                          const isHl = colHighlight === (sm.name + "|" + h);
+                          const colId = "fp-col-" + (sm.name + "-" + h).replace(/[^a-zA-Z0-9]/g, "_");
+                          return (
+                            <th key={h} id={colId}
+                              style={{ padding: 0, borderRight: "1px solid " + T.border,
+                                borderBottom: "3px solid " + (isHl ? T.amber : fDef ? fDef.color : T.border),
+                                background: isHl ? T.amberBg + "88" : fDef ? fDef.bg : T.surface2,
+                                minWidth: 140, maxWidth: 220,
+                                transition: "background 0.3s, border-color 0.3s" }}>
+                              <div style={{ padding: "7px 10px 6px" }}>
+                                <div style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
+                                  color: isHl ? T.amber : fDef ? fDef.color : T.text,
+                                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                  maxWidth: 200, marginBottom: 5 }} title={h}>{h}</div>
+                                <select value={fk || ""}
+                                  onChange={e => {
+                                    const newKey = e.target.value;
+                                    setSheetMetas(prev => prev.map(s => {
+                                      if (s.name !== sm.name) return s;
+                                      const m = { ...s.mapping };
+                                      Object.keys(m).forEach(k => { if (m[k] === h) m[k] = null; });
+                                      if (newKey && m[newKey] && m[newKey] !== h) m[newKey] = null;
+                                      if (newKey) m[newKey] = h;
+                                      return { ...s, mapping: m };
+                                    }));
+                                  }}
+                                  style={{ width: "100%", fontSize: 10, padding: "4px 6px", borderRadius: 4, minHeight: 26,
+                                    border: "1px solid " + (fDef ? fDef.bd : T.border),
+                                    background: fDef ? fDef.bg : T.surface, color: fDef ? fDef.color : T.muted,
+                                    cursor: "pointer", fontWeight: fDef ? 600 : 400 }}>
+                                  <option value="">— assign field —</option>
+                                  {fields.map(f => <option key={f.key} value={f.key}>{f.label}{f.req ? " *" : ""}</option>)}
+                                </select>
+                              </div>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(sm.sampleRows || []).slice(0, 6).map((row, ri) => (
+                        <tr key={ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2 }}>
+                          {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
+                            const fk   = colToKey[h];
+                            const fDef = fk ? fields.find(f => f.key === fk) : null;
+                            const isHl = colHighlight === (sm.name + "|" + h);
+                            const val  = row[h];
+                            const disp = val == null || val === "" ? "" : String(val);
+                            return (
+                              <td key={h} style={{ padding: "5px 10px", borderRight: "1px solid " + T.border,
+                                borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
+                                color: isHl ? T.amber : fDef ? fDef.color : T.muted,
+                                background: isHl ? T.amberBg + "44" : fDef ? fDef.bg + "44" : undefined,
+                                fontWeight: fDef ? 500 : 400, maxWidth: 220,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                title={disp}>
+                                {disp || <span style={{ color: T.faint }}>—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
                 <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
-                  No columns found — select a different header row above.
+                  No columns detected — try selecting a different header row.
                 </div>
               )}
 
-              {/* Missing required */}
+              {/* Missing required warning */}
               {reqFields.some(f => !sm.mapping[f.key]) && sm.include && (
                 <div style={{ padding: "8px 16px", background: T.amberBg, borderTop: "1px solid " + T.amberBd }}>
                   <span style={{ fontSize: 11, color: T.amber }}>
-                    ⚠️ Missing: {reqFields.filter(f => !sm.mapping[f.key]).map(f => f.label).join(", ")}
+                    ⚠ Missing: {reqFields.filter(f => !sm.mapping[f.key]).map(f => f.label).join(", ")}
                   </span>
                 </div>
               )}
@@ -4482,89 +4553,98 @@ function FootprintTab({ project, onChange }) {
         })}
 
         {sheetMetas.length === 0 && (
-          <div style={{ padding: "2rem", textAlign: "center", background: T.surface, borderRadius: 8,
-            border: "1px solid " + T.border, color: T.faint }}>
-            No sheets detected. Try uploading a different file.
+          <div style={{ padding: "2rem", textAlign: "center", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, color: T.faint }}>
+            No sheets detected.
           </div>
         )}
       </div>
     );
   }
 
-  // STEP 3 — RESULTS
   // ════════════════════════════════════════════════════════════════════════════
-  if (!result || !result.success) {
+  // STEP 3 — RESULTS (uses displayResult = base + overrides)
+  // ════════════════════════════════════════════════════════════════════════════
+  if (!displayResult || !displayResult.success) {
     return (
       <div style={{ padding: "1.5rem" }}>
-        {result && !result.success && (
+        {displayResult && !displayResult.success && (
           <div style={{ padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8, marginBottom: "1rem" }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: "0 0 4px" }}>\u274c {result.fatalError}</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: 0 }}>❌ {displayResult.fatalError}</p>
           </div>
         )}
-        <label style={{ padding: "7px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+        <label style={{ padding: "7px 16px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "inline-block" }}>
           Upload file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
         </label>
       </div>
     );
   }
 
-  const allRows   = result.allRows   || [];
-  const mtoRows   = result.mtoRows   || [];
-  const melRows   = result.melRows   || [];
-  const errList   = result.errors    || [];
-  const unkCors   = result.unknownCors || [];
+  const allRows   = displayResult.allRows   || [];
+  const mtoRows   = displayResult.mtoRows   || [];
+  const melRows   = displayResult.melRows   || [];
+  const errList   = displayResult.errors    || [];
+  const unkCors   = displayResult.unknownCors || [];
   const validRows = allRows.filter(r => r.status === "VALID");
   const errCount  = errList.length;
-  const isOk      = result.status === "success";
+  const isOk      = displayResult.status === "success";
+  const overrideCount = Object.keys(corOverrides).length;
 
   const byCat = {};
   validRows.forEach(r => { const k = r.category || "Unknown"; byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0); });
   const catRows = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const byMHC   = {};
+  const byMHC = {};
   validRows.filter(r => r.mhc).forEach(r => { byMHC[r.mhc] = (byMHC[r.mhc] || 0) + (r.emissionTco2e || 0); });
   const mhcRows = Object.entries(byMHC).sort((a, b) => b[1] - a[1]);
 
   let dRows = allRows;
-  if (dFilter === "MTO")   dRows = allRows.filter(r => r.source === "MTO");
-  if (dFilter === "MEL")   dRows = allRows.filter(r => r.source === "MEL");
-  if (dFilter === "VALID") dRows = allRows.filter(r => r.status === "VALID");
-  if (dFilter === "ERROR") dRows = allRows.filter(r => r.status === "ERROR");
+  if (dFilter === "MTO")      dRows = allRows.filter(r => r.source === "MTO");
+  else if (dFilter === "MEL") dRows = allRows.filter(r => r.source === "MEL");
+  else if (dFilter === "VALID")  dRows = allRows.filter(r => r.status === "VALID");
+  else if (dFilter === "ERROR")  dRows = allRows.filter(r => r.status === "ERROR");
   if (dSearch) { const q = dSearch.toLowerCase(); dRows = dRows.filter(r => (r.desc || "").toLowerCase().includes(q) || (r.cor || "").toLowerCase().includes(q)); }
 
   return (
     <div style={{ padding: "1.25rem", background: T.bg }}>
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO\u2082 Footprint Calculator</h2>
+          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
           <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName}</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setStep("mapping")}
-            style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid " + T.border, background: "transparent", color: T.muted, fontSize: 12, cursor: "pointer" }}>
-            \u2190 Edit mapping
+          <button onClick={() => setStep("mapping")} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>
+            ← Edit mapping
           </button>
-          <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+          <button onClick={exportCSV} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
+            ↓ Download CSV
+          </button>
+          <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12,
+            fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", minHeight: 32, boxSizing: "border-box" }}>
             Upload new<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           </label>
         </div>
       </div>
 
-      {/* Status */}
-      <div style={{ padding: "8px 14px", borderRadius: 6, marginBottom: "1rem",
+      {/* ── Status ── */}
+      <div style={{ padding: "9px 14px", borderRadius: 7, marginBottom: "1rem",
         background: isOk ? T.greenBg : T.amberBg, border: "1px solid " + (isOk ? T.greenBd : T.amberBd),
-        display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 14 }}>{isOk ? "\u2705" : "\u26a0\ufe0f"}</span>
+        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 15 }}>{isOk ? "✅" : "⚠️"}</span>
         <span style={{ fontSize: 12, fontWeight: 600, color: isOk ? T.green : T.amber }}>
           {isOk ? "Calculation completed successfully"
-            : "Completed with " + errCount + " error" + (errCount !== 1 ? "s" : "") + " \u2014 affected rows excluded from totals"}
+            : "Completed with " + errCount + " error" + (errCount !== 1 ? "s" : "") + " — affected rows excluded from totals"}
         </span>
+        {overrideCount > 0 && (
+          <span style={{ fontSize: 11, padding: "2px 10px", borderRadius: 10, background: T.purpleBg, color: T.purple, border: "1px solid " + T.purpleBd }}>
+            {overrideCount} COR override{overrideCount !== 1 ? "s" : ""} applied
+          </span>
+        )}
         <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, marginLeft: "auto" }}>
-          {(result.sheets || []).map(s => s.name + " (" + s.type + ")").join(" \u00b7 ")}
+          {(displayResult.sheets || []).map(s => s.name + " (" + s.type + ")").join(" · ")}
         </span>
       </div>
 
-      {/* View tabs */}
+      {/* ── View tabs ── */}
       <div style={{ display: "flex", borderBottom: "2px solid " + T.border, marginBottom: "1.25rem" }}>
         {[
           { id: "summary", label: "Summary" },
@@ -4572,8 +4652,8 @@ function FootprintTab({ project, onChange }) {
           { id: "errors",  label: "Errors" + (errCount > 0 ? " (" + errCount + ")" : "") },
         ].map(tb => (
           <button key={tb.id} onClick={() => setView(tb.id)}
-            style={{ padding: "7px 16px", fontSize: 12, cursor: "pointer", border: "none",
-              background: "transparent", fontFamily: T.sans, fontWeight: 500,
+            style={{ padding: "8px 18px", fontSize: 12, cursor: "pointer", border: "none",
+              background: "transparent", fontFamily: T.sans, fontWeight: 500, minHeight: 38,
               borderBottom: "2px solid " + (view === tb.id ? T.teal : "transparent"), marginBottom: "-2px",
               color: view === tb.id ? T.teal : (tb.id === "errors" && errCount > 0 ? T.amber : T.muted) }}>
             {tb.label}
@@ -4581,22 +4661,22 @@ function FootprintTab({ project, onChange }) {
         ))}
       </div>
 
-      {/* SUMMARY */}
+      {/* ════ SUMMARY ════ */}
       {view === "summary" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: "1.25rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: "1.25rem" }}>
             {[
-              { label: "MTO Footprint",  val: result.mtoTotal, cnt: mtoRows.filter(r => r.status === "VALID").length, c: T.teal,     bg: T.tealBg,   bd: T.tealBd },
-              { label: "MEL Footprint",  val: result.melTotal, cnt: melRows.filter(r => r.status === "VALID").length, c: T.blue,     bg: T.blueBg,   bd: T.blueBd },
-              { label: "Combined Total", val: result.combined, cnt: validRows.length,                                  c: T.tealDark, bg: T.tealBg,   bd: T.tealBd },
+              { label: "MTO Footprint",  val: displayResult.mtoTotal, cnt: mtoRows.filter(r => r.status === "VALID").length, c: T.teal,     bg: T.tealBg,   bd: T.tealBd },
+              { label: "MEL Footprint",  val: displayResult.melTotal, cnt: melRows.filter(r => r.status === "VALID").length, c: T.blue,     bg: T.blueBg,   bd: T.blueBd },
+              { label: "Combined Total", val: displayResult.combined, cnt: validRows.length,                                  c: T.tealDark, bg: T.tealBg,   bd: T.tealBd },
             ].map(card => (
-              <div key={card.label} style={{ background: card.bg, border: "1px solid " + card.bd, borderRadius: 8, padding: "14px 16px" }}>
-                <p style={{ fontFamily: T.mono, fontSize: 9, color: card.c, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.label}</p>
-                <p style={{ fontFamily: T.mono, fontSize: 20, fontWeight: 700, color: card.c, margin: "0 0 2px", lineHeight: 1 }}>
+              <div key={card.label} style={{ background: card.bg, border: "1px solid " + card.bd, borderRadius: 8, padding: "16px 18px" }}>
+                <p style={{ fontFamily: T.mono, fontSize: 9, color: card.c, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.label}</p>
+                <p style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 700, color: card.c, margin: "0 0 3px", lineHeight: 1 }}>
                   {Number(card.val) >= 1 ? Number(card.val).toFixed(3) : (Number(card.val) * 1000).toFixed(2)}
                 </p>
                 <p style={{ fontFamily: T.mono, fontSize: 10, color: card.c, margin: 0, opacity: 0.7 }}>
-                  {Number(card.val) >= 1 ? "tCO\u2082e" : "kgCO\u2082e"} \u00b7 {card.cnt} row{card.cnt !== 1 ? "s" : ""}
+                  {Number(card.val) >= 1 ? "tCO₂e" : "kgCO₂e"} · {card.cnt} row{card.cnt !== 1 ? "s" : ""}
                 </p>
               </div>
             ))}
@@ -4606,14 +4686,14 @@ function FootprintTab({ project, onChange }) {
               <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 12px" }}>By COR Category</p>
               {catRows.map(([cat, val]) => {
                 const c = catC(cat);
-                const pct = result.combined > 0 ? Math.min(100, Math.round((val / result.combined) * 100)) : 0;
+                const pct = displayResult.combined > 0 ? Math.min(100, Math.round((val / displayResult.combined) * 100)) : 0;
                 return (
-                  <div key={cat} style={{ marginBottom: 8 }}>
+                  <div key={cat} style={{ marginBottom: 9 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                      <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 8px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{cat}</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{cat}</span>
                       <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 600, color: T.text }}>{fmt(val)}</span>
                     </div>
-                    <div style={{ height: 5, borderRadius: 3, background: T.border, overflow: "hidden" }}>
+                    <div style={{ height: 6, borderRadius: 3, background: T.border, overflow: "hidden" }}>
                       <div style={{ height: "100%", width: pct + "%", background: c.c, borderRadius: 3 }} />
                     </div>
                   </div>
@@ -4623,12 +4703,12 @@ function FootprintTab({ project, onChange }) {
           )}
           {mhcRows.length > 0 && (
             <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px" }}>
-              <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 10px" }}>By Module Handling Code</p>
+              <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 10px" }}>By Handling Code</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {mhcRows.map(([mhc, val]) => (
-                  <div key={mhc} style={{ padding: "6px 12px", borderRadius: 6, background: T.surface2, border: "1px solid " + T.border }}>
+                  <div key={mhc} style={{ padding: "7px 14px", borderRadius: 6, background: T.surface2, border: "1px solid " + T.border }}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 600, color: T.text }}>{mhc}</span>
-                    <span style={{ fontSize: 11, color: T.muted, marginLeft: 8 }}>{fmt(val)}</span>
+                    <span style={{ fontSize: 11, color: T.muted, marginLeft: 10 }}>{fmt(val)}</span>
                   </div>
                 ))}
               </div>
@@ -4637,19 +4717,16 @@ function FootprintTab({ project, onChange }) {
         </div>
       )}
 
-      {/* DETAIL */}
+      {/* ════ DETAIL ════ */}
       {view === "detail" && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input value={dSearch} onChange={e => setDSearch(e.target.value)} placeholder="Search description or COR\u2026"
-              style={{ padding: "5px 10px", fontSize: 12, border: "1px solid " + T.border, borderRadius: 6, background: T.surface, color: T.text, width: 210 }} />
+            <input value={dSearch} onChange={e => setDSearch(e.target.value)} placeholder="Search description or COR…"
+              style={{ padding: "6px 12px", fontSize: 12, border: "1px solid " + T.border, borderRadius: 6,
+                background: T.surface, color: T.text, width: 220, height: 32, boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 3 }}>
               {["ALL", "MTO", "MEL", "VALID", "ERROR"].map(f => (
-                <button key={f} onClick={() => setDFilter(f)}
-                  style={{ fontFamily: T.mono, fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer",
-                    border: "1px solid " + (dFilter === f ? T.teal : T.border),
-                    background: dFilter === f ? T.tealBg : "transparent",
-                    color: dFilter === f ? T.teal : T.muted }}>{f}</button>
+                <button key={f} onClick={() => setDFilter(f)} style={{ ...btnSm(dFilter === f, T.teal, T.tealBg, T.tealBd), minHeight: 32, minWidth: 50 }}>{f}</button>
               ))}
             </div>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, marginLeft: "auto" }}>{dRows.length} rows</span>
@@ -4658,10 +4735,10 @@ function FootprintTab({ project, onChange }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
               <thead>
                 <tr style={{ background: T.surface2 }}>
-                  {["Src","Sheet","Row","Description","COR","Category","MHC","Weight kg","EF","tCO\u2082e","Status"].map(h => (
-                    <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontFamily: T.mono, fontSize: 9, fontWeight: 600,
-                      color: T.muted, borderBottom: "1px solid " + T.border, whiteSpace: "nowrap",
-                      textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                  {["Src","Sheet","Row","Description","COR","Category","MHC","Weight kg","EF","tCO₂e","Status"].map(h => (
+                    <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                      fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
+                      whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -4669,18 +4746,33 @@ function FootprintTab({ project, onChange }) {
                 {dRows.map((r, i) => {
                   const c = catC(r.category);
                   return (
-                    <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd, background: r.status === "ERROR" ? T.redBg + "33" : undefined }}>
-                      <td style={{ padding: "5px 10px" }}><span style={{ fontFamily: T.mono, fontSize: 9, padding: "1px 5px", borderRadius: 3, background: r.source === "MTO" ? T.tealBg : T.blueBg, color: r.source === "MTO" ? T.teal : T.blue }}>{r.source}</span></td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap" }}>{r.sheet}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{r.rowNum}</td>
-                      <td style={{ padding: "5px 10px", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500, color: T.text }} title={r.desc}>{r.desc || "\u2014"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "\u2014"}</td>
-                      <td style={{ padding: "5px 10px" }}>{r.category ? <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>\u2014</span>}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "\u2014"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "\u2014"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "\u2014"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 11, fontWeight: r.emissionTco2e ? 600 : 400, color: r.emissionTco2e ? T.teal : T.faint, textAlign: "right" }}>{r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "\u2014"}</td>
-                      <td style={{ padding: "5px 10px" }}><span style={{ fontFamily: T.mono, fontSize: 9, padding: "1px 6px", borderRadius: 3, fontWeight: 500, background: r.status === "VALID" ? T.greenBg : T.redBg, color: r.status === "VALID" ? T.green : T.red, border: "1px solid " + (r.status === "VALID" ? T.greenBd : T.redBd) }}>{r.status}</span></td>
+                    <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd,
+                      background: r._overridden ? T.purpleBg + "33" : r.status === "ERROR" ? T.redBg + "33" : undefined }}>
+                      <td style={{ padding: "6px 10px" }}>
+                        <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 6px", borderRadius: 3,
+                          background: r.source === "MTO" ? T.tealBg : T.blueBg,
+                          color: r.source === "MTO" ? T.teal : T.blue }}>{r.source}</span>
+                      </td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap" }}>{r.sheet}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{r.rowNum}</td>
+                      <td style={{ padding: "6px 10px", maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500, color: T.text }} title={r.desc}>
+                        {r._overridden && <span style={{ fontSize: 8, marginRight: 4, color: T.purple, fontFamily: T.mono }}>OVR</span>}
+                        {r.desc || "—"}
+                      </td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "—"}</td>
+                      <td style={{ padding: "6px 10px" }}>{r.category ? <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>—</span>}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, fontWeight: r.emissionTco2e ? 600 : 400, color: r.emissionTco2e ? T.teal : T.faint, textAlign: "right" }}>
+                        {r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "—"}
+                      </td>
+                      <td style={{ padding: "6px 10px" }}>
+                        <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 7px", borderRadius: 3, fontWeight: 500,
+                          background: r.status === "VALID" ? T.greenBg : T.redBg,
+                          color: r.status === "VALID" ? T.green : T.red,
+                          border: "1px solid " + (r.status === "VALID" ? T.greenBd : T.redBd) }}>{r.status}</span>
+                      </td>
                     </tr>
                   );
                 })}
@@ -4690,47 +4782,70 @@ function FootprintTab({ project, onChange }) {
         </div>
       )}
 
-      {/* ERRORS */}
+      {/* ════ ERRORS ════ */}
       {view === "errors" && (
         <div>
+          {/* COR datalist for override pickers */}
+          <datalist id="fp-cor-datalist">
+            {COR_LOOKUP.map(c => (
+              <option key={c.code} value={c.code}>{c.code} — {c.cat}: {c.desc} (EF={c.ef})</option>
+            ))}
+          </datalist>
+
           {errCount === 0 ? (
             <div style={{ padding: "2rem", textAlign: "center", background: T.greenBg, border: "1px solid " + T.greenBd, borderRadius: 8, color: T.green, fontSize: 13 }}>
-              \u2705 No validation errors.
+              ✅ No validation errors.
             </div>
           ) : (
             <div>
+              {/* AI suggestions for completely unknown COR codes */}
               {unkCors.length > 0 && (
                 <div style={{ marginBottom: "1.25rem", padding: "14px 16px", borderRadius: 8, background: T.purpleBg, border: "1px solid " + T.purpleBd }}>
-                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.purple, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>Unknown COR codes \u2014 AI suggestions</p>
-                  <p style={{ fontSize: 11, color: T.muted, margin: "0 0 12px" }}>These COR codes were not found in the lookup. Click to get best-fit suggestions from AI.</p>
+                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.purple, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 4px" }}>
+                    Unknown COR codes — AI suggestions
+                  </p>
+                  <p style={{ fontSize: 11, color: T.muted, margin: "0 0 10px" }}>
+                    These codes are not in the lookup. Use AI to find the closest match, then apply it as an override below.
+                  </p>
                   {unkCors.map(code => {
                     const affected = allRows.filter(r => r.cor === code);
                     const hasSug   = suggestions[code] && suggestions[code].length > 0;
                     const loading  = !!corLoading[code];
                     return (
                       <div key={code} style={{ marginBottom: "0.75rem", background: T.surface, borderRadius: 7, border: "1px solid " + T.purpleBd, overflow: "hidden" }}>
-                        <div style={{ padding: "8px 14px", background: T.purpleBg, borderBottom: "1px solid " + T.purpleBd, display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ padding: "8px 14px", background: T.purpleBg, borderBottom: "1px solid " + T.purpleBd, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: T.purple }}>{code}</span>
                           <span style={{ fontSize: 11, color: T.muted }}>{affected.length} row{affected.length !== 1 ? "s" : ""}</span>
                           <span style={{ fontSize: 11, color: T.faint, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{affected[0] ? affected[0].desc : ""}</span>
                           {!hasSug && (
                             <button disabled={loading} onClick={() => doSuggestCOR(code, affected)}
-                              style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: loading ? T.border : T.purple, color: loading ? T.muted : "#fff", cursor: loading ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 500 }}>
-                              {loading ? "Asking AI\u2026" : "\u2728 Suggest COR"}
+                              style={{ padding: "5px 14px", borderRadius: 6, border: "none", minHeight: 30,
+                                background: loading ? T.border : T.purple, color: loading ? T.muted : "#fff",
+                                cursor: loading ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 500 }}>
+                              {loading ? "Asking AI…" : "✨ Suggest COR"}
                             </button>
                           )}
                         </div>
                         {hasSug && (
                           <div style={{ padding: "12px 14px" }}>
-                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 10px" }}>Best matches \u2014 apply in source file or re-map above</p>
+                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
+                              Best matches — click Apply to use as override for all rows with this code
+                            </p>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               {(suggestions[code] || []).map((s, si) => {
                                 const sc = catC(s.category);
                                 return (
                                   <div key={si} style={{ flex: 1, minWidth: 160, padding: "10px 12px", borderRadius: 7, background: sc.bg, border: "1px solid " + sc.bd }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
                                       <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: sc.c }}>{s.code}</span>
                                       <span style={{ fontFamily: T.mono, fontSize: 10, color: sc.c }}>EF={s.ef}</span>
+                                      <button onClick={() => {
+                                        affected.forEach(r => setOverride(r.sheet + "|" + r.rowNum, s.code));
+                                      }}
+                                        style={{ marginLeft: "auto", padding: "3px 10px", borderRadius: 5, border: "none",
+                                          background: sc.c, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer", minHeight: 24 }}>
+                                        Apply all
+                                      </button>
                                     </div>
                                     <p style={{ fontSize: 11, fontWeight: 500, color: T.text, margin: "0 0 3px" }}>{s.description}</p>
                                     <p style={{ fontSize: 10, color: T.muted, margin: 0, lineHeight: 1.5 }}>{s.reason}</p>
@@ -4745,36 +4860,85 @@ function FootprintTab({ project, onChange }) {
                   })}
                 </div>
               )}
+
+              {/* Per-sheet error tables with inline COR override picker */}
               {Object.entries(errList.reduce((acc, e) => { (acc[e.sheet] = acc[e.sheet] || []).push(e); return acc; }, {})).map(([sheet, sheetErrs]) => (
                 <div key={sheet} style={{ marginBottom: "1rem", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
-                  <div style={{ padding: "8px 14px", background: T.redBg, borderBottom: "1px solid " + T.redBd, display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ padding: "9px 14px", background: T.redBg, borderBottom: "1px solid " + T.redBd, display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>{sheet}</span>
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.red, opacity: 0.7 }}>{sheetErrs.length} row{sheetErrs.length !== 1 ? "s" : ""}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.red, opacity: 0.7 }}>{sheetErrs.length} row{sheetErrs.length !== 1 ? "s" : ""} with errors</span>
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                     <thead>
                       <tr style={{ background: T.surface2 }}>
-                        {["Row", "Description", "COR Code", "Error"].map(h => (
-                          <th key={h} style={{ padding: "6px 12px", textAlign: "left", fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                        {["Row", "Description", "Error", "Override COR", "Result"].map(h => (
+                          <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                            fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
+                            textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {sheetErrs.map((e, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd }}>
-                          <td style={{ padding: "6px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.row}</td>
-                          <td style={{ padding: "6px 12px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "\u2014"}</td>
-                          <td style={{ padding: "6px 12px", fontFamily: T.mono, fontSize: 11, color: T.red }}>{e.cor || "blank"}</td>
-                          <td style={{ padding: "6px 12px" }}>
-                            {(e.errs || []).map((er, j) => (
-                              <div key={j} style={{ marginBottom: j < e.errs.length - 1 ? 3 : 0, fontSize: 11, color: T.muted }}>
-                                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, marginRight: 5, padding: "1px 4px", borderRadius: 3, background: T.redBg }}>{er.col}</span>
-                                {er.msg}
-                              </div>
-                            ))}
-                          </td>
-                        </tr>
-                      ))}
+                      {sheetErrs.map((e, i) => {
+                        const rowKey = e.sheet + "|" + e.row;
+                        const ov = corOverrides[rowKey];
+                        const ovEntry = ov ? COR_MAP[ov] : null;
+                        const inputVal = overrideInput[rowKey] !== undefined ? overrideInput[rowKey] : (ov || "");
+                        const hasCorError = (e.errs || []).some(er => er.notFound || er.col === "COR Code");
+                        return (
+                          <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd, background: ov ? T.purpleBg + "22" : undefined }}>
+                            <td style={{ padding: "8px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.row}</td>
+                            <td style={{ padding: "8px 12px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "—"}</td>
+                            <td style={{ padding: "8px 12px" }}>
+                              {(e.errs || []).map((er, j) => (
+                                <div key={j} style={{ marginBottom: j < e.errs.length - 1 ? 3 : 0, display: "flex", alignItems: "center", gap: 5 }}>
+                                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, padding: "1px 5px", borderRadius: 3, background: T.redBg, flexShrink: 0 }}>{er.col}</span>
+                                  <span style={{ fontSize: 11, color: T.muted }}>{er.msg}</span>
+                                </div>
+                              ))}
+                            </td>
+                            <td style={{ padding: "6px 12px", minWidth: 220 }}>
+                              {hasCorError ? (
+                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                  <input
+                                    list="fp-cor-datalist"
+                                    value={inputVal}
+                                    onChange={ev => {
+                                      const val = ev.target.value;
+                                      setOverrideInput(p => ({ ...p, [rowKey]: val }));
+                                      if (COR_MAP[val]) setOverride(rowKey, val);
+                                    }}
+                                    placeholder="Type COR code…"
+                                    style={{ flex: 1, padding: "5px 8px", fontSize: 11, borderRadius: 5, minHeight: 30,
+                                      border: "1px solid " + (ov ? T.purpleBd : T.border),
+                                      background: ov ? T.purpleBg : T.surface, color: T.text, boxSizing: "border-box" }} />
+                                  {ov && (
+                                    <button onClick={() => clearOverride(rowKey)}
+                                      style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid " + T.redBd,
+                                        background: T.redBg, color: T.red, fontSize: 11, cursor: "pointer", minHeight: 30, flexShrink: 0 }}>
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: 10, color: T.faint, fontStyle: "italic" }}>not a COR error</span>
+                              )}
+                            </td>
+                            <td style={{ padding: "8px 12px" }}>
+                              {ovEntry ? (
+                                <div>
+                                  <div style={{ fontSize: 10, fontWeight: 600, color: T.purple }}>→ {ov}</div>
+                                  <div style={{ fontSize: 10, color: T.muted }}>{ovEntry.cat} · EF={ovEntry.ef}</div>
+                                </div>
+                              ) : ov ? (
+                                <span style={{ fontSize: 10, color: T.red }}>Invalid code</span>
+                              ) : (
+                                <span style={{ fontSize: 10, color: T.faint }}>—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
