@@ -4130,20 +4130,36 @@ function FootprintTab({ project, onChange }) {
   if (step === "mapping") {
     const includedSheets = sheetMetas.filter(s => s.include);
     const canCalc = includedSheets.length > 0;
+
+    // Field definitions for the assignment UI
+    const MTO_FIELDS = [
+      { key: "desc",   label: "Item Description", req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
+      { key: "mat",    label: "Material",          req: false, color: T.slate,  bg: T.slateBg,  bd: T.slateBd  },
+      { key: "cor",    label: "COR Code",          req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
+      { key: "mhc",    label: "Handling Code",     req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
+      { key: "weight", label: "Weight (kg)",       req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
+    ];
+    const MEL_FIELDS = [
+      { key: "desc",   label: "Equip. Description", req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
+      { key: "cor",    label: "COR Code",            req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
+      { key: "mhc",    label: "Handling Code",       req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
+      { key: "weight", label: "Weight (kg)",         req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
+    ];
+    const getFields = type => type === "MEL" ? MEL_FIELDS : MTO_FIELDS;
+
     return (
       <div style={{ padding: "1.25rem" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
           <div>
-            <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Review column mapping</h2>
+            <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Map columns</h2>
             <p style={{ margin: 0, fontSize: 11, color: T.muted }}>
-              {fileName} \u00b7 {sheetMetas.length} sheet{sheetMetas.length !== 1 ? "s" : ""} found \u00b7 Verify and adjust before calculating
+              {fileName} \u00b7 Click any column header in the preview to assign it to a field
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <label style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + T.border, background: "transparent", color: T.muted, fontSize: 12, cursor: "pointer" }}>
-              Upload different file
-              <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+              Different file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
             </label>
             <button onClick={doCalc} disabled={!canCalc}
               style={{ padding: "7px 18px", borderRadius: 6, border: "none", background: canCalc ? T.teal : T.border,
@@ -4155,48 +4171,47 @@ function FootprintTab({ project, onChange }) {
 
         {/* One card per sheet */}
         {sheetMetas.map(sm => {
-          const schema   = FIELD_SCHEMAS[sm.type] || FIELD_SCHEMAS.MTO;
-          const fields   = sm.type === "MTO"
-            ? [["desc","Item Description"],["mat","Material"],["cor","COR Code"],["mhc","Handling Code"],["weight","Weight (kg)"]]
-            : [["desc","Equipment Description"],["cor","COR Code"],["mhc","Handling Code"],["weight","Weight (kg)"]];
+          const fields    = getFields(sm.type);
           const isLoading = !!aiLoading[sm.name];
-          const conf = Math.round((sm.confidence || 0) * 100);
-          const confColor = conf >= 80 ? T.green : conf >= 50 ? T.amber : T.red;
-          const reqMapped = fields.filter(([k]) => {
-            const def = schema[k]; return def && def.req && sm.mapping[k];
-          }).length;
-          const reqTotal  = fields.filter(([k]) => { const def = schema[k]; return def && def.req; }).length;
+          const reqFields = fields.filter(f => f.req);
+          const mappedReq = reqFields.filter(f => sm.mapping[f.key]).length;
+          // reverse map: colName -> fieldKey
+          const colToField = {};
+          Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToField[col] = fk; });
+          // field lookup by key
+          const fByKey = {};
+          fields.forEach(f => { fByKey[f.key] = f; });
+
           return (
-            <div key={sm.name} style={{ marginBottom: "1rem", background: T.surface, borderRadius: 10,
-              border: "1px solid " + (sm.include ? T.border : T.faint),
-              opacity: sm.include ? 1 : 0.5, overflow: "hidden" }}>
-              {/* Sheet header */}
+            <div key={sm.name} style={{ marginBottom: "1.25rem", background: T.surface, borderRadius: 10,
+              border: "1px solid " + (sm.include ? T.border : T.faint), opacity: sm.include ? 1 : 0.5, overflow: "hidden" }}>
+
+              {/* ── Card header ── */}
               <div style={{ padding: "10px 16px", background: T.surface2, borderBottom: "1px solid " + T.border,
                 display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <input type="checkbox" checked={sm.include} onChange={() => toggleInclude(sm.name)}
                   style={{ width: 14, height: 14, cursor: "pointer" }} />
                 <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: T.text }}>{sm.name}</span>
                 <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{sm.totalRows} rows</span>
-                {/* Type selector */}
+                {/* MTO / MEL toggle */}
                 <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid " + T.border }}>
                   {["MTO", "MEL"].map(t => (
                     <button key={t} onClick={() => setSheetType(sm.name, t)}
                       style={{ padding: "3px 12px", fontSize: 11, fontWeight: 500, cursor: "pointer", border: "none",
                         background: sm.type === t ? T.teal : "transparent",
-                        color: sm.type === t ? "#fff" : T.muted }}>
-                      {t}
-                    </button>
+                        color: sm.type === t ? "#fff" : T.muted }}>{t}</button>
                   ))}
                 </div>
-                {/* Confidence */}
+                {/* Required-field progress */}
                 <span style={{ fontFamily: T.mono, fontSize: 10, padding: "2px 8px", borderRadius: 4,
-                  background: conf >= 80 ? T.greenBg : conf >= 50 ? T.amberBg : T.redBg,
-                  color: confColor, border: "1px solid " + (conf >= 80 ? T.greenBd : conf >= 50 ? T.amberBd : T.redBd) }}>
-                  {reqMapped}/{reqTotal} required fields matched
+                  background: mappedReq === reqFields.length ? T.greenBg : mappedReq > 0 ? T.amberBg : T.redBg,
+                  color:      mappedReq === reqFields.length ? T.green   : mappedReq > 0 ? T.amber   : T.red,
+                  border: "1px solid " + (mappedReq === reqFields.length ? T.greenBd : mappedReq > 0 ? T.amberBd : T.redBd) }}>
+                  {mappedReq}/{reqFields.length} required
                 </span>
                 {sm.aiMapped && (
                   <span style={{ fontFamily: T.mono, fontSize: 9, color: T.purple, background: T.purpleBg,
-                    padding: "2px 7px", borderRadius: 4, border: "1px solid " + T.purpleBd }}>AI mapped</span>
+                    padding: "2px 7px", borderRadius: 4, border: "1px solid " + T.purpleBd }}>AI</span>
                 )}
                 <button onClick={() => doAiMap(sm.name)} disabled={isLoading}
                   style={{ marginLeft: "auto", padding: "4px 12px", borderRadius: 6, border: "1px solid " + T.purpleBd,
@@ -4206,41 +4221,123 @@ function FootprintTab({ project, onChange }) {
                 </button>
               </div>
 
-              {/* Field rows */}
-              <div style={{ padding: "12px 16px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "10px 16px" }}>
-                  {fields.map(([key, label]) => {
-                    const def      = schema[key];
-                    const mapped   = sm.mapping[key];
-                    const isReq    = def && def.req;
-                    const isMissing = isReq && !mapped;
-                    return (
-                      <div key={key}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: isMissing ? T.red : T.text }}>{label}</span>
-                          {isReq && <span style={{ fontFamily: T.mono, fontSize: 9, color: isMissing ? T.red : T.faint }}>required</span>}
-                          {mapped && <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, marginLeft: "auto" }}>\u2713</span>}
-                        </div>
-                        <select
-                          value={mapped || ""}
-                          onChange={e => setMapping(sm.name, key, e.target.value)}
-                          style={{ width: "100%", padding: "5px 8px", fontSize: 12, borderRadius: 5,
-                            border: "1px solid " + (isMissing ? T.redBd : mapped ? T.greenBd : T.border),
-                            background: isMissing ? T.redBg : mapped ? T.greenBg + "44" : T.surface,
-                            color: T.text, boxSizing: "border-box" }}>
-                          <option value="">-- not mapped --</option>
-                          {sm.headers.map(h => <option key={h} value={h}>{h}</option>)}
-                        </select>
-                        {mapped && (
-                          <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, margin: "2px 0 0" }}>
-                            sample: {String(sm.sampleRows[0] && sm.sampleRows[0][mapped] !== undefined ? sm.sampleRows[0][mapped] : "").slice(0, 40)}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              {/* ── Field assignment legend ── */}
+              <div style={{ padding: "10px 16px", borderBottom: "1px solid " + T.border,
+                display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 10, color: T.faint, marginRight: 4 }}>Fields:</span>
+                {fields.map(f => {
+                  const col = sm.mapping[f.key];
+                  return (
+                    <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px 3px 8px",
+                      borderRadius: 20, background: col ? f.bg : T.surface2,
+                      border: "1px solid " + (col ? f.bd : T.border) }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: col ? f.color : T.faint, flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 600, color: col ? f.color : T.faint }}>{f.label}</span>
+                      {f.req && !col && <span style={{ fontSize: 9, color: T.red }}>*</span>}
+                      {col && (
+                        <>
+                          <span style={{ fontSize: 10, color: f.color, fontFamily: T.mono, opacity: 0.8 }}>\u2192 {col}</span>
+                          <button onClick={() => setMapping(sm.name, f.key, "")}
+                            style={{ fontSize: 10, color: f.color, background: "transparent", border: "none",
+                              cursor: "pointer", padding: "0 0 0 2px", lineHeight: 1, opacity: 0.6 }}>\u00d7</button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* ── Data preview table — click headers to assign ── */}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {sm.headers.map(h => {
+                        const assignedKey = colToField[h];
+                        const fDef        = assignedKey ? fByKey[assignedKey] : null;
+                        return (
+                          <th key={h} style={{ padding: 0, borderRight: "1px solid " + T.border,
+                            borderBottom: "2px solid " + (fDef ? fDef.color : T.border),
+                            background: fDef ? fDef.bg : T.surface2,
+                            minWidth: 110, maxWidth: 200, position: "relative" }}>
+                            {/* Column header + assignment badge */}
+                            <div style={{ padding: "6px 8px 4px" }}>
+                              <div style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
+                                color: fDef ? fDef.color : T.text,
+                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                maxWidth: 180, marginBottom: 4 }} title={h}>{h}</div>
+                              {/* Field assignment dropdown */}
+                              <select
+                                value={assignedKey || ""}
+                                onChange={e => {
+                                  const newKey = e.target.value;
+                                  // clear old mapping that used this col
+                                  const cleared = {};
+                                  fields.forEach(f => {
+                                    if (sm.mapping[f.key] === h && f.key !== newKey) cleared[f.key] = null;
+                                  });
+                                  // if newKey already mapped to another col, clear that too
+                                  if (newKey && sm.mapping[newKey] && sm.mapping[newKey] !== h) {
+                                    cleared[newKey] = null;
+                                  }
+                                  // apply all changes
+                                  setSheetMetas(prev => prev.map(s => {
+                                    if (s.name !== sm.name) return s;
+                                    const m = { ...s.mapping, ...cleared };
+                                    if (newKey) m[newKey] = h; else { Object.keys(cleared).forEach(k => { m[k] = null; }); }
+                                    return { ...s, mapping: m };
+                                  }));
+                                }}
+                                style={{ width: "100%", fontSize: 9, padding: "2px 4px", borderRadius: 4,
+                                  border: "1px solid " + (fDef ? fDef.bd : T.border),
+                                  background: fDef ? fDef.bg : T.surface,
+                                  color: fDef ? fDef.color : T.muted,
+                                  cursor: "pointer", fontWeight: fDef ? 600 : 400 }}>
+                                <option value="">— assign —</option>
+                                {fields.map(f => (
+                                  <option key={f.key} value={f.key}>{f.label}{f.req ? " *" : ""}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sm.sampleRows.slice(0, 6).map((row, ri) => (
+                      <tr key={ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2 }}>
+                        {sm.headers.map(h => {
+                          const assignedKey = colToField[h];
+                          const fDef        = assignedKey ? fByKey[assignedKey] : null;
+                          const val         = row[h];
+                          const display     = val === null || val === undefined || val === "" ? "" : String(val);
+                          return (
+                            <td key={h} style={{ padding: "4px 8px", borderRight: "1px solid " + T.border,
+                              borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
+                              color: fDef ? fDef.color : T.muted,
+                              background: fDef ? fDef.bg + "55" : undefined,
+                              fontWeight: fDef ? 500 : 400,
+                              maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                              title={display}>
+                              {display || <span style={{ color: T.faint, fontStyle: "italic" }}>—</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ── Missing required fields warning ── */}
+              {reqFields.some(f => !sm.mapping[f.key]) && sm.include && (
+                <div style={{ padding: "8px 16px", background: T.amberBg, borderTop: "1px solid " + T.amberBd }}>
+                  <span style={{ fontSize: 11, color: T.amber }}>
+                    \u26a0\ufe0f Missing required: {reqFields.filter(f => !sm.mapping[f.key]).map(f => f.label).join(", ")}
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -4255,7 +4352,6 @@ function FootprintTab({ project, onChange }) {
     );
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
   // STEP 3 — RESULTS
   // ════════════════════════════════════════════════════════════════════════════
   if (!result || !result.success) {
