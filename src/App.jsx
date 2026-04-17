@@ -3825,32 +3825,96 @@ function autoMapHeaders(headers, schemaType) {
   return { mapping, confidence };
 }
 
+// Score a row on how likely it is to be a header row
+function scoreHeaderRow(row) {
+  const HEADER_KEYWORDS = [
+    "description","descr","desc","name","type","item","tag","equip","component",
+    "weight","wt","mass","kg","gdw","gross","dry",
+    "code","cor","cost","commodity","class","account","wbs","group","discipline",
+    "material","mat","alloy","spec",
+    "handling","handl","mhc","module","mod","install",
+    "qty","quantity","unit","no","number","ref","id",
+  ];
+  const cells = row.map(v => String(v == null ? "" : v).trim()).filter(Boolean);
+  if (cells.length < 2) return 0;
+  const textCells    = cells.filter(v => isNaN(Number(v)) || v.length > 8);
+  const keywordHits  = cells.filter(v =>
+    HEADER_KEYWORDS.some(kw => v.toLowerCase().includes(kw))
+  ).length;
+  return textCells.length * 1.5 + keywordHits * 4 + cells.length * 0.3;
+}
+
+function detectHeaderRow(rawRows) {
+  // Scan first 25 rows, return index of most likely header row
+  const scan = rawRows.slice(0, 25);
+  let bestIdx = 0, bestScore = -1;
+  scan.forEach((row, i) => {
+    const score = scoreHeaderRow(row);
+    if (score > bestScore) { bestScore = score; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
+function parseSheetFromRow(rawRows, headerRowIdx) {
+  // Given all rows and a chosen header row index, return { headers, sampleRows }
+  const headerArr = (rawRows[headerRowIdx] || []).map(h => String(h == null ? "" : h).trim());
+  // Deduplicate blank/repeated headers by appending index
+  const headers = headerArr.map((h, i) => {
+    if (!h) return "_col" + i;
+    let name = h, count = 0;
+    const base = h;
+    while (headerArr.slice(0, i).includes(name)) { count++; name = base + "_" + count; }
+    return name;
+  }).filter(h => h !== "_col" + headerArr.indexOf(""));  // keep only non-empty originals
+
+  // Re-derive headers preserving positions for all columns
+  const finalHeaders = headerArr.map((h, i) => h || ("_col" + i));
+
+  const sampleRows = rawRows.slice(headerRowIdx + 1, headerRowIdx + 9)
+    .filter(row => row.some(v => v !== "" && v !== null && v !== undefined))
+    .map(rowArr => {
+      const obj = {};
+      finalHeaders.forEach((h, i) => { obj[h] = rowArr[i]; });
+      return obj;
+    });
+  return { headers: finalHeaders, sampleRows };
+}
+
 function detectSheets(wb) {
   const result = [];
   for (const name of wb.SheetNames) {
     const ws  = wb.Sheets[name];
     const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
     if (raw.length < 2) continue;
-    const headers = raw[0].map(h => String(h || "").trim()).filter(Boolean);
-    if (headers.length === 0) continue;
-    const sampleRows = raw.slice(1, 5).map(rowArr => {
-      const obj = {};
-      headers.forEach((h, i) => { obj[h] = rowArr[i]; });
-      return obj;
-    });
-    const mto = autoMapHeaders(headers, "MTO");
-    const mel = autoMapHeaders(headers, "MEL");
+
+    const headerRowIdx = detectHeaderRow(raw);
+    const { headers, sampleRows } = parseSheetFromRow(raw, headerRowIdx);
+    const visibleHeaders = headers.filter(h => !h.startsWith("_col"));
+    if (visibleHeaders.length < 2) continue;
+
+    const mto = autoMapHeaders(visibleHeaders, "MTO");
+    const mel = autoMapHeaders(visibleHeaders, "MEL");
     let type = "unknown", mapping = {}, confidence = 0;
     if (mto.confidence >= mel.confidence && mto.confidence > 0.4) {
       type = "MTO"; mapping = mto.mapping; confidence = mto.confidence;
     } else if (mel.confidence > 0.4) {
       type = "MEL"; mapping = mel.mapping; confidence = mel.confidence;
     } else if (mto.confidence > 0) {
-      // low confidence but some signal — default MTO, flag it
       type = "MTO"; mapping = mto.mapping; confidence = mto.confidence;
+    } else {
+      type = "MTO"; mapping = mto.mapping; confidence = 0;  // show sheet anyway
     }
-    result.push({ name, headers, sampleRows, type, mapping, confidence,
-                  totalRows: raw.length - 1, include: type !== "unknown" });
+
+    // Store raw preview rows (first 20) so UI can let user pick header row
+    const rawPreview = raw.slice(0, 20).map(row =>
+      row.map(v => v === null || v === undefined ? "" : String(v))
+    );
+
+    result.push({ name, headers: visibleHeaders, sampleRows,
+                  headerRowIdx, rawPreview,
+                  type, mapping, confidence,
+                  totalRows: Math.max(0, raw.length - 1 - headerRowIdx),
+                  include: true });
   }
   return result;
 }
@@ -3891,8 +3955,9 @@ function calcSheets(wb, sheetMetas) {
     const ws  = wb.Sheets[sm.name];
     const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
     if (raw.length < 2) continue;
-    const headers = raw[0].map(h => String(h || "").trim());
-    raw.slice(1).forEach((rowArr, idx) => {
+    const hIdx = sm.headerRowIdx != null ? sm.headerRowIdx : detectHeaderRow(raw);
+    const { headers } = parseSheetFromRow(raw, hIdx);
+    raw.slice(hIdx + 1).forEach((rowArr, idx) => {
       const row = {};
       headers.forEach((h, j) => { row[h] = rowArr[j]; });
       const m = sm.mapping;
@@ -4035,6 +4100,21 @@ function FootprintTab({ project, onChange }) {
     setSheetMetas(prev => prev.map(s =>
       s.name === sheetName ? { ...s, include: !s.include } : s
     ));
+  };
+
+  const setHeaderRow = (sheetName, rowIdx) => {
+    setSheetMetas(prev => prev.map(s => {
+      if (s.name !== sheetName) return s;
+      const rawPreview = s.rawPreview || [];
+      if (!rawPreview[rowIdx]) return s;
+      const { headers, sampleRows } = parseSheetFromRow(rawPreview, rowIdx);
+      const visibleHeaders = headers.filter(h => !h.startsWith("_col"));
+      const mto = autoMapHeaders(visibleHeaders, "MTO");
+      const mel = autoMapHeaders(visibleHeaders, "MEL");
+      const best = (s.type === "MEL" ? mel : mto);
+      return { ...s, headerRowIdx: rowIdx, headers: visibleHeaders, sampleRows,
+               mapping: best.mapping, confidence: best.confidence, aiMapped: false };
+    }));
   };
 
   // ── Run calculation ──────────────────────────────────────────────────────────
@@ -4221,120 +4301,179 @@ function FootprintTab({ project, onChange }) {
                 </button>
               </div>
 
-              {/* ── Field assignment legend ── */}
-              <div style={{ padding: "10px 16px", borderBottom: "1px solid " + T.border,
-                display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: T.faint, marginRight: 4 }}>Fields:</span>
-                {fields.map(f => {
-                  const col = sm.mapping[f.key];
-                  return (
-                    <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px 3px 8px",
-                      borderRadius: 20, background: col ? f.bg : T.surface2,
-                      border: "1px solid " + (col ? f.bd : T.border) }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: col ? f.color : T.faint, flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, fontWeight: 600, color: col ? f.color : T.faint }}>{f.label}</span>
-                      {f.req && !col && <span style={{ fontSize: 9, color: T.red }}>*</span>}
-                      {col && (
-                        <>
-                          <span style={{ fontSize: 10, color: f.color, fontFamily: T.mono, opacity: 0.8 }}>\u2192 {col}</span>
-                          <button onClick={() => setMapping(sm.name, f.key, "")}
-                            style={{ fontSize: 10, color: f.color, background: "transparent", border: "none",
-                              cursor: "pointer", padding: "0 0 0 2px", lineHeight: 1, opacity: 0.6 }}>\u00d7</button>
-                        </>
-                      )}
+              {/* ── Raw row picker ── */}
+              {(sm.rawPreview || []).length > 0 && (() => {
+                const rawPrev = sm.rawPreview || [];
+                const hIdx    = sm.headerRowIdx != null ? sm.headerRowIdx : 0;
+                const maxCols = Math.min(Math.max(...rawPrev.map(r => r.length), 1), 20);
+                return (
+                  <div style={{ borderBottom: "1px solid " + T.border }}>
+                    <div style={{ padding: "5px 14px 4px", background: T.surface2, borderBottom: "1px solid " + T.border,
+                      display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint,
+                        textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Raw file — click row number to set as header row
+                      </span>
+                      <span style={{ fontSize: 10, color: T.teal, fontWeight: 600 }}>
+                        Current header: row {hIdx + 1}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                    <div style={{ overflowX: "auto", maxHeight: 240, overflowY: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                        <tbody>
+                          {rawPrev.map((row, ri) => {
+                            const isHeader = ri === hIdx;
+                            const isAbove  = ri < hIdx;
+                            return (
+                              <tr key={ri} style={{
+                                background: isHeader ? T.tealBg : isAbove ? T.surface2 : (ri % 2 === 0 ? T.surface : T.surface2),
+                                borderBottom: "1px solid " + (isHeader ? T.tealBd : T.rowBd),
+                                opacity: isAbove ? 0.45 : 1 }}>
+                                <td onClick={() => setHeaderRow(sm.name, ri)}
+                                  style={{ padding: "3px 10px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
+                                    color: isHeader ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
+                                    background: isHeader ? T.tealBg : T.surface2,
+                                    borderRight: "2px solid " + (isHeader ? T.tealBd : T.border),
+                                    minWidth: 42, textAlign: "center", whiteSpace: "nowrap" }}
+                                  title={"Click to use row " + (ri + 1) + " as header"}>
+                                  {isHeader ? "▶ HDR" : ri + 1}
+                                </td>
+                                {Array.from({ length: maxCols }, (_, ci) => {
+                                  const val = String(row[ci] == null ? "" : row[ci]);
+                                  return (
+                                    <td key={ci} style={{ padding: "3px 10px", fontFamily: T.mono, fontSize: 10,
+                                      fontWeight: isHeader ? 700 : 400,
+                                      color: isHeader ? T.teal : val ? T.text : T.faint,
+                                      borderRight: "1px solid " + T.rowBd,
+                                      maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                      title={val}>
+                                      {val || (isHeader ? "" : <span style={{ opacity: 0.3 }}>·</span>)}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
-              {/* ── Data preview table — click headers to assign ── */}
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      {sm.headers.map(h => {
-                        const assignedKey = colToField[h];
-                        const fDef        = assignedKey ? fByKey[assignedKey] : null;
+              {/* ── Column assignment ── */}
+              {sm.headers.length > 0 ? (() => {
+                const colToKey = {};
+                Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToKey[col] = fk; });
+                return (
+                  <div>
+                    {/* Field status bar */}
+                    <div style={{ padding: "8px 14px", borderBottom: "1px solid " + T.border,
+                      display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: T.surface2 }}>
+                      <span style={{ fontSize: 10, color: T.faint }}>Fields:</span>
+                      {fields.map(f => {
+                        const col = sm.mapping[f.key];
                         return (
-                          <th key={h} style={{ padding: 0, borderRight: "1px solid " + T.border,
-                            borderBottom: "2px solid " + (fDef ? fDef.color : T.border),
-                            background: fDef ? fDef.bg : T.surface2,
-                            minWidth: 110, maxWidth: 200, position: "relative" }}>
-                            {/* Column header + assignment badge */}
-                            <div style={{ padding: "6px 8px 4px" }}>
-                              <div style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
-                                color: fDef ? fDef.color : T.text,
-                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                                maxWidth: 180, marginBottom: 4 }} title={h}>{h}</div>
-                              {/* Field assignment dropdown */}
-                              <select
-                                value={assignedKey || ""}
-                                onChange={e => {
-                                  const newKey = e.target.value;
-                                  // clear old mapping that used this col
-                                  const cleared = {};
-                                  fields.forEach(f => {
-                                    if (sm.mapping[f.key] === h && f.key !== newKey) cleared[f.key] = null;
-                                  });
-                                  // if newKey already mapped to another col, clear that too
-                                  if (newKey && sm.mapping[newKey] && sm.mapping[newKey] !== h) {
-                                    cleared[newKey] = null;
-                                  }
-                                  // apply all changes
-                                  setSheetMetas(prev => prev.map(s => {
-                                    if (s.name !== sm.name) return s;
-                                    const m = { ...s.mapping, ...cleared };
-                                    if (newKey) m[newKey] = h; else { Object.keys(cleared).forEach(k => { m[k] = null; }); }
-                                    return { ...s, mapping: m };
-                                  }));
-                                }}
-                                style={{ width: "100%", fontSize: 9, padding: "2px 4px", borderRadius: 4,
-                                  border: "1px solid " + (fDef ? fDef.bd : T.border),
-                                  background: fDef ? fDef.bg : T.surface,
-                                  color: fDef ? fDef.color : T.muted,
-                                  cursor: "pointer", fontWeight: fDef ? 600 : 400 }}>
-                                <option value="">— assign —</option>
-                                {fields.map(f => (
-                                  <option key={f.key} value={f.key}>{f.label}{f.req ? " *" : ""}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </th>
+                          <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 5,
+                            padding: "2px 10px 2px 7px", borderRadius: 20,
+                            background: col ? f.bg : T.surface, border: "1px solid " + (col ? f.bd : T.border) }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: col ? f.color : T.faint, flexShrink: 0 }} />
+                            <span style={{ fontSize: 10, fontWeight: 600, color: col ? f.color : T.faint }}>{f.label}</span>
+                            {f.req && !col && <span style={{ fontSize: 9, color: T.red }}>*</span>}
+                            {col && (
+                              <>
+                                <span style={{ fontSize: 9, color: f.color, fontFamily: T.mono, opacity: 0.8 }}>→ {col}</span>
+                                <button onClick={() => setMapping(sm.name, f.key, "")}
+                                  style={{ fontSize: 10, color: f.color, background: "transparent", border: "none",
+                                    cursor: "pointer", padding: 0, marginLeft: 2, opacity: 0.6 }}>×</button>
+                              </>
+                            )}
+                          </div>
                         );
                       })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sm.sampleRows.slice(0, 6).map((row, ri) => (
-                      <tr key={ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2 }}>
-                        {sm.headers.map(h => {
-                          const assignedKey = colToField[h];
-                          const fDef        = assignedKey ? fByKey[assignedKey] : null;
-                          const val         = row[h];
-                          const display     = val === null || val === undefined || val === "" ? "" : String(val);
-                          return (
-                            <td key={h} style={{ padding: "4px 8px", borderRight: "1px solid " + T.border,
-                              borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
-                              color: fDef ? fDef.color : T.muted,
-                              background: fDef ? fDef.bg + "55" : undefined,
-                              fontWeight: fDef ? 500 : 400,
-                              maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                              title={display}>
-                              {display || <span style={{ color: T.faint, fontStyle: "italic" }}>—</span>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </div>
+                    {/* Per-column table */}
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                        <thead>
+                          <tr>
+                            {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
+                              const fk   = colToKey[h];
+                              const fDef = fk ? fields.find(f => f.key === fk) : null;
+                              return (
+                                <th key={h} style={{ padding: 0, borderRight: "1px solid " + T.border,
+                                  borderBottom: "2px solid " + (fDef ? fDef.color : T.border),
+                                  background: fDef ? fDef.bg : T.surface2, minWidth: 130, maxWidth: 220 }}>
+                                  <div style={{ padding: "6px 8px 5px" }}>
+                                    <div style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
+                                      color: fDef ? fDef.color : T.text, whiteSpace: "nowrap",
+                                      overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, marginBottom: 4 }}
+                                      title={h}>{h}</div>
+                                    <select value={fk || ""}
+                                      onChange={e => {
+                                        const newKey = e.target.value;
+                                        setSheetMetas(prev => prev.map(s => {
+                                          if (s.name !== sm.name) return s;
+                                          const m = { ...s.mapping };
+                                          Object.keys(m).forEach(k => { if (m[k] === h) m[k] = null; });
+                                          if (newKey && m[newKey] && m[newKey] !== h) m[newKey] = null;
+                                          if (newKey) m[newKey] = h;
+                                          return { ...s, mapping: m };
+                                        }));
+                                      }}
+                                      style={{ width: "100%", fontSize: 9, padding: "2px 4px", borderRadius: 4,
+                                        border: "1px solid " + (fDef ? fDef.bd : T.border),
+                                        background: fDef ? fDef.bg : T.surface,
+                                        color: fDef ? fDef.color : T.muted,
+                                        cursor: "pointer", fontWeight: fDef ? 600 : 400 }}>
+                                      <option value="">— assign —</option>
+                                      {fields.map(f => (
+                                        <option key={f.key} value={f.key}>{f.label}{f.req ? " *" : ""}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(sm.sampleRows || []).slice(0, 6).map((row, ri) => (
+                            <tr key={ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2 }}>
+                              {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
+                                const fk   = colToKey[h];
+                                const fDef = fk ? fields.find(f => f.key === fk) : null;
+                                const val  = row[h];
+                                const disp = val == null || val === "" ? "" : String(val);
+                                return (
+                                  <td key={h} style={{ padding: "4px 8px", borderRight: "1px solid " + T.border,
+                                    borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
+                                    color: fDef ? fDef.color : T.muted,
+                                    background: fDef ? fDef.bg + "44" : undefined, fontWeight: fDef ? 500 : 400,
+                                    maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                    title={disp}>
+                                    {disp || <span style={{ color: T.faint }}>—</span>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
+                  No columns found — select a different header row above.
+                </div>
+              )}
 
-              {/* ── Missing required fields warning ── */}
+              {/* Missing required */}
               {reqFields.some(f => !sm.mapping[f.key]) && sm.include && (
                 <div style={{ padding: "8px 16px", background: T.amberBg, borderTop: "1px solid " + T.amberBd }}>
                   <span style={{ fontSize: 11, color: T.amber }}>
-                    \u26a0\ufe0f Missing required: {reqFields.filter(f => !sm.mapping[f.key]).map(f => f.label).join(", ")}
+                    ⚠️ Missing: {reqFields.filter(f => !sm.mapping[f.key]).map(f => f.label).join(", ")}
                   </span>
                 </div>
               )}
