@@ -3996,6 +3996,12 @@ function calcSheets(wb, sheetMetas) {
       const mhc       = m.mhc   ? String(row[m.mhc]    || "").trim() : "";
       const weightRaw = m.weight ? row[m.weight] : "";
       if (!desc || !desc.trim()) return; // skip rows with blank description
+      // skip summary/total rows (bottom lines)
+      const descL = desc.trim().toLowerCase();
+      const SKIP_LABELS = ['total','subtotal','sub-total','grand total','bottom line','sum total','totalt','netto','brutto','net weight','gross weight total','sum'];
+      if (SKIP_LABELS.some(p => descL === p || descL === p + ':' || descL === p + ' :') || descL.startsWith('bottom line') || (descL.startsWith('total ') && !descL.includes('valve') && !descL.includes('assembly'))) return;
+      // Only calculate NP and RP handling codes — skip all others silently
+      if (mhc !== "NP" && mhc !== "RP") return;
       const entry = { _sheet: sm.name, _row: idx + 2, _type: sm.type,
                       desc, material, cor, mhc, weightRaw };
       if (sm.type === "MTO") mtoRows.push(entry);
@@ -4016,9 +4022,6 @@ function calcSheets(wb, sheetMetas) {
         rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight is blank." });
       } else if (isNaN(Number(r.weightRaw))) {
         rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is not numeric." });
-      }
-      if (!r.mhc) {
-        rowErrs.push({ col: "Handling Code", val: r.mhc, msg: "Handling code is blank." });
       }
       const corEntry = COR_MAP[r.cor];
       let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
@@ -4052,6 +4055,55 @@ function calcSheets(wb, sheetMetas) {
     errors: allErrors, unknownCors,
     sheets: sheetMetas.filter(s => s.include),
   };
+}
+
+// ── Local COR suggestion (no API — pure keyword scoring) ──────────────────────
+function localSuggestCOR(descTexts) {
+  const text  = descTexts.filter(Boolean).join(" ").toLowerCase();
+  const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+  // Domain keyword → likely COR codes (high-confidence boosts)
+  const DOMAIN = [
+    { kws:["valve","valv","kontrollventil"],             codes:["BJB","BLB","BHB"] },
+    { kws:["pipe","piping","flange","fitting","rør"],    codes:["BLA"] },
+    { kws:["cable","kabel","wiring"],                    codes:["BJCA","BEAA","BEAB"] },
+    { kws:["struct","struktur","beam","column","stål"],  codes:["BNAA","BNAB"] },
+    { kws:["platform","walkway","grating","handrail"],   codes:["BNAC","BNAE","BNAK","BNAG"] },
+    { kws:["pump","kompressor","compressor","motor","turbo","compr"],codes:["EZR"] },
+    { kws:["vessel","tank","exchanger","separator"],     codes:["EZ"] },
+    { kws:["instrument","transmitter","sensor","gauge"], codes:["BJA"] },
+    { kws:["junction","jbox","junction box"],            codes:["BJD","BED"] },
+    { kws:["insulation","isolasjon"],                    codes:["BLD","BCG"] },
+    { kws:["electric","elektro","light","lighting"],     codes:["BEAA","BEC"] },
+    { kws:["cable tray","tray","conduit"],               codes:["BEB"] },
+    { kws:["hvac","duct","damper","ventil"],             codes:["EG","BHB"] },
+    { kws:["paint","coating","surface","maling"],        codes:["BMA_Struktur"] },
+    { kws:["support","hanger","bracket"],                codes:["BLC"] },
+    { kws:["steel","stainless","carbon"],                codes:["CS","SS"] },
+    { kws:["telecom","tele","coax","optical","fibre"],   codes:["BTA","BTCA","BTCC"] },
+    { kws:["safety","sikkerhet","fire","brann"],         codes:["ES"] },
+    { kws:["scaffold","temporary","stillas"],            codes:["BNC"] },
+  ];
+
+  const scores = COR_LOOKUP.map(c => {
+    const corText  = (c.code + " " + c.cat + " " + c.desc).toLowerCase();
+    const corWords = corText.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+    let score = 0;
+    // Word overlap
+    words.forEach(w => {
+      if (corWords.includes(w)) score += 4;
+      else corWords.forEach(cw => {
+        if (w.length > 3 && cw.length > 3 && (w.includes(cw) || cw.includes(w))) score += 1;
+      });
+    });
+    // Domain keyword bonus
+    DOMAIN.forEach(({ kws, codes }) => {
+      if (codes.includes(c.code) && kws.some(kw => text.includes(kw))) score += 12;
+    });
+    return { code: c.code, category: c.cat, description: c.desc, ef: c.ef, score,
+             reason: score > 0 ? "Keyword match against description and COR library" : "No strong match" };
+  });
+
+  return scores.sort((a, b) => b.score - a.score).slice(0, 3);
 }
 
 // ── applyOverrides — pure function, applies user COR overrides to a result ────
@@ -4689,11 +4741,22 @@ function FootprintTab({ project, onChange }) {
           <button onClick={exportCSV} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
             ↓ Download CSV
           </button>
+          <button onClick={addToProject}
+            style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans,
+              border: "1px solid " + T.greenBd, background: T.greenBg, color: T.green,
+              fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            📌 Add to project
+          </button>
           <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12,
             fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", minHeight: 32, boxSizing: "border-box" }}>
             Upload new<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           </label>
         </div>
+        {toast && (
+          <div style={{ padding: "6px 16px", background: T.tealBg, border: "1px solid " + T.tealBd,
+            borderRadius: 6, fontSize: 11, fontWeight: 500, color: T.teal, fontFamily: T.mono,
+            marginTop: 6 }}>{toast}</div>
+        )}
       </div>
 
       {/* ── Status ── */}
@@ -4752,39 +4815,59 @@ function FootprintTab({ project, onChange }) {
               </div>
             ))}
           </div>
-          {catRows.length > 0 && (
-            <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px", marginBottom: "1rem" }}>
-              <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 12px" }}>By COR Category</p>
-              {catRows.map(([cat, val]) => {
-                const c = catC(cat);
-                const pct = displayResult.combined > 0 ? Math.min(100, Math.round((val / displayResult.combined) * 100)) : 0;
-                return (
-                  <div key={cat} style={{ marginBottom: 9 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                      <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{cat}</span>
-                      <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 600, color: T.text }}>{fmt(val)}</span>
+          {catRows.length > 0 && (() => {
+            // Pre-calc NP and RP totals per category
+            const catNP = {}, catRP = {};
+            validRows.filter(r => r.mhc === "NP").forEach(r => { const k = r.category||"Unknown"; catNP[k] = (catNP[k]||0) + (r.emissionTco2e||0); });
+            validRows.filter(r => r.mhc === "RP").forEach(r => { const k = r.category||"Unknown"; catRP[k] = (catRP[k]||0) + (r.emissionTco2e||0); });
+            const npTotal = validRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0);
+            const rpTotal = validRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0);
+            return (
+              <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px", marginBottom: "1rem" }}>
+                {/* NP / RP totals header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: 0, flex: 1 }}>By COR Category</p>
+                  <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 10, background: T.tealBg, color: T.teal, border: "1px solid " + T.tealBd, fontFamily: T.mono }}>NP {fmt(npTotal)}</span>
+                  <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 10, background: T.blueBg, color: T.blue, border: "1px solid " + T.blueBd, fontFamily: T.mono }}>RP {fmt(rpTotal)}</span>
+                </div>
+                {catRows.map(([cat, val]) => {
+                  const c   = catC(cat);
+                  const np  = catNP[cat] || 0;
+                  const rp  = catRP[cat] || 0;
+                  const tot = np + rp;
+                  const pct = displayResult.combined > 0 ? Math.min(100, (tot / displayResult.combined) * 100) : 0;
+                  const npPct = tot > 0 ? (np / tot) * 100 : 0;
+                  const rpPct = tot > 0 ? (rp / tot) * 100 : 0;
+                  return (
+                    <div key={cat} style={{ marginBottom: 11 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, alignItems: "center" }}>
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{cat}</span>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          {np > 0 && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.teal }}>NP {fmt(np)}</span>}
+                          {rp > 0 && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.blue }}>RP {fmt(rp)}</span>}
+                          <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 700, color: T.text }}>{fmt(tot)}</span>
+                        </div>
+                      </div>
+                      {/* Stacked bar: NP (teal) + RP (blue) */}
+                      <div style={{ height: 7, borderRadius: 3, background: T.border, overflow: "hidden", display: "flex" }}>
+                        <div style={{ width: (pct * npPct / 100) + "%", background: T.teal, transition: "width 0.4s" }} />
+                        <div style={{ width: (pct * rpPct / 100) + "%", background: T.blue, transition: "width 0.4s" }} />
+                      </div>
                     </div>
-                    <div style={{ height: 6, borderRadius: 3, background: T.border, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: pct + "%", background: c.c, borderRadius: 3 }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {mhcRows.length > 0 && (
-            <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px" }}>
-              <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 10px" }}>By Handling Code</p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {mhcRows.map(([mhc, val]) => (
-                  <div key={mhc} style={{ padding: "7px 14px", borderRadius: 6, background: T.surface2, border: "1px solid " + T.border }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 600, color: T.text }}>{mhc}</span>
-                    <span style={{ fontSize: 11, color: T.muted, marginLeft: 10 }}>{fmt(val)}</span>
-                  </div>
-                ))}
+                  );
+                })}
+                {/* Legend */}
+                <div style={{ display: "flex", gap: 14, marginTop: 10, paddingTop: 8, borderTop: "1px solid " + T.border }}>
+                  <span style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, color: T.muted }}>
+                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.teal, display: "inline-block" }} />NP — Not Part of module
+                  </span>
+                  <span style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, color: T.muted }}>
+                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.blue, display: "inline-block" }} />RP — Ready for Pack-out
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -4879,7 +4962,7 @@ function FootprintTab({ project, onChange }) {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: T.surface2 }}>
-                        {["Unknown code", "Rows", "Sample item", "Replace with", "Action"].map(h => (
+                        {["Unknown code", "Rows / Samples", "Best-fit suggestions", "Replace with", "Action"].map(h => (
                           <th key={h} style={{ padding: "7px 14px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
                             fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
                             textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</th>
@@ -4888,24 +4971,52 @@ function FootprintTab({ project, onChange }) {
                     </thead>
                     <tbody>
                       {unkCors.map(code => {
-                        const pending  = (displayResult.allRows || []).filter(r => r.cor === code && !r._overridden);
-                        const done     = (displayResult.allRows || []).filter(r => r._overridden && (result && (result.allRows || []).find(x => x.sheet === r.sheet && x.rowNum === r.rowNum && x.cor === code)));
-                        const sel      = remapSelections[code] || "";
-                        const selEntry = sel ? COR_MAP[sel] : null;
-                        const allDone  = pending.length === 0 && done.length > 0;
-                        const grouped  = COR_LOOKUP.reduce((acc, c) => { (acc[c.cat] = acc[c.cat] || []).push(c); return acc; }, {});
+                        const pending    = (displayResult.allRows || []).filter(r => r.cor === code && !r._overridden);
+                        const done       = (displayResult.allRows || []).filter(r => r._overridden && (result && (result.allRows || []).find(x => x.sheet === r.sheet && x.rowNum === r.rowNum && x.cor === code)));
+                        const sel        = remapSelections[code] || "";
+                        const selEntry   = sel ? COR_MAP[sel] : null;
+                        const allDone    = pending.length === 0 && done.length > 0;
+                        const grouped    = COR_LOOKUP.reduce((acc, c) => { (acc[c.cat] = acc[c.cat] || []).push(c); return acc; }, {});
+                        const allSamples = [...new Set([...pending, ...done].map(r => r.desc).filter(Boolean))].slice(0, 6);
+                        const localSugs  = localSuggestCOR(allSamples);
                         return (
-                          <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg + "33" : undefined }}>
-                            <td style={{ padding: "10px 14px" }}>
+                          <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg + "33" : undefined, verticalAlign: "top" }}>
+                            <td style={{ padding: "12px 14px" }}>
                               <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: allDone ? T.green : T.red }}>{code}</span>
-                              {allDone && <span style={{ fontSize: 10, color: T.green, marginLeft: 8 }}>✓ remapped</span>}
+                              {allDone && <div style={{ fontSize: 10, color: T.green, marginTop: 2 }}>✓ remapped</div>}
                             </td>
-                            <td style={{ padding: "10px 14px", fontFamily: T.mono, fontSize: 11, color: T.muted, whiteSpace: "nowrap" }}>
-                              {pending.length > 0 && <span style={{ color: T.red }}>{pending.length} pending</span>}
-                              {done.length > 0 && <div style={{ color: T.green, fontSize: 10 }}>{done.length} done</div>}
+                            <td style={{ padding: "12px 14px", minWidth: 160 }}>
+                              {pending.length > 0 && <div style={{ color: T.red, fontFamily: T.mono, fontSize: 11, marginBottom: 6 }}>{pending.length} pending</div>}
+                              {done.length > 0 && <div style={{ color: T.green, fontFamily: T.mono, fontSize: 11, marginBottom: 6 }}>{done.length} done</div>}
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                {allSamples.map((d, i) => (
+                                  <span key={i} style={{ fontSize: 10, color: T.muted, fontStyle: "italic",
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}
+                                    title={d}>· {d}</span>
+                                ))}
+                              </div>
                             </td>
-                            <td style={{ padding: "10px 14px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.muted, fontSize: 11 }}>
-                              {(pending[0] || done[0])?.desc || "—"}
+                            <td style={{ padding: "12px 14px", minWidth: 260 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                                {localSugs.map((s, si) => {
+                                  const sc = catC(s.category);
+                                  const isSelected = sel === s.code;
+                                  return (
+                                    <button key={si} onClick={() => setRemapSelections(p => ({ ...p, [code]: s.code }))}
+                                      style={{ textAlign: "left", padding: "6px 10px", borderRadius: 6, cursor: "pointer",
+                                        border: "2px solid " + (isSelected ? sc.c : sc.bd),
+                                        background: isSelected ? sc.bg : T.surface,
+                                        transition: "all 0.1s" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 700, color: sc.c }}>{s.code}</span>
+                                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: sc.bg, color: sc.c, border: "1px solid " + sc.bd }}>{s.category}</span>
+                                        <span style={{ fontFamily: T.mono, fontSize: 10, color: sc.c, marginLeft: "auto" }}>EF={s.ef}</span>
+                                      </div>
+                                      <div style={{ fontSize: 10, color: T.text, marginTop: 2 }}>{s.description}</div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </td>
                             <td style={{ padding: "8px 14px", minWidth: 260 }}>
                               <select value={sel}
