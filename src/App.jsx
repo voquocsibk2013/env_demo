@@ -2626,6 +2626,35 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
 
+          {/* ── Material footprint strip ── */}
+          {project.footprintSummary && (() => {
+            const fp = project.footprintSummary;
+            const fmtFP = v => Number(v) >= 1 ? Number(v).toFixed(3) + " tCO₂e" : (Number(v)*1000).toFixed(2) + " kgCO₂e";
+            const d = fp.date ? new Date(fp.date).toLocaleDateString("en-GB", {day:"2-digit",month:"short",year:"numeric"}) : "";
+            return (
+              <div style={{ padding:"11px 16px", marginBottom:"1rem",
+                background:"var(--cat-green-bg)", border:"1px solid var(--cat-green-bd)", borderRadius:7 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:11, color:"var(--cat-green-tx)", fontWeight:600 }}>Material CO₂ Footprint</span>
+                  <span style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:"var(--cat-green-hd)" }}>{fmtFP(fp.combined)}</span>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>MTO: <strong style={{fontFamily:T.mono}}>{fmtFP(fp.mtoTotal)}</strong></span>
+                    <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, background:T.blueBg, color:T.blue, border:"1px solid "+T.blueBd }}>MEL: <strong style={{fontFamily:T.mono}}>{fmtFP(fp.melTotal)}</strong></span>
+                  </div>
+                  <span style={{ fontSize:10, color:"var(--cat-green-tx)", marginLeft:"auto", opacity:0.7 }}>
+                    {fp.validRows} rows · {fp.fileName}{d ? " · " + d : ""}
+                    {fp.overrideCount > 0 && " · " + fp.overrideCount + " override" + (fp.overrideCount!==1?"s":"")}
+                  </span>
+                  <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
+                    style={{ fontSize:10, padding:"2px 8px", borderRadius:4, border:"1px solid var(--cat-green-bd)",
+                      background:"transparent", color:"var(--cat-green-tx)", cursor:"pointer", opacity:0.6 }}>
+                    remove
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* tCO₂e saving strip with scope breakdown */}
           {opps.length > 0 && totalGhgSaving > 0 && (() => {
             const sc = calcPortfolioScopeSavings(opps);
@@ -3966,7 +3995,7 @@ function calcSheets(wb, sheetMetas) {
       const cor       = m.cor    ? String(row[m.cor]    || "").trim() : "";
       const mhc       = m.mhc   ? String(row[m.mhc]    || "").trim() : "";
       const weightRaw = m.weight ? row[m.weight] : "";
-      if (!desc && !cor && (weightRaw === "" || weightRaw === null)) return; // blank row
+      if (!desc || !desc.trim()) return; // skip rows with blank description
       const entry = { _sheet: sm.name, _row: idx + 2, _type: sm.type,
                       desc, material, cor, mhc, weightRaw };
       if (sm.type === "MTO") mtoRows.push(entry);
@@ -4063,6 +4092,8 @@ function FootprintTab({ project, onChange }) {
   const [corLoading, setCorLoading]       = useState({});
   const [corOverrides, setCorOverrides]   = useState(project.footprintCorOverrides || {});
   const [overrideInput, setOverrideInput] = useState({});  // rowKey -> typed string
+  const [remapSelections, setRemapSelections] = useState({});  // unknownCode -> selectedReplacement
+  const [toast, setToast] = useState("");
   const [view, setView]   = useState("summary");
   const [dFilter, setDFilter] = useState("ALL");
   const [dSearch, setDSearch] = useState("");
@@ -4211,6 +4242,46 @@ function FootprintTab({ project, onChange }) {
     setCorOverrides(upd);
     setOverrideInput(p => { const n = {...p}; delete n[rowKey]; return n; });
     onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+  };
+
+  // Apply a remap to ALL rows currently using a given COR code
+  const applyRemap = (fromCode, toCode) => {
+    if (!COR_MAP[toCode]) return;
+    const rowsToFix = (displayResult.allRows || []).filter(r => r.cor === fromCode);
+    const upd = { ...corOverrides };
+    rowsToFix.forEach(r => { upd[r.sheet + "|" + r.rowNum] = toCode; });
+    setCorOverrides(upd);
+    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+    const showMsg = () => { setToast(rowsToFix.length + " row" + (rowsToFix.length !== 1 ? "s" : "") + " remapped to " + toCode); setTimeout(() => setToast(""), 2500); };
+    showMsg();
+  };
+
+  // Stamp the current footprint result to the project dashboard
+  const addToProject = () => {
+    if (!displayResult || !displayResult.success) return;
+    const summary = {
+      combined: displayResult.combined,
+      mtoTotal: displayResult.mtoTotal,
+      melTotal: displayResult.melTotal,
+      validRows: (displayResult.allRows || []).filter(r => r.status === "VALID").length,
+      overrideCount: Object.keys(corOverrides).length,
+      date: new Date().toISOString(),
+      fileName: fileName,
+    };
+    const entry = { id: Date.now().toString(), ts: new Date().toISOString(),
+      action: "Added material footprint",
+      detail: "Combined: " + displayResult.combined.toFixed(3) + " tCO₂e",
+      fields: [
+        { k: "MTO", v: displayResult.mtoTotal.toFixed(3) + " tCO₂e" },
+        { k: "MEL", v: displayResult.melTotal.toFixed(3) + " tCO₂e" },
+        { k: "Combined", v: displayResult.combined.toFixed(3) + " tCO₂e" },
+        { k: "Rows", v: String(summary.validRows) },
+      ]
+    };
+    onChange({ ...project, footprintSummary: summary,
+               changelog: [...(project.changelog || []), entry] });
+    setToast("Footprint added to project dashboard ✓");
+    setTimeout(() => setToast(""), 2500);
   };
 
   // ── AI COR suggestion ────────────────────────────────────────────────────────
@@ -4785,7 +4856,7 @@ function FootprintTab({ project, onChange }) {
       {/* ════ ERRORS ════ */}
       {view === "errors" && (
         <div>
-          {/* COR datalist for override pickers */}
+          {/* COR datalist kept for possible future use */}
           <datalist id="fp-cor-datalist">
             {COR_LOOKUP.map(c => (
               <option key={c.code} value={c.code}>{c.code} — {c.cat}: {c.desc} (EF={c.ef})</option>
@@ -4798,143 +4869,92 @@ function FootprintTab({ project, onChange }) {
             </div>
           ) : (
             <div>
-              {/* AI suggestions for completely unknown COR codes */}
+              {/* ── COR Code Remap Panel ── */}
               {unkCors.length > 0 && (
-                <div style={{ marginBottom: "1.25rem", padding: "14px 16px", borderRadius: 8, background: T.purpleBg, border: "1px solid " + T.purpleBd }}>
-                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.purple, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 4px" }}>
-                    Unknown COR codes — AI suggestions
-                  </p>
-                  <p style={{ fontSize: 11, color: T.muted, margin: "0 0 10px" }}>
-                    These codes are not in the lookup. Use AI to find the closest match, then apply it as an override below.
-                  </p>
-                  {unkCors.map(code => {
-                    const affected = allRows.filter(r => r.cor === code);
-                    const hasSug   = suggestions[code] && suggestions[code].length > 0;
-                    const loading  = !!corLoading[code];
-                    return (
-                      <div key={code} style={{ marginBottom: "0.75rem", background: T.surface, borderRadius: 7, border: "1px solid " + T.purpleBd, overflow: "hidden" }}>
-                        <div style={{ padding: "8px 14px", background: T.purpleBg, borderBottom: "1px solid " + T.purpleBd, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                          <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: T.purple }}>{code}</span>
-                          <span style={{ fontSize: 11, color: T.muted }}>{affected.length} row{affected.length !== 1 ? "s" : ""}</span>
-                          <span style={{ fontSize: 11, color: T.faint, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{affected[0] ? affected[0].desc : ""}</span>
-                          {!hasSug && (
-                            <button disabled={loading} onClick={() => doSuggestCOR(code, affected)}
-                              style={{ padding: "5px 14px", borderRadius: 6, border: "none", minHeight: 30,
-                                background: loading ? T.border : T.purple, color: loading ? T.muted : "#fff",
-                                cursor: loading ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 500 }}>
-                              {loading ? "Asking AI…" : "✨ Suggest COR"}
-                            </button>
-                          )}
-                        </div>
-                        {hasSug && (
-                          <div style={{ padding: "12px 14px" }}>
-                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-                              Best matches — click Apply to use as override for all rows with this code
-                            </p>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              {(suggestions[code] || []).map((s, si) => {
-                                const sc = catC(s.category);
-                                return (
-                                  <div key={si} style={{ flex: 1, minWidth: 160, padding: "10px 12px", borderRadius: 7, background: sc.bg, border: "1px solid " + sc.bd }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                                      <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: sc.c }}>{s.code}</span>
-                                      <span style={{ fontFamily: T.mono, fontSize: 10, color: sc.c }}>EF={s.ef}</span>
-                                      <button onClick={() => {
-                                        affected.forEach(r => setOverride(r.sheet + "|" + r.rowNum, s.code));
-                                      }}
-                                        style={{ marginLeft: "auto", padding: "3px 10px", borderRadius: 5, border: "none",
-                                          background: sc.c, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer", minHeight: 24 }}>
-                                        Apply all
-                                      </button>
-                                    </div>
-                                    <p style={{ fontSize: 11, fontWeight: 500, color: T.text, margin: "0 0 3px" }}>{s.description}</p>
-                                    <p style={{ fontSize: 10, color: T.muted, margin: 0, lineHeight: 1.5 }}>{s.reason}</p>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Per-sheet error tables with inline COR override picker */}
-              {Object.entries(errList.reduce((acc, e) => { (acc[e.sheet] = acc[e.sheet] || []).push(e); return acc; }, {})).map(([sheet, sheetErrs]) => (
-                <div key={sheet} style={{ marginBottom: "1rem", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
-                  <div style={{ padding: "9px 14px", background: T.redBg, borderBottom: "1px solid " + T.redBd, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>{sheet}</span>
-                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.red, opacity: 0.7 }}>{sheetErrs.length} row{sheetErrs.length !== 1 ? "s" : ""} with errors</span>
+                <div style={{ marginBottom: "1.25rem", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
+                  <div style={{ padding: "10px 16px", background: T.surface2, borderBottom: "1px solid " + T.border, display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 700, color: T.text }}>Remap COR codes</span>
+                    <span style={{ fontSize: 11, color: T.muted }}>Pick a replacement for each unknown code — applies to all rows sharing it and updates totals instantly</span>
                   </div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: T.surface2 }}>
-                        {["Row", "Description", "Error", "Override COR", "Result"].map(h => (
-                          <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                        {["Unknown code", "Rows", "Sample item", "Replace with", "Action"].map(h => (
+                          <th key={h} style={{ padding: "7px 14px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
                             fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
-                            textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                            textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {sheetErrs.map((e, i) => {
-                        const rowKey = e.sheet + "|" + e.row;
-                        const ov = corOverrides[rowKey];
-                        const ovEntry = ov ? COR_MAP[ov] : null;
-                        const inputVal = overrideInput[rowKey] !== undefined ? overrideInput[rowKey] : (ov || "");
-                        const hasCorError = (e.errs || []).some(er => er.notFound || er.col === "COR Code");
+                      {unkCors.map(code => {
+                        const pending  = (displayResult.allRows || []).filter(r => r.cor === code && !r._overridden);
+                        const done     = (displayResult.allRows || []).filter(r => r._overridden && (result && (result.allRows || []).find(x => x.sheet === r.sheet && x.rowNum === r.rowNum && x.cor === code)));
+                        const sel      = remapSelections[code] || "";
+                        const selEntry = sel ? COR_MAP[sel] : null;
+                        const allDone  = pending.length === 0 && done.length > 0;
+                        const grouped  = COR_LOOKUP.reduce((acc, c) => { (acc[c.cat] = acc[c.cat] || []).push(c); return acc; }, {});
                         return (
-                          <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd, background: ov ? T.purpleBg + "22" : undefined }}>
-                            <td style={{ padding: "8px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.row}</td>
-                            <td style={{ padding: "8px 12px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "—"}</td>
-                            <td style={{ padding: "8px 12px" }}>
-                              {(e.errs || []).map((er, j) => (
-                                <div key={j} style={{ marginBottom: j < e.errs.length - 1 ? 3 : 0, display: "flex", alignItems: "center", gap: 5 }}>
-                                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, padding: "1px 5px", borderRadius: 3, background: T.redBg, flexShrink: 0 }}>{er.col}</span>
-                                  <span style={{ fontSize: 11, color: T.muted }}>{er.msg}</span>
-                                </div>
-                              ))}
+                          <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg + "33" : undefined }}>
+                            <td style={{ padding: "10px 14px" }}>
+                              <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: allDone ? T.green : T.red }}>{code}</span>
+                              {allDone && <span style={{ fontSize: 10, color: T.green, marginLeft: 8 }}>✓ remapped</span>}
                             </td>
-                            <td style={{ padding: "6px 12px", minWidth: 220 }}>
-                              {hasCorError ? (
-                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                  <input
-                                    list="fp-cor-datalist"
-                                    value={inputVal}
-                                    onChange={ev => {
-                                      const val = ev.target.value;
-                                      setOverrideInput(p => ({ ...p, [rowKey]: val }));
-                                      if (COR_MAP[val]) setOverride(rowKey, val);
-                                    }}
-                                    placeholder="Type COR code…"
-                                    style={{ flex: 1, padding: "5px 8px", fontSize: 11, borderRadius: 5, minHeight: 30,
-                                      border: "1px solid " + (ov ? T.purpleBd : T.border),
-                                      background: ov ? T.purpleBg : T.surface, color: T.text, boxSizing: "border-box" }} />
-                                  {ov && (
-                                    <button onClick={() => clearOverride(rowKey)}
-                                      style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid " + T.redBd,
-                                        background: T.redBg, color: T.red, fontSize: 11, cursor: "pointer", minHeight: 30, flexShrink: 0 }}>
-                                      ×
-                                    </button>
-                                  )}
+                            <td style={{ padding: "10px 14px", fontFamily: T.mono, fontSize: 11, color: T.muted, whiteSpace: "nowrap" }}>
+                              {pending.length > 0 && <span style={{ color: T.red }}>{pending.length} pending</span>}
+                              {done.length > 0 && <div style={{ color: T.green, fontSize: 10 }}>{done.length} done</div>}
+                            </td>
+                            <td style={{ padding: "10px 14px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.muted, fontSize: 11 }}>
+                              {(pending[0] || done[0])?.desc || "—"}
+                            </td>
+                            <td style={{ padding: "8px 14px", minWidth: 260 }}>
+                              <select value={sel}
+                                onChange={e => setRemapSelections(p => ({ ...p, [code]: e.target.value }))}
+                                style={{ width: "100%", padding: "6px 8px", fontSize: 11, borderRadius: 5, minHeight: 32,
+                                  border: "1px solid " + (selEntry ? T.tealBd : T.border),
+                                  background: selEntry ? T.tealBg : T.surface,
+                                  color: selEntry ? T.teal : T.text, cursor: "pointer" }}>
+                                <option value="">— choose replacement —</option>
+                                {Object.entries(grouped).sort(([a],[b]) => a.localeCompare(b)).map(([cat, items]) => (
+                                  <optgroup key={cat} label={cat}>
+                                    {items.map(c => (
+                                      <option key={c.code} value={c.code}>{c.code} — {c.desc} (EF={c.ef})</option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </select>
+                              {selEntry && (
+                                <div style={{ marginTop: 4, fontSize: 10, color: T.teal }}>
+                                  {selEntry.cat} · {selEntry.desc} · EF = {selEntry.ef} kg CO₂e / kg
                                 </div>
-                              ) : (
-                                <span style={{ fontSize: 10, color: T.faint, fontStyle: "italic" }}>not a COR error</span>
                               )}
                             </td>
-                            <td style={{ padding: "8px 12px" }}>
-                              {ovEntry ? (
-                                <div>
-                                  <div style={{ fontSize: 10, fontWeight: 600, color: T.purple }}>→ {ov}</div>
-                                  <div style={{ fontSize: 10, color: T.muted }}>{ovEntry.cat} · EF={ovEntry.ef}</div>
-                                </div>
-                              ) : ov ? (
-                                <span style={{ fontSize: 10, color: T.red }}>Invalid code</span>
-                              ) : (
-                                <span style={{ fontSize: 10, color: T.faint }}>—</span>
-                              )}
+                            <td style={{ padding: "8px 14px", whiteSpace: "nowrap" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <button disabled={!sel || pending.length === 0}
+                                  onClick={() => applyRemap(code, sel)}
+                                  style={{ padding: "6px 14px", borderRadius: 6, border: "none", minHeight: 32,
+                                    background: sel && pending.length > 0 ? T.teal : T.border,
+                                    color: sel && pending.length > 0 ? "#fff" : T.muted,
+                                    fontSize: 11, fontWeight: 600,
+                                    cursor: sel && pending.length > 0 ? "pointer" : "not-allowed" }}>
+                                  Apply to {pending.length} row{pending.length !== 1 ? "s" : ""}
+                                </button>
+                                {done.length > 0 && (
+                                  <button onClick={() => {
+                                    const upd = { ...corOverrides };
+                                    (result && result.allRows || []).filter(r => r.cor === code)
+                                      .forEach(r => { delete upd[r.sheet + "|" + r.rowNum]; });
+                                    setCorOverrides(upd);
+                                    setRemapSelections(p => { const n = {...p}; delete n[code]; return n; });
+                                    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+                                  }}
+                                    style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.redBd,
+                                      background: "transparent", color: T.red, fontSize: 10, cursor: "pointer" }}>
+                                    Clear overrides
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -4942,7 +4962,47 @@ function FootprintTab({ project, onChange }) {
                     </tbody>
                   </table>
                 </div>
-              ))}
+              )}
+
+              {/* ── Other row errors (weight, handling code) ── */}
+              {errList.filter(e => (e.errs || []).some(er => er.col !== "COR Code")).length > 0 && (
+                <div style={{ background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
+                  <div style={{ padding: "9px 14px", background: T.redBg, borderBottom: "1px solid " + T.redBd, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>Other row errors</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.red, opacity: 0.7 }}>
+                      {errList.filter(e => (e.errs || []).some(er => er.col !== "COR Code")).length} rows
+                    </span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ background: T.surface2 }}>
+                        {["Sheet", "Row", "Description", "Error"].map(h => (
+                          <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                            fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
+                            textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errList.filter(e => (e.errs || []).some(er => er.col !== "COR Code")).map((e, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd }}>
+                          <td style={{ padding: "7px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.sheet}</td>
+                          <td style={{ padding: "7px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.row}</td>
+                          <td style={{ padding: "7px 12px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "—"}</td>
+                          <td style={{ padding: "7px 12px" }}>
+                            {(e.errs || []).filter(er => er.col !== "COR Code").map((er, j) => (
+                              <div key={j} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, padding: "1px 5px", borderRadius: 3, background: T.redBg }}>{er.col}</span>
+                                <span style={{ fontSize: 11, color: T.muted }}>{er.msg}</span>
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>
