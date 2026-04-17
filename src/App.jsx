@@ -3683,7 +3683,7 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
 }
 
 
-// ── COR Lookup — embedded reference table ─────────────────────────────────────
+// ── COR Lookup ───────────────────────────────────────────────────────────────
 const COR_LOOKUP = [
   {code:"BCA",cat:"Architect",desc:"Wall/Cladding",ef:13},{code:"BCB",cat:"Architect",desc:"Floor",ef:13},
   {code:"BCC",cat:"Architect",desc:"Roof",ef:13},{code:"BCD",cat:"Architect",desc:"Doors & windows",ef:13},
@@ -3694,8 +3694,8 @@ const COR_LOOKUP = [
   {code:"BJCA",cat:"Instrument",desc:"Group 1 - Instrument Cables",ef:6.8},{code:"BJCB",cat:"Instrument",desc:"Group 2 - Instrument Cables",ef:6.8},
   {code:"BJCC",cat:"Instrument",desc:"Group 3 - Instrument Cables",ef:6.8},{code:"BJCD",cat:"Instrument",desc:"Group 4 - Instrument Cables",ef:6.8},
   {code:"BJCE",cat:"Instrument",desc:"Group 5 - Instrument Cables",ef:6.8},{code:"BJCF",cat:"Instrument",desc:"Group 6 - Instrument Cables",ef:6.8},
-  {code:"BTCA",cat:"Instrument",desc:"Group 1 - Coaxial Cables (all sizes)",ef:6.8},{code:"BTCB",cat:"Instrument",desc:"Group 2 - CCTV Cables (all sizes)",ef:6.8},
-  {code:"BTCC",cat:"Instrument",desc:"Group 3 - Optical Cables (all sizes)",ef:6.8},{code:"BTCD",cat:"Instrument",desc:"Group 4 - Comp. Data Cables (all sizes)",ef:6.8},
+  {code:"BTCA",cat:"Instrument",desc:"Group 1 - Coaxial Cables",ef:6.8},{code:"BTCB",cat:"Instrument",desc:"Group 2 - CCTV Cables",ef:6.8},
+  {code:"BTCC",cat:"Instrument",desc:"Group 3 - Optical Cables",ef:6.8},{code:"BTCD",cat:"Instrument",desc:"Group 4 - Comp. Data Cables",ef:6.8},
   {code:"BJD",cat:"Instrument",desc:"Instrument Junction boxes",ef:7.2},{code:"BTD",cat:"Instrument",desc:"Telecom Junction boxes",ef:7.2},
   {code:"BJTD",cat:"Instrument",desc:"Junction boxes",ef:7.2},{code:"Umbilicals",cat:"Instrument",desc:"Topside Umbilicals",ef:6.8},
   {code:"BJE",cat:"Instrument",desc:"Instrument tubes/Tubing",ef:7.2},{code:"BTA",cat:"Instrument",desc:"Telecom. Apparatus",ef:24},
@@ -3722,7 +3722,7 @@ const COR_LOOKUP = [
   {code:"BLC",cat:"Piping",desc:"Supports",ef:3},{code:"BLD",cat:"Piping",desc:"Insulation (INS)",ef:3},
   {code:"BLZ",cat:"Piping",desc:"Other piping bulk",ef:3},{code:"BLD_Klasse_1",cat:"Insulation",desc:"Insulation class 1 - Heat conservation",ef:-1},
   {code:"BNAA",cat:"Structure",desc:"Primary Structures",ef:10},{code:"BNAB",cat:"Structure",desc:"Secondary Structures",ef:10},
-  {code:"BNAC",cat:"Structure",desc:"Outfitting: Access platforms/structures",ef:10},{code:"BNAD",cat:"Structure",desc:"Outfitting: Wall & Eq. support above deck",ef:10},
+  {code:"BNAC",cat:"Structure",desc:"Outfitting: Access platforms",ef:10},{code:"BNAD",cat:"Structure",desc:"Outfitting: Wall & Eq. support",ef:10},
   {code:"BNAE",cat:"Structure",desc:"Outfitting: Walkways",ef:10},{code:"BNAF",cat:"Structure",desc:"Outfitting: Monorails",ef:10},
   {code:"BNAG",cat:"Structure",desc:"Outfitting: Handrails",ef:10},{code:"BNAH",cat:"Structure",desc:"Outfitting: Sleeves",ef:10},
   {code:"BNAJ",cat:"Structure",desc:"Outfitting: Dropped object protection",ef:10},{code:"BNAK",cat:"Structure",desc:"Outfitting: Grating",ef:10},
@@ -3734,156 +3734,334 @@ const COR_LOOKUP = [
 const COR_MAP = {};
 COR_LOOKUP.forEach(r => { COR_MAP[r.code] = r; });
 
-// ── Footprint helpers ─────────────────────────────────────────────────────────
-const MTO_COLS = ["Weight Item Descr.","Material","Cost Code COR","Mod. Handl. Code","Gross Dry Weight (kg)"];
-const MEL_COLS = ["Equipment type Description","Cost Code COR","Mod. Handl. Code","Gross Dry Weight (kg)"];
+// ── Column-mapping schema ─────────────────────────────────────────────────────
+// Each field lists aliases in descending priority. The engine tries:
+//   1. exact normalised match
+//   2. header contains alias OR alias contains header
+//   3. shared word count >= 2
+// If confidence is low the user is prompted to try AI mapping.
+const FIELD_SCHEMAS = {
+  MTO: {
+    desc:   { label: "Item Description",    req: true,
+              aliases: ["weight item descr","item description","description","item desc",
+                        "tag description","component description","item name","descr",
+                        "component","name","short description"] },
+    mat:    { label: "Material",            req: false,
+              aliases: ["material","material type","mat","material code","material grade",
+                        "alloy","spec","specification","material spec"] },
+    cor:    { label: "COR Code",            req: true,
+              aliases: ["cost code cor","cor code","cor","costcode","cost code",
+                        "commodity code","discipline code","material group","wbs code",
+                        "account code","budget code","class code"] },
+    mhc:    { label: "Handling Code",       req: true,
+              aliases: ["mod. handl. code","module handling code","modular handling code",
+                        "handling code","mhc","mod handling","modular handling",
+                        "module code","handl code","mod handl","installation code"] },
+    weight: { label: "Gross Dry Weight (kg)", req: true,
+              aliases: ["gross dry weight (kg)","gross dry weight","gdw","dry weight (kg)",
+                        "dry weight","gross weight (kg)","gross weight","weight (kg)",
+                        "weight kg","net weight (kg)","net weight","wt (kg)","wt kg",
+                        "weight","mass (kg)","mass","total weight","unit weight"] },
+  },
+  MEL: {
+    desc:   { label: "Equipment Description", req: true,
+              aliases: ["equipment type description","equipment type descr",
+                        "equipment description","equip type desc","tag description",
+                        "equipment name","description","equip desc","tag desc",
+                        "name","item description","descr"] },
+    cor:    { label: "COR Code",              req: true,
+              aliases: ["cost code cor","cor code","cor","costcode","cost code",
+                        "commodity code","discipline code","material group","wbs code",
+                        "account code","class code"] },
+    mhc:    { label: "Handling Code",         req: true,
+              aliases: ["mod. handl. code","module handling code","modular handling code",
+                        "handling code","mhc","mod handling","modular handling",
+                        "module code","handl code","installation code"] },
+    weight: { label: "Gross Dry Weight (kg)", req: true,
+              aliases: ["gross dry weight (kg)","gross dry weight","gdw","dry weight (kg)",
+                        "dry weight","gross weight (kg)","gross weight","weight (kg)",
+                        "weight kg","net weight (kg)","net weight","wt (kg)","wt kg",
+                        "weight","mass (kg)","mass","total weight"] },
+  },
+};
 
-function normHeader(h) { return String(h||"").replace(/\s+/g," ").trim(); }
-function hasAllCols(headers, required) { return required.every(r => headers.includes(r)); }
-function detectSheetType(headers) {
-  const nh = headers.map(normHeader);
-  if (hasAllCols(nh, MTO_COLS)) return "MTO";
-  if (hasAllCols(nh, MEL_COLS))  return "MEL";
+function normCol(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function bestColMatch(headers, aliases) {
+  const nHeaders = headers.map(h => ({ orig: h, norm: normCol(h) }));
+  const nAliases  = aliases.map(normCol);
+  // 1. exact
+  for (const { orig, norm } of nHeaders) {
+    if (nAliases.includes(norm)) return orig;
+  }
+  // 2. substring
+  for (const { orig, norm } of nHeaders) {
+    for (const a of nAliases) {
+      if (a.length > 2 && (norm.includes(a) || a.includes(norm))) return orig;
+    }
+  }
+  // 3. word overlap >= 2 significant words
+  for (const { orig, norm } of nHeaders) {
+    const hw = new Set(norm.split(" ").filter(w => w.length > 2));
+    for (const a of nAliases) {
+      const aw = a.split(" ").filter(w => w.length > 2);
+      if (aw.filter(w => hw.has(w)).length >= 2) return orig;
+    }
+  }
   return null;
 }
 
-function parseSheets(wb) {
-  // Returns { mto: [{...row, _sheet, _row}], mel: [...], sheets: [{name, type}] }
-  const result = { mto: [], mel: [], sheets: [], allSheetNames: wb.SheetNames };
+function autoMapHeaders(headers, schemaType) {
+  const schema  = FIELD_SCHEMAS[schemaType];
+  const mapping = {};
+  for (const [key, def] of Object.entries(schema)) {
+    mapping[key] = bestColMatch(headers, def.aliases);
+  }
+  const reqFields   = Object.entries(schema).filter(([, d]) => d.req);
+  const mappedReq   = reqFields.filter(([k]) => mapping[k]).length;
+  const confidence  = reqFields.length > 0 ? mappedReq / reqFields.length : 0;
+  return { mapping, confidence };
+}
+
+function detectSheets(wb) {
+  const result = [];
   for (const name of wb.SheetNames) {
-    const ws = wb.Sheets[name];
-    const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+    const ws  = wb.Sheets[name];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
     if (raw.length < 2) continue;
-    const headers = raw[0].map(normHeader);
-    const type = detectSheetType(headers);
-    if (!type) continue;
-    result.sheets.push({ name, type });
-    const rows = raw.slice(1).map((rowArr, i) => {
-      const obj = { _sheet: name, _row: i + 2 };
-      headers.forEach((h, j) => { obj[h] = rowArr[j]; });
+    const headers = raw[0].map(h => String(h || "").trim()).filter(Boolean);
+    if (headers.length === 0) continue;
+    const sampleRows = raw.slice(1, 5).map(rowArr => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = rowArr[i]; });
       return obj;
-    }).filter(r => {
-      // Skip entirely blank rows
-      const vals = Object.entries(r).filter(([k]) => !k.startsWith("_")).map(([,v]) => v);
-      return vals.some(v => v !== "" && v !== null && v !== undefined);
     });
-    if (type === "MTO") result.mto.push(...rows);
-    else result.mel.push(...rows);
+    const mto = autoMapHeaders(headers, "MTO");
+    const mel = autoMapHeaders(headers, "MEL");
+    let type = "unknown", mapping = {}, confidence = 0;
+    if (mto.confidence >= mel.confidence && mto.confidence > 0.4) {
+      type = "MTO"; mapping = mto.mapping; confidence = mto.confidence;
+    } else if (mel.confidence > 0.4) {
+      type = "MEL"; mapping = mel.mapping; confidence = mel.confidence;
+    } else if (mto.confidence > 0) {
+      // low confidence but some signal — default MTO, flag it
+      type = "MTO"; mapping = mto.mapping; confidence = mto.confidence;
+    }
+    result.push({ name, headers, sampleRows, type, mapping, confidence,
+                  totalRows: raw.length - 1, include: type !== "unknown" });
   }
   return result;
 }
 
-function validateAndCalc(rows, sheetType) {
-  const validRows = [], errors = [];
-  for (const row of rows) {
-    const errs = [];
-    const cor = String(row["Cost Code COR"] ?? "").trim();
-    const weightRaw = row["Gross Dry Weight (kg)"];
-    const mhc = String(row["Mod. Handl. Code"] ?? "").trim();
-    const desc = sheetType === "MTO" ? row["Weight Item Descr."] : row["Equipment type Description"];
-    const material = sheetType === "MTO" ? row["Material"] : undefined;
-
-    if (!cor) errs.push({ col:"Cost Code COR", val: cor, msg:"Cost Code COR is blank." });
-    else if (!COR_MAP[cor]) errs.push({ col:"Cost Code COR", val: cor, msg:`COR code '${cor}' not found in lookup.`, notFound: true });
-    if (weightRaw === "" || weightRaw === null || weightRaw === undefined) {
-      errs.push({ col:"Gross Dry Weight (kg)", val: weightRaw, msg:"Gross Dry Weight (kg) is blank." });
-    } else if (isNaN(Number(weightRaw))) {
-      errs.push({ col:"Gross Dry Weight (kg)", val: weightRaw, msg:`Gross Dry Weight (kg) = '${weightRaw}' is not numeric.` });
-    }
-    if (!mhc) errs.push({ col:"Mod. Handl. Code", val: mhc, msg:"Mod. Handl. Code is blank." });
-
-    const weight = Number(weightRaw);
-    const corEntry = COR_MAP[cor];
-    let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
-    if (!errs.length && corEntry) {
-      emissionFactor = corEntry.ef;
-      category = corEntry.cat;
-      corDesc = corEntry.desc;
-      emissionTco2e = (weight * emissionFactor) / 1000;
-    }
-
-    const rowResult = {
-      source: sheetType, sheet: row._sheet, rowNum: row._row,
-      desc: String(desc ?? ""), material: material ? String(material) : undefined,
-      cor, mhc, weight: errs.find(e=>e.col==="Gross Dry Weight (kg)") ? null : weight,
-      category, corDesc, emissionFactor, emissionTco2e,
-      status: errs.length ? "ERROR" : "VALID",
-      errors: errs,
-    };
-    if (errs.length) errors.push({ sheet: row._sheet, row: row._row, desc: String(desc??""), cor, errs });
-    validRows.push(rowResult);
-  }
-  return { rows: validRows, errors };
+async function aiMapSheet(sheetMeta) {
+  const { name, headers, sampleRows } = sheetMeta;
+  const corList = COR_LOOKUP.map(c => c.code + "(" + c.cat + ")").join(", ");
+  const prompt =
+    "Sheet name: \"" + name + "\"\n" +
+    "Columns: " + JSON.stringify(headers) + "\n" +
+    "Sample rows: " + JSON.stringify(sampleRows.slice(0, 3)) + "\n\n" +
+    "Determine if this is MTO (Material Take-Off) or MEL (Equipment List). " +
+    "Map columns to: desc (item/equip description), mat (material, MTO only), " +
+    "cor (COR/cost code — values look like: " + corList.slice(0, 120) + "...), " +
+    "mhc (module handling code), weight (gross dry weight in kg). " +
+    "Return ONLY JSON: {\"type\":\"MTO\",\"mapping\":{\"desc\":\"ColName\",\"mat\":\"ColName\",\"cor\":\"ColName\",\"mhc\":\"ColName\",\"weight\":\"ColName\"}}. " +
+    "Use null for not found. Use exact column names.";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514", max_tokens: 400,
+      system: "You are a data extraction expert. Return ONLY valid JSON, no markdown, no explanation.",
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  const d   = await res.json();
+  const txt = ((d.content && d.content[0] && d.content[0].text) || "")
+    .replace(/```json|```/g, "").trim();
+  return JSON.parse(txt);
 }
 
-function runFootprintCalc(wb) {
-  const parsed = parseSheets(wb);
-  if (parsed.mto.length === 0 && parsed.mel.length === 0) {
-    return { success: false, fatalError: "No MTO or MEL sheets detected. Ensure your workbook has sheets with the required column headers.", sheets: parsed.allSheetNames };
+// ── Calculation (works with any column mapping) ───────────────────────────────
+function calcSheets(wb, sheetMetas) {
+  const mtoRows = [], melRows = [];
+  for (const sm of sheetMetas) {
+    if (!sm.include || sm.type === "unknown") continue;
+    const ws  = wb.Sheets[sm.name];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (raw.length < 2) continue;
+    const headers = raw[0].map(h => String(h || "").trim());
+    raw.slice(1).forEach((rowArr, idx) => {
+      const row = {};
+      headers.forEach((h, j) => { row[h] = rowArr[j]; });
+      const m = sm.mapping;
+      const desc      = m.desc   ? String(row[m.desc]   || "") : "";
+      const material  = m.mat    ? String(row[m.mat]    || "") : "";
+      const cor       = m.cor    ? String(row[m.cor]    || "").trim() : "";
+      const mhc       = m.mhc   ? String(row[m.mhc]    || "").trim() : "";
+      const weightRaw = m.weight ? row[m.weight] : "";
+      if (!desc && !cor && (weightRaw === "" || weightRaw === null)) return; // blank row
+      const entry = { _sheet: sm.name, _row: idx + 2, _type: sm.type,
+                      desc, material, cor, mhc, weightRaw };
+      if (sm.type === "MTO") mtoRows.push(entry);
+      else melRows.push(entry);
+    });
   }
-  const mtoCalc = validateAndCalc(parsed.mto, "MTO");
-  const melCalc = validateAndCalc(parsed.mel, "MEL");
-  const allRows = [...mtoCalc.rows, ...melCalc.rows];
-  const allErrors = [...mtoCalc.errors, ...melCalc.errors];
-  const mtoTotal = mtoCalc.rows.filter(r=>r.status==="VALID").reduce((s,r)=>s+(r.emissionTco2e||0),0);
-  const melTotal = melCalc.rows.filter(r=>r.status==="VALID").reduce((s,r)=>s+(r.emissionTco2e||0),0);
-  const hasErrors = allErrors.length > 0;
-  // Collect unique unknown COR codes for AI suggestion
-  const unknownCors = [...new Set(allErrors.flatMap(e => e.errs.filter(r=>r.notFound).map(r=>r.val)))].filter(Boolean);
+
+  function validateRows(rows) {
+    const out = [], errs = [];
+    for (const r of rows) {
+      const rowErrs = [];
+      if (!r.cor) {
+        rowErrs.push({ col: "COR Code", val: r.cor, msg: "COR code is blank.", notFound: false });
+      } else if (!COR_MAP[r.cor]) {
+        rowErrs.push({ col: "COR Code", val: r.cor, msg: "COR code '" + r.cor + "' not in lookup.", notFound: true });
+      }
+      if (r.weightRaw === "" || r.weightRaw === null || r.weightRaw === undefined) {
+        rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight is blank." });
+      } else if (isNaN(Number(r.weightRaw))) {
+        rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is not numeric." });
+      }
+      if (!r.mhc) {
+        rowErrs.push({ col: "Handling Code", val: r.mhc, msg: "Handling code is blank." });
+      }
+      const corEntry = COR_MAP[r.cor];
+      let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
+      if (!rowErrs.length && corEntry) {
+        emissionFactor = corEntry.ef; category = corEntry.cat; corDesc = corEntry.desc;
+        emissionTco2e = (Number(r.weightRaw) * emissionFactor) / 1000;
+      }
+      const row = { source: r._type, sheet: r._sheet, rowNum: r._row,
+                    desc: r.desc, material: r.material, cor: r.cor, mhc: r.mhc,
+                    weight: rowErrs.find(e => e.col === "Weight") ? null : Number(r.weightRaw),
+                    category, corDesc, emissionFactor, emissionTco2e,
+                    status: rowErrs.length ? "ERROR" : "VALID", errors: rowErrs };
+      if (rowErrs.length) errs.push({ sheet: r._sheet, row: r._row, desc: r.desc, cor: r.cor, errs: rowErrs });
+      out.push(row);
+    }
+    return { rows: out, errs };
+  }
+
+  const mto = validateRows(mtoRows);
+  const mel = validateRows(melRows);
+  const allRows   = [...mto.rows, ...mel.rows];
+  const allErrors = [...mto.errs, ...mel.errs];
+  const mtoTotal  = mto.rows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const melTotal  = mel.rows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const unknownCors = [...new Set(allErrors.flatMap(e => e.errs.filter(x => x.notFound).map(x => x.val)))].filter(Boolean);
   return {
     success: true,
-    status: hasErrors ? "completed_with_errors" : "success",
+    status: allErrors.length > 0 ? "completed_with_errors" : "success",
     mtoTotal, melTotal, combined: mtoTotal + melTotal,
-    mtoRows: mtoCalc.rows, melRows: melCalc.rows, allRows,
+    mtoRows: mto.rows, melRows: mel.rows, allRows,
     errors: allErrors, unknownCors,
-    sheets: parsed.sheets,
+    sheets: sheetMetas.filter(s => s.include),
   };
 }
 
-// ── FootprintTab ─────────────────────────────────────────────────────────────
+// ── FootprintTab ──────────────────────────────────────────────────────────────
 function FootprintTab({ project, onChange }) {
-  const [dragOver, setDragOver]     = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [result, setResult]         = useState(project.footprint || null);
-  const [fileName, setFileName]     = useState(project.footprintFile || "");
-  const [view, setView]             = useState("summary");
+  const [step, setStep]           = useState("upload");  // upload | mapping | result
+  const [rawWb, setRawWb]         = useState(null);      // XLSX workbook object
+  const [fileName, setFileName]   = useState(project.footprintFile || "");
+  const [sheetMetas, setSheetMetas] = useState(project.footprintMeta || []);
+  const [result, setResult]       = useState(project.footprint || null);
+  const [aiLoading, setAiLoading] = useState({});        // sheetName -> bool
   const [suggestions, setSuggestions] = useState(project.footprintSuggestions || {});
-  const [loadingSug, setLoadingSug] = useState({});
-  const [dFilter, setDFilter]       = useState("ALL");
-  const [dSearch, setDSearch]       = useState("");
+  const [corLoading, setCorLoading]   = useState({});
+  const [view, setView]           = useState("summary");
+  const [dFilter, setDFilter]     = useState("ALL");
+  const [dSearch, setDSearch]     = useState("");
 
-  const doProcess = async (file) => {
-    setProcessing(true);
-    try {
-      const buf = await file.arrayBuffer();
-      const wb  = XLSX.read(buf, { type: "array" });
-      const cal = runFootprintCalc(wb);
-      setResult(cal);
-      setFileName(file.name);
-      setSuggestions({});
-      setView("summary");
-      onChange({ ...project, footprint: cal, footprintFile: file.name, footprintSuggestions: {} });
-    } catch (err) {
-      setResult({ success: false, fatalError: "Could not read file: " + err.message });
+  // Restore workbook ref on first load if we have saved meta+result
+  const wbRef = React.useRef(null);
+
+  // ── File intake ──────────────────────────────────────────────────────────────
+  const ingestFile = async (file) => {
+    setFileName(file.name);
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: "array" });
+    wbRef.current = wb;
+    const metas = detectSheets(wb);
+    if (metas.length === 0) {
+      setResult({ success: false, fatalError: "No sheets with readable column headers found." });
+      setStep("result");
+      return;
     }
-    setProcessing(false);
+    setSheetMetas(metas);
+    setResult(null);
+    setSuggestions({});
+    setStep("mapping");
   };
 
-  const onFile  = e => { const f = e.target.files && e.target.files[0]; if (f) { doProcess(f); e.target.value = ""; } };
-  const onDrop  = e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) doProcess(f); };
+  const onFile  = e => { const f = e.target.files && e.target.files[0]; if (f) { ingestFile(f); e.target.value = ""; } };
+  const onDrop  = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingestFile(f); };
 
-  const doSuggest = async (code, rows) => {
-    if (suggestions[code] || loadingSug[code]) return;
-    setLoadingSug(p => ({ ...p, [code]: true }));
+  // ── AI mapping for one sheet ─────────────────────────────────────────────────
+  const doAiMap = async (sheetName) => {
+    const meta = sheetMetas.find(s => s.name === sheetName);
+    if (!meta) return;
+    setAiLoading(p => ({ ...p, [sheetName]: true }));
     try {
-      const ex  = rows.slice(0, 3).map(r => r.desc || r.cor).join("; ");
-      const lst = COR_LOOKUP.map(c => c.code + " (" + c.cat + " - " + c.desc + ", EF=" + c.ef + ")").join("\n");
+      const res = await aiMapSheet(meta);
+      setSheetMetas(prev => prev.map(s => {
+        if (s.name !== sheetName) return s;
+        const type    = (res.type === "MTO" || res.type === "MEL") ? res.type : s.type;
+        const mapping = { ...s.mapping };
+        Object.entries(res.mapping || {}).forEach(([k, v]) => { if (v) mapping[k] = v; });
+        return { ...s, type, mapping, confidence: 1, aiMapped: true };
+      }));
+    } catch (err) {
+      alert("AI mapping failed: " + err.message);
+    }
+    setAiLoading(p => ({ ...p, [sheetName]: false }));
+  };
+
+  // ── Update one field in a sheet mapping ──────────────────────────────────────
+  const setMapping = (sheetName, field, value) => {
+    setSheetMetas(prev => prev.map(s =>
+      s.name === sheetName ? { ...s, mapping: { ...s.mapping, [field]: value || null } } : s
+    ));
+  };
+  const setSheetType = (sheetName, type) => {
+    setSheetMetas(prev => prev.map(s => {
+      if (s.name !== sheetName) return s;
+      const m = autoMapHeaders(s.headers, type);
+      return { ...s, type, mapping: m.mapping, confidence: m.confidence };
+    }));
+  };
+  const toggleInclude = (sheetName) => {
+    setSheetMetas(prev => prev.map(s =>
+      s.name === sheetName ? { ...s, include: !s.include } : s
+    ));
+  };
+
+  // ── Run calculation ──────────────────────────────────────────────────────────
+  const doCalc = () => {
+    if (!wbRef.current) return;
+    const cal = calcSheets(wbRef.current, sheetMetas);
+    setResult(cal);
+    setView("summary");
+    setStep("result");
+    onChange({ ...project, footprint: cal, footprintFile: fileName,
+               footprintMeta: sheetMetas, footprintSuggestions: {} });
+    setSuggestions({});
+  };
+
+  // ── COR code AI suggestions ──────────────────────────────────────────────────
+  const doSuggestCOR = async (code, affectedRows) => {
+    if (suggestions[code] || corLoading[code]) return;
+    setCorLoading(p => ({ ...p, [code]: true }));
+    try {
+      const ex  = affectedRows.slice(0, 3).map(r => r.desc || r.cor).join("; ");
+      const lst = COR_LOOKUP.map(c => c.code + "(" + c.cat + " - " + c.desc + ", EF=" + c.ef + ")").join("\n");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514", max_tokens: 400,
           system: "Expert in COR codes for oil & gas CO2 footprint. Return ONLY a JSON array of 3 objects: {code,category,description,ef,reason}. No markdown.",
-          messages: [{ role: "user", content: "COR code '" + code + "' is used for: \"" + ex + "\". Best 3 matches from:\n" + lst }]
+          messages: [{ role: "user", content: "COR code '" + code + "' used for: \"" + ex + "\". Best 3 from:\n" + lst }]
         })
       });
       const d    = await res.json();
@@ -3895,10 +4073,10 @@ function FootprintTab({ project, onChange }) {
     } catch (err) {
       setSuggestions(p => ({ ...p, [code]: [{ code: "—", category: "Error", description: err.message, ef: "—", reason: "" }] }));
     }
-    setLoadingSug(p => ({ ...p, [code]: false }));
+    setCorLoading(p => ({ ...p, [code]: false }));
   };
 
-  // colour helper
+  // ── Colour helper ────────────────────────────────────────────────────────────
   const CC = { Architect:{bg:T.slateBg,c:T.slate,bd:T.slateBd}, Instrument:{bg:T.blueBg,c:T.blue,bd:T.blueBd},
     Electro:{bg:T.amberBg,c:T.amber,bd:T.amberBd}, HVAC:{bg:T.tealBg,c:T.teal,bd:T.tealBd},
     "Surface treatment":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}, Mechanical:{bg:T.greenBg,c:T.green,bd:T.greenBd},
@@ -3906,85 +4084,211 @@ function FootprintTab({ project, onChange }) {
     Material:{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}, Safety:{bg:T.amberBg,c:T.amber,bd:T.amberBd},
     Insulation:{bg:T.blueBg,c:T.blue,bd:T.blueBd} };
   const catC = cat => CC[cat] || { bg: T.slateBg, c: T.slate, bd: T.slateBd };
-
-  const fmt = v => {
-    if (v === null || v === undefined || isNaN(Number(v))) return "—";
+  const fmt  = v => {
+    if (v === null || v === undefined || isNaN(Number(v))) return "\u2014";
     const n = Number(v);
-    return n >= 1
-      ? n.toLocaleString("nb-NO", { maximumFractionDigits: 3 }) + " tCO₂e"
-      : (n * 1000).toLocaleString("nb-NO", { maximumFractionDigits: 2 }) + " kgCO₂e";
+    return n >= 1 ? n.toFixed(3) + " tCO\u2082e" : (n * 1000).toFixed(2) + " kgCO\u2082e";
   };
 
-  // ── No data yet ──────────────────────────────────────────────────────────────
-  if (!result && !processing) {
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 1 — UPLOAD
+  // ════════════════════════════════════════════════════════════════════════════
+  if (step === "upload") {
     return (
       <div style={{ padding: "1.5rem" }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
-        <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>Upload an MTO/MEL workbook to calculate the project CO₂ footprint.</p>
+        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO\u2082 Footprint Calculator</h2>
+        <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>
+          Upload any MTO or MEL workbook. Column names are matched automatically \u2014 no fixed template required.
+        </p>
         <label
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
+          onDragOver={e => { e.preventDefault(); }}
           onDrop={onDrop}
-          style={{ display: "block", border: "2px dashed " + (dragOver ? T.teal : T.border), borderRadius: 12,
-            padding: "3rem 2rem", textAlign: "center", background: dragOver ? T.tealBg : T.surface, cursor: "pointer" }}
-        >
+          style={{ display: "block", border: "2px dashed " + T.border, borderRadius: 12,
+            padding: "3rem 2rem", textAlign: "center", background: T.surface, cursor: "pointer" }}>
           <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
           <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 8px" }}>Drop workbook here or click to browse</p>
-          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>Auto-detects MTO and MEL sheets by column headers</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 6px" }}>
+            Handles any column naming \u2014 fuzzy matching + AI for ambiguous headers
+          </p>
+          <p style={{ fontSize: 11, color: T.faint, margin: 0 }}>
+            Detects MTO and MEL sheets automatically across .xlsx files
+          </p>
         </label>
-        <p style={{ fontSize: 11, color: T.faint, marginTop: "1rem" }}>MTO needs: {MTO_COLS.join(" · ")}</p>
-        <p style={{ fontSize: 11, color: T.faint, margin: 0 }}>MEL needs: {MEL_COLS.join(" · ")}</p>
+        {result && !result.success && (
+          <div style={{ marginTop: "1rem", padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: T.red, margin: 0 }}>{result.fatalError}</p>
+          </div>
+        )}
       </div>
     );
   }
 
-  // ── Processing ───────────────────────────────────────────────────────────────
-  if (processing) {
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 2 — MAPPING REVIEW
+  // ════════════════════════════════════════════════════════════════════════════
+  if (step === "mapping") {
+    const includedSheets = sheetMetas.filter(s => s.include);
+    const canCalc = includedSheets.length > 0;
     return (
-      <div style={{ padding: "3rem", textAlign: "center" }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>⚙️</div>
-        <p style={{ fontSize: 14, fontWeight: 600, color: T.teal, margin: "0 0 6px" }}>Processing {fileName}…</p>
-        <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>Detecting sheets · validating rows · calculating emissions</p>
+      <div style={{ padding: "1.25rem" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Review column mapping</h2>
+            <p style={{ margin: 0, fontSize: 11, color: T.muted }}>
+              {fileName} \u00b7 {sheetMetas.length} sheet{sheetMetas.length !== 1 ? "s" : ""} found \u00b7 Verify and adjust before calculating
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <label style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid " + T.border, background: "transparent", color: T.muted, fontSize: 12, cursor: "pointer" }}>
+              Upload different file
+              <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+            </label>
+            <button onClick={doCalc} disabled={!canCalc}
+              style={{ padding: "7px 18px", borderRadius: 6, border: "none", background: canCalc ? T.teal : T.border,
+                color: canCalc ? "#fff" : T.muted, fontSize: 13, fontWeight: 600, cursor: canCalc ? "pointer" : "not-allowed" }}>
+              Calculate \u2192
+            </button>
+          </div>
+        </div>
+
+        {/* One card per sheet */}
+        {sheetMetas.map(sm => {
+          const schema   = FIELD_SCHEMAS[sm.type] || FIELD_SCHEMAS.MTO;
+          const fields   = sm.type === "MTO"
+            ? [["desc","Item Description"],["mat","Material"],["cor","COR Code"],["mhc","Handling Code"],["weight","Weight (kg)"]]
+            : [["desc","Equipment Description"],["cor","COR Code"],["mhc","Handling Code"],["weight","Weight (kg)"]];
+          const isLoading = !!aiLoading[sm.name];
+          const conf = Math.round((sm.confidence || 0) * 100);
+          const confColor = conf >= 80 ? T.green : conf >= 50 ? T.amber : T.red;
+          const reqMapped = fields.filter(([k]) => {
+            const def = schema[k]; return def && def.req && sm.mapping[k];
+          }).length;
+          const reqTotal  = fields.filter(([k]) => { const def = schema[k]; return def && def.req; }).length;
+          return (
+            <div key={sm.name} style={{ marginBottom: "1rem", background: T.surface, borderRadius: 10,
+              border: "1px solid " + (sm.include ? T.border : T.faint),
+              opacity: sm.include ? 1 : 0.5, overflow: "hidden" }}>
+              {/* Sheet header */}
+              <div style={{ padding: "10px 16px", background: T.surface2, borderBottom: "1px solid " + T.border,
+                display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <input type="checkbox" checked={sm.include} onChange={() => toggleInclude(sm.name)}
+                  style={{ width: 14, height: 14, cursor: "pointer" }} />
+                <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: T.text }}>{sm.name}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{sm.totalRows} rows</span>
+                {/* Type selector */}
+                <div style={{ display: "flex", borderRadius: 5, overflow: "hidden", border: "1px solid " + T.border }}>
+                  {["MTO", "MEL"].map(t => (
+                    <button key={t} onClick={() => setSheetType(sm.name, t)}
+                      style={{ padding: "3px 12px", fontSize: 11, fontWeight: 500, cursor: "pointer", border: "none",
+                        background: sm.type === t ? T.teal : "transparent",
+                        color: sm.type === t ? "#fff" : T.muted }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                {/* Confidence */}
+                <span style={{ fontFamily: T.mono, fontSize: 10, padding: "2px 8px", borderRadius: 4,
+                  background: conf >= 80 ? T.greenBg : conf >= 50 ? T.amberBg : T.redBg,
+                  color: confColor, border: "1px solid " + (conf >= 80 ? T.greenBd : conf >= 50 ? T.amberBd : T.redBd) }}>
+                  {reqMapped}/{reqTotal} required fields matched
+                </span>
+                {sm.aiMapped && (
+                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.purple, background: T.purpleBg,
+                    padding: "2px 7px", borderRadius: 4, border: "1px solid " + T.purpleBd }}>AI mapped</span>
+                )}
+                <button onClick={() => doAiMap(sm.name)} disabled={isLoading}
+                  style={{ marginLeft: "auto", padding: "4px 12px", borderRadius: 6, border: "1px solid " + T.purpleBd,
+                    background: isLoading ? T.purpleBg : "transparent", color: T.purple,
+                    fontSize: 11, fontWeight: 500, cursor: isLoading ? "not-allowed" : "pointer" }}>
+                  {isLoading ? "AI mapping\u2026" : "\u2728 Ask AI"}
+                </button>
+              </div>
+
+              {/* Field rows */}
+              <div style={{ padding: "12px 16px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "10px 16px" }}>
+                  {fields.map(([key, label]) => {
+                    const def      = schema[key];
+                    const mapped   = sm.mapping[key];
+                    const isReq    = def && def.req;
+                    const isMissing = isReq && !mapped;
+                    return (
+                      <div key={key}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: isMissing ? T.red : T.text }}>{label}</span>
+                          {isReq && <span style={{ fontFamily: T.mono, fontSize: 9, color: isMissing ? T.red : T.faint }}>required</span>}
+                          {mapped && <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, marginLeft: "auto" }}>\u2713</span>}
+                        </div>
+                        <select
+                          value={mapped || ""}
+                          onChange={e => setMapping(sm.name, key, e.target.value)}
+                          style={{ width: "100%", padding: "5px 8px", fontSize: 12, borderRadius: 5,
+                            border: "1px solid " + (isMissing ? T.redBd : mapped ? T.greenBd : T.border),
+                            background: isMissing ? T.redBg : mapped ? T.greenBg + "44" : T.surface,
+                            color: T.text, boxSizing: "border-box" }}>
+                          <option value="">-- not mapped --</option>
+                          {sm.headers.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                        {mapped && (
+                          <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, margin: "2px 0 0" }}>
+                            sample: {String(sm.sampleRows[0] && sm.sampleRows[0][mapped] !== undefined ? sm.sampleRows[0][mapped] : "").slice(0, 40)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {sheetMetas.length === 0 && (
+          <div style={{ padding: "2rem", textAlign: "center", background: T.surface, borderRadius: 8,
+            border: "1px solid " + T.border, color: T.faint }}>
+            No sheets detected. Try uploading a different file.
+          </div>
+        )}
       </div>
     );
   }
 
-  // ── Fatal error ──────────────────────────────────────────────────────────────
-  if (result && !result.success) {
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 3 — RESULTS
+  // ════════════════════════════════════════════════════════════════════════════
+  if (!result || !result.success) {
     return (
       <div style={{ padding: "1.5rem" }}>
-        <h2 style={{ margin: "0 0 1rem", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
-        <div style={{ padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8, marginBottom: "1rem" }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: "0 0 6px" }}>❌ Cannot process file</p>
-          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 10px" }}>{result.fatalError}</p>
-        </div>
-        <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-          Try another file
-          <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+        {result && !result.success && (
+          <div style={{ padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8, marginBottom: "1rem" }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: "0 0 4px" }}>\u274c {result.fatalError}</p>
+          </div>
+        )}
+        <label style={{ padding: "7px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+          Upload file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
         </label>
       </div>
     );
   }
 
-  // ── Results ──────────────────────────────────────────────────────────────────
-  const allRows   = (result && result.allRows)   || [];
-  const mtoRows   = (result && result.mtoRows)   || [];
-  const melRows   = (result && result.melRows)   || [];
-  const errList   = (result && result.errors)    || [];
-  const unkCors   = (result && result.unknownCors) || [];
+  const allRows   = result.allRows   || [];
+  const mtoRows   = result.mtoRows   || [];
+  const melRows   = result.melRows   || [];
+  const errList   = result.errors    || [];
+  const unkCors   = result.unknownCors || [];
   const validRows = allRows.filter(r => r.status === "VALID");
+  const errCount  = errList.length;
+  const isOk      = result.status === "success";
 
-  // category / MHC rollups
   const byCat = {};
   validRows.forEach(r => { const k = r.category || "Unknown"; byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0); });
   const catRows = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-  const byMHC = {};
+  const byMHC   = {};
   validRows.filter(r => r.mhc).forEach(r => { byMHC[r.mhc] = (byMHC[r.mhc] || 0) + (r.emissionTco2e || 0); });
   const mhcRows = Object.entries(byMHC).sort((a, b) => b[1] - a[1]);
 
-  // detail filter
   let dRows = allRows;
   if (dFilter === "MTO")   dRows = allRows.filter(r => r.source === "MTO");
   if (dFilter === "MEL")   dRows = allRows.filter(r => r.source === "MEL");
@@ -3992,37 +4296,40 @@ function FootprintTab({ project, onChange }) {
   if (dFilter === "ERROR") dRows = allRows.filter(r => r.status === "ERROR");
   if (dSearch) { const q = dSearch.toLowerCase(); dRows = dRows.filter(r => (r.desc || "").toLowerCase().includes(q) || (r.cor || "").toLowerCase().includes(q)); }
 
-  const errCount  = errList.length;
-  const isSuccess = result.status === "success";
-
   return (
     <div style={{ padding: "1.25rem", background: T.bg }}>
-
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
+          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO\u2082 Footprint Calculator</h2>
           <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName}</p>
         </div>
-        <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-          Upload new file
-          <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
-        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setStep("mapping")}
+            style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid " + T.border, background: "transparent", color: T.muted, fontSize: 12, cursor: "pointer" }}>
+            \u2190 Edit mapping
+          </button>
+          <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+            Upload new<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+          </label>
+        </div>
       </div>
 
-      {/* ── Status banner ── */}
+      {/* Status */}
       <div style={{ padding: "8px 14px", borderRadius: 6, marginBottom: "1rem",
-        background: isSuccess ? T.greenBg : T.amberBg,
-        border: "1px solid " + (isSuccess ? T.greenBd : T.amberBd),
+        background: isOk ? T.greenBg : T.amberBg, border: "1px solid " + (isOk ? T.greenBd : T.amberBd),
         display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 14 }}>{isSuccess ? "✅" : "⚠️"}</span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: isSuccess ? T.green : T.amber }}>
-          {isSuccess ? "Calculation completed successfully"
-            : "Completed with " + errCount + " error" + (errCount !== 1 ? "s" : "") + " — affected rows excluded from totals"}
+        <span style={{ fontSize: 14 }}>{isOk ? "\u2705" : "\u26a0\ufe0f"}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isOk ? T.green : T.amber }}>
+          {isOk ? "Calculation completed successfully"
+            : "Completed with " + errCount + " error" + (errCount !== 1 ? "s" : "") + " \u2014 affected rows excluded from totals"}
+        </span>
+        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, marginLeft: "auto" }}>
+          {(result.sheets || []).map(s => s.name + " (" + s.type + ")").join(" \u00b7 ")}
         </span>
       </div>
 
-      {/* ── View tabs ── */}
+      {/* View tabs */}
       <div style={{ display: "flex", borderBottom: "2px solid " + T.border, marginBottom: "1.25rem" }}>
         {[
           { id: "summary", label: "Summary" },
@@ -4032,15 +4339,14 @@ function FootprintTab({ project, onChange }) {
           <button key={tb.id} onClick={() => setView(tb.id)}
             style={{ padding: "7px 16px", fontSize: 12, cursor: "pointer", border: "none",
               background: "transparent", fontFamily: T.sans, fontWeight: 500,
-              borderBottom: "2px solid " + (view === tb.id ? T.teal : "transparent"),
-              marginBottom: "-2px",
+              borderBottom: "2px solid " + (view === tb.id ? T.teal : "transparent"), marginBottom: "-2px",
               color: view === tb.id ? T.teal : (tb.id === "errors" && errCount > 0 ? T.amber : T.muted) }}>
             {tb.label}
           </button>
         ))}
       </div>
 
-      {/* ════════════ SUMMARY ════════════ */}
+      {/* SUMMARY */}
       {view === "summary" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: "1.25rem" }}>
@@ -4055,18 +4361,17 @@ function FootprintTab({ project, onChange }) {
                   {Number(card.val) >= 1 ? Number(card.val).toFixed(3) : (Number(card.val) * 1000).toFixed(2)}
                 </p>
                 <p style={{ fontFamily: T.mono, fontSize: 10, color: card.c, margin: 0, opacity: 0.7 }}>
-                  {Number(card.val) >= 1 ? "tCO₂e" : "kgCO₂e"} · {card.cnt} row{card.cnt !== 1 ? "s" : ""}
+                  {Number(card.val) >= 1 ? "tCO\u2082e" : "kgCO\u2082e"} \u00b7 {card.cnt} row{card.cnt !== 1 ? "s" : ""}
                 </p>
               </div>
             ))}
           </div>
-
           {catRows.length > 0 && (
             <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px", marginBottom: "1rem" }}>
               <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 12px" }}>By COR Category</p>
               {catRows.map(([cat, val]) => {
-                const c   = catC(cat);
-                const pct = result.combined > 0 ? Math.round((val / result.combined) * 100) : 0;
+                const c = catC(cat);
+                const pct = result.combined > 0 ? Math.min(100, Math.round((val / result.combined) * 100)) : 0;
                 return (
                   <div key={cat} style={{ marginBottom: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -4081,7 +4386,6 @@ function FootprintTab({ project, onChange }) {
               })}
             </div>
           )}
-
           {mhcRows.length > 0 && (
             <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px" }}>
               <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 10px" }}>By Module Handling Code</p>
@@ -4098,12 +4402,11 @@ function FootprintTab({ project, onChange }) {
         </div>
       )}
 
-      {/* ════════════ DETAIL ════════════ */}
+      {/* DETAIL */}
       {view === "detail" && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input value={dSearch} onChange={e => setDSearch(e.target.value)}
-              placeholder="Search description or COR…"
+            <input value={dSearch} onChange={e => setDSearch(e.target.value)} placeholder="Search description or COR\u2026"
               style={{ padding: "5px 10px", fontSize: 12, border: "1px solid " + T.border, borderRadius: 6, background: T.surface, color: T.text, width: 210 }} />
             <div style={{ display: "flex", gap: 3 }}>
               {["ALL", "MTO", "MEL", "VALID", "ERROR"].map(f => (
@@ -4120,7 +4423,7 @@ function FootprintTab({ project, onChange }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
               <thead>
                 <tr style={{ background: T.surface2 }}>
-                  {["Src","Sheet","Row","Description","COR","Category","MHC","Weight kg","EF","tCO₂e","Status"].map(h => (
+                  {["Src","Sheet","Row","Description","COR","Category","MHC","Weight kg","EF","tCO\u2082e","Status"].map(h => (
                     <th key={h} style={{ padding: "7px 10px", textAlign: "left", fontFamily: T.mono, fontSize: 9, fontWeight: 600,
                       color: T.muted, borderBottom: "1px solid " + T.border, whiteSpace: "nowrap",
                       textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
@@ -4133,15 +4436,15 @@ function FootprintTab({ project, onChange }) {
                   return (
                     <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd, background: r.status === "ERROR" ? T.redBg + "33" : undefined }}>
                       <td style={{ padding: "5px 10px" }}><span style={{ fontFamily: T.mono, fontSize: 9, padding: "1px 5px", borderRadius: 3, background: r.source === "MTO" ? T.tealBg : T.blueBg, color: r.source === "MTO" ? T.teal : T.blue }}>{r.source}</span></td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{r.sheet}</td>
+                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap" }}>{r.sheet}</td>
                       <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{r.rowNum}</td>
-                      <td style={{ padding: "5px 10px", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500, color: T.text }} title={r.desc}>{r.desc || "—"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "—"}</td>
-                      <td style={{ padding: "5px 10px" }}>{r.category ? <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>—</span>}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "—"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "—"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "—"}</td>
-                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 11, fontWeight: r.emissionTco2e ? 600 : 400, color: r.emissionTco2e ? T.teal : T.faint, textAlign: "right" }}>{r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "—"}</td>
+                      <td style={{ padding: "5px 10px", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500, color: T.text }} title={r.desc}>{r.desc || "\u2014"}</td>
+                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "\u2014"}</td>
+                      <td style={{ padding: "5px 10px" }}>{r.category ? <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>\u2014</span>}</td>
+                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "\u2014"}</td>
+                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "\u2014"}</td>
+                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "\u2014"}</td>
+                      <td style={{ padding: "5px 10px", fontFamily: T.mono, fontSize: 11, fontWeight: r.emissionTco2e ? 600 : 400, color: r.emissionTco2e ? T.teal : T.faint, textAlign: "right" }}>{r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "\u2014"}</td>
                       <td style={{ padding: "5px 10px" }}><span style={{ fontFamily: T.mono, fontSize: 9, padding: "1px 6px", borderRadius: 3, fontWeight: 500, background: r.status === "VALID" ? T.greenBg : T.redBg, color: r.status === "VALID" ? T.green : T.red, border: "1px solid " + (r.status === "VALID" ? T.greenBd : T.redBd) }}>{r.status}</span></td>
                     </tr>
                   );
@@ -4152,23 +4455,23 @@ function FootprintTab({ project, onChange }) {
         </div>
       )}
 
-      {/* ════════════ ERRORS ════════════ */}
+      {/* ERRORS */}
       {view === "errors" && (
         <div>
           {errCount === 0 ? (
             <div style={{ padding: "2rem", textAlign: "center", background: T.greenBg, border: "1px solid " + T.greenBd, borderRadius: 8, color: T.green, fontSize: 13 }}>
-              ✅ No validation errors.
+              \u2705 No validation errors.
             </div>
           ) : (
             <div>
               {unkCors.length > 0 && (
                 <div style={{ marginBottom: "1.25rem", padding: "14px 16px", borderRadius: 8, background: T.purpleBg, border: "1px solid " + T.purpleBd }}>
-                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.purple, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>Unknown COR codes — AI suggestions</p>
-                  <p style={{ fontSize: 11, color: T.muted, margin: "0 0 12px" }}>Click to find the closest matching COR code using AI.</p>
+                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.purple, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>Unknown COR codes \u2014 AI suggestions</p>
+                  <p style={{ fontSize: 11, color: T.muted, margin: "0 0 12px" }}>These COR codes were not found in the lookup. Click to get best-fit suggestions from AI.</p>
                   {unkCors.map(code => {
                     const affected = allRows.filter(r => r.cor === code);
                     const hasSug   = suggestions[code] && suggestions[code].length > 0;
-                    const loading  = !!loadingSug[code];
+                    const loading  = !!corLoading[code];
                     return (
                       <div key={code} style={{ marginBottom: "0.75rem", background: T.surface, borderRadius: 7, border: "1px solid " + T.purpleBd, overflow: "hidden" }}>
                         <div style={{ padding: "8px 14px", background: T.purpleBg, borderBottom: "1px solid " + T.purpleBd, display: "flex", alignItems: "center", gap: 10 }}>
@@ -4176,15 +4479,15 @@ function FootprintTab({ project, onChange }) {
                           <span style={{ fontSize: 11, color: T.muted }}>{affected.length} row{affected.length !== 1 ? "s" : ""}</span>
                           <span style={{ fontSize: 11, color: T.faint, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{affected[0] ? affected[0].desc : ""}</span>
                           {!hasSug && (
-                            <button disabled={loading} onClick={() => doSuggest(code, affected)}
+                            <button disabled={loading} onClick={() => doSuggestCOR(code, affected)}
                               style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: loading ? T.border : T.purple, color: loading ? T.muted : "#fff", cursor: loading ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 500 }}>
-                              {loading ? "Asking AI…" : "Suggest best-fit COR"}
+                              {loading ? "Asking AI\u2026" : "\u2728 Suggest COR"}
                             </button>
                           )}
                         </div>
                         {hasSug && (
                           <div style={{ padding: "12px 14px" }}>
-                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 10px" }}>Best matches — apply in source file</p>
+                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 10px" }}>Best matches \u2014 apply in source file or re-map above</p>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               {(suggestions[code] || []).map((s, si) => {
                                 const sc = catC(s.category);
@@ -4207,10 +4510,7 @@ function FootprintTab({ project, onChange }) {
                   })}
                 </div>
               )}
-
-              {Object.entries(
-                errList.reduce((acc, e) => { (acc[e.sheet] = acc[e.sheet] || []).push(e); return acc; }, {})
-              ).map(([sheet, sheetErrs]) => (
+              {Object.entries(errList.reduce((acc, e) => { (acc[e.sheet] = acc[e.sheet] || []).push(e); return acc; }, {})).map(([sheet, sheetErrs]) => (
                 <div key={sheet} style={{ marginBottom: "1rem", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
                   <div style={{ padding: "8px 14px", background: T.redBg, borderBottom: "1px solid " + T.redBd, display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>{sheet}</span>
@@ -4228,7 +4528,7 @@ function FootprintTab({ project, onChange }) {
                       {sheetErrs.map((e, i) => (
                         <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd }}>
                           <td style={{ padding: "6px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.row}</td>
-                          <td style={{ padding: "6px 12px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "—"}</td>
+                          <td style={{ padding: "6px 12px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "\u2014"}</td>
                           <td style={{ padding: "6px 12px", fontFamily: T.mono, fontSize: 11, color: T.red }}>{e.cor || "blank"}</td>
                           <td style={{ padding: "6px 12px" }}>
                             {(e.errs || []).map((er, j) => (
@@ -4248,7 +4548,6 @@ function FootprintTab({ project, onChange }) {
           )}
         </div>
       )}
-
     </div>
   );
 }
