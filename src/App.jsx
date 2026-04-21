@@ -2626,30 +2626,90 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
 
-          {/* ── Material footprint strip ── */}
+          {/* ── Material footprint card ── */}
           {project.footprintSummary && (() => {
             const fp = project.footprintSummary;
-            const fmtFP = v => Number(v) >= 1 ? Number(v).toFixed(3) + " tCO₂e" : (Number(v)*1000).toFixed(2) + " kgCO₂e";
-            const d = fp.date ? new Date(fp.date).toLocaleDateString("en-GB", {day:"2-digit",month:"short",year:"numeric"}) : "";
+            const fmtV = v => { const n=Number(v); return n>=1 ? n.toFixed(3)+" tCO₂e" : (n*1000).toFixed(2)+" kgCO₂e"; };
+            const d = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
+            // Visual NP/RP split — stored on summary if available, else show combined
+            const npVal = fp.npTotal != null ? fp.npTotal : null;
+            const rpVal = fp.rpTotal != null ? fp.rpTotal : null;
+            const tot   = Number(fp.combined);
+            const npPct = npVal != null && tot > 0 ? Math.min(100, (npVal/tot)*100) : 50;
+            const rpPct = rpVal != null && tot > 0 ? Math.min(100, (rpVal/tot)*100) : 50;
             return (
-              <div style={{ padding:"11px 16px", marginBottom:"1rem",
-                background:"var(--cat-green-bg)", border:"1px solid var(--cat-green-bd)", borderRadius:7 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                  <span style={{ fontSize:11, color:"var(--cat-green-tx)", fontWeight:600 }}>Material CO₂ Footprint</span>
-                  <span style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:"var(--cat-green-hd)" }}>{fmtFP(fp.combined)}</span>
-                  <div style={{ display:"flex", gap:8 }}>
-                    <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>MTO: <strong style={{fontFamily:T.mono}}>{fmtFP(fp.mtoTotal)}</strong></span>
-                    <span style={{ fontSize:11, padding:"2px 10px", borderRadius:4, background:T.blueBg, color:T.blue, border:"1px solid "+T.blueBd }}>MEL: <strong style={{fontFamily:T.mono}}>{fmtFP(fp.melTotal)}</strong></span>
-                  </div>
-                  <span style={{ fontSize:10, color:"var(--cat-green-tx)", marginLeft:"auto", opacity:0.7 }}>
-                    {fp.validRows} rows · {fp.fileName}{d ? " · " + d : ""}
-                    {fp.overrideCount > 0 && " · " + fp.overrideCount + " override" + (fp.overrideCount!==1?"s":"")}
+              <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden",
+                border:"1px solid var(--cat-green-bd)", background:T.surface }}>
+                {/* Header bar */}
+                <div style={{ padding:"10px 16px", background:"var(--cat-green-bg)",
+                  borderBottom:"1px solid var(--cat-green-bd)",
+                  display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:"var(--cat-green-hd)",
+                    fontFamily:T.mono, textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                    Material CO₂ Footprint
                   </span>
-                  <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
-                    style={{ fontSize:10, padding:"2px 8px", borderRadius:4, border:"1px solid var(--cat-green-bd)",
-                      background:"transparent", color:"var(--cat-green-tx)", cursor:"pointer", opacity:0.6 }}>
-                    remove
+                  {d && <span style={{ fontSize:10, color:"var(--cat-green-tx)", opacity:0.7 }}>{d}</span>}
+                  {fp.fileName && <span style={{ fontFamily:T.mono, fontSize:9, color:"var(--cat-green-tx)", opacity:0.6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:200 }}>{fp.fileName}</span>}
+                  <button onClick={()=>setTab("footprint")}
+                    style={{ marginLeft:"auto", fontSize:10, padding:"3px 10px", borderRadius:4,
+                      border:"1px solid var(--cat-green-bd)", background:"transparent",
+                      color:"var(--cat-green-hd)", cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+                    Open footprint tab →
                   </button>
+                  <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
+                    style={{ fontSize:11, padding:"3px 7px", borderRadius:4, border:"1px solid var(--cat-green-bd)",
+                      background:"transparent", color:"var(--cat-green-tx)", cursor:"pointer", opacity:0.5 }}>
+                    ×
+                  </button>
+                </div>
+                {/* Body */}
+                <div style={{ padding:"14px 16px" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:"0 24px", alignItems:"center" }}>
+                    {/* Big number */}
+                    <div>
+                      <p style={{ margin:"0 0 2px", fontFamily:T.mono, fontSize:28, fontWeight:700,
+                        color:"var(--cat-green-hd)", lineHeight:1 }}>
+                        {Number(tot) >= 1 ? tot.toFixed(3) : (tot*1000).toFixed(2)}
+                      </p>
+                      <p style={{ margin:0, fontFamily:T.mono, fontSize:11, color:"var(--cat-green-tx)", opacity:0.8 }}>
+                        {Number(tot) >= 1 ? "tCO₂e combined" : "kgCO₂e combined"}
+                        {fp.validRows ? " · " + fp.validRows + " rows" : ""}
+                        {fp.overrideCount > 0 ? " · " + fp.overrideCount + " override" + (fp.overrideCount!==1?"s":"") : ""}
+                      </p>
+                    </div>
+                    {/* MTO / MEL breakdown */}
+                    <div>
+                      <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                        <div style={{ flex:1, padding:"7px 12px", borderRadius:6, background:T.tealBg, border:"1px solid "+T.tealBd }}>
+                          <p style={{ margin:"0 0 2px", fontFamily:T.mono, fontSize:8, color:T.teal, textTransform:"uppercase", letterSpacing:"0.08em" }}>MTO</p>
+                          <p style={{ margin:0, fontFamily:T.mono, fontSize:14, fontWeight:700, color:T.teal }}>{fmtV(fp.mtoTotal)}</p>
+                        </div>
+                        <div style={{ flex:1, padding:"7px 12px", borderRadius:6, background:T.blueBg, border:"1px solid "+T.blueBd }}>
+                          <p style={{ margin:"0 0 2px", fontFamily:T.mono, fontSize:8, color:T.blue, textTransform:"uppercase", letterSpacing:"0.08em" }}>MEL</p>
+                          <p style={{ margin:0, fontFamily:T.mono, fontSize:14, fontWeight:700, color:T.blue }}>{fmtV(fp.melTotal)}</p>
+                        </div>
+                      </div>
+                      {/* NP/RP stacked bar */}
+                      {(npVal != null || rpVal != null) && (
+                        <div>
+                          <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", background:T.border }}>
+                            <div style={{ width:npPct+"%", background:T.teal, transition:"width 0.5s" }} title={"NP: "+fmtV(npVal||0)} />
+                            <div style={{ width:rpPct+"%", background:T.blue, transition:"width 0.5s" }} title={"RP: "+fmtV(rpVal||0)} />
+                          </div>
+                          <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                            <span style={{ fontSize:10, color:T.teal, display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ width:8,height:8,borderRadius:2,background:T.teal,display:"inline-block" }}/>
+                              NP {fmtV(npVal||0)}
+                            </span>
+                            <span style={{ fontSize:10, color:T.blue, display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ width:8,height:8,borderRadius:2,background:T.blue,display:"inline-block" }}/>
+                              RP {fmtV(rpVal||0)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -3318,6 +3378,11 @@ function PortfolioView({ projects, onClose, onSelect }) {
   const allAspects = projects.flatMap(p=>p.aspects||[]);
   const allOpps    = projects.flatMap(p=>p.opportunities||p.opps||[]);
   const totalGhg   = allOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
+  const allFpProj  = projects.filter(p=>p.footprintSummary);
+  const totalFp    = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.combined)||0),0);
+  const totalFpNP  = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.npTotal)||0),0);
+  const totalFpRP  = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.rpTotal)||0),0);
+  const fmtFPH = v => { const n=Number(v); return n>=1 ? n.toFixed(2)+" t CO₂e" : (n*1000).toFixed(1)+" kg CO₂e"; };
 
   const MiniDonut = ({ segments, size=52, strokeW=9 }) => {
     const r=(size-strokeW)/2; const circ=2*Math.PI*r;
@@ -3385,7 +3450,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
               ))}
             </div>
           </div>
-          {opp.length>0&&<div style={{ display:"flex",gap:8,alignItems:"center" }}>
+          {opp.length>0&&<div style={{ display:"flex",gap:8,alignItems:"center",marginBottom:p.footprintSummary?6:0 }}>
             <span style={{ fontSize:10,color:"var(--muted)",fontWeight:500 }}>Opportunities:</span>
             <span style={{ fontSize:10,color:"var(--muted)" }}>Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong></span>
             <span style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:3 }}>
@@ -3393,6 +3458,33 @@ function PortfolioView({ projects, onClose, onSelect }) {
               High <strong style={{ color:"var(--text)" }}>{hi}</strong>
             </span>
           </div>}
+          {p.footprintSummary && (() => {
+            const fp=p.footprintSummary;
+            const fmtF=v=>{ const n=Number(v); return n>=1?n.toFixed(3)+" t":((n*1000).toFixed(1))+" kg"; };
+            const tot=Number(fp.combined);
+            const npPct=fp.npTotal!=null&&tot>0?Math.min(100,(fp.npTotal/tot)*100):50;
+            const rpPct=fp.rpTotal!=null&&tot>0?Math.min(100,(fp.rpTotal/tot)*100):50;
+            return (
+              <div style={{ padding:"7px 10px", borderRadius:6, border:"1px solid var(--cat-green-bd)",
+                background:"var(--cat-green-bg)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:9, fontWeight:700, color:"var(--cat-green-hd)", fontFamily:"var(--mono)",
+                    textTransform:"uppercase", letterSpacing:"0.07em" }}>CO₂ footprint</span>
+                  <span style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:700, color:"var(--cat-green-hd)" }}>
+                    {fmtF(tot)} CO₂e
+                  </span>
+                </div>
+                <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:"var(--border)" }}>
+                  <div style={{ width:npPct+"%", background:"var(--teal)" }} title={"NP "+(fp.npTotal!=null?fmtF(fp.npTotal):"")} />
+                  <div style={{ width:rpPct+"%", background:"var(--blue)" }} title={"RP "+(fp.rpTotal!=null?fmtF(fp.rpTotal):"")} />
+                </div>
+                <div style={{ display:"flex", gap:8, marginTop:3 }}>
+                  {fp.npTotal!=null&&<span style={{ fontSize:9, color:"var(--teal)" }}>NP {fmtF(fp.npTotal)}</span>}
+                  {fp.rpTotal!=null&&<span style={{ fontSize:9, color:"var(--blue)" }}>RP {fmtF(fp.rpTotal)}</span>}
+                </div>
+              </div>
+            );
+          })()}
         </div>
         {tot>0&&(
           <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:60 }}>
@@ -3422,6 +3514,11 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const medOpp=opp.filter(o=>{const s=calcOppScore(o);return s>=30&&s<75;}).length;
     const ghg=opp.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
     const sc=calcPortfolioScopeSavings(opp);
+    const fpProjects=ps.filter(p=>p.footprintSummary);
+    const fpTotal=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.combined)||0),0);
+    const fpNP=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.npTotal)||0),0);
+    const fpRP=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.rpTotal)||0),0);
+    const fmtFP=v=>{ const n=Number(v); return n>=1?n.toFixed(2)+" tCO₂e":(n*1000).toFixed(1)+" kgCO₂e"; };
     return (
       <div style={{ marginBottom:"2rem" }}>
         <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:"0.75rem",
@@ -3509,6 +3606,40 @@ function PortfolioView({ projects, onClose, onSelect }) {
           </div>
         </div>
 
+        {fpProjects.length > 0 && (
+          <div style={{ background:"var(--surface)", border:"1px solid var(--cat-green-bd)",
+            borderRadius:8, padding:"12px 14px", marginBottom:"1rem" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+              <span style={{ fontSize:10, fontWeight:700, color:"var(--cat-green-hd)",
+                fontFamily:"var(--mono)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                Material CO₂ Footprint
+              </span>
+              <span style={{ fontFamily:"var(--mono)", fontSize:16, fontWeight:700, color:"var(--cat-green-hd)" }}>
+                {fmtFP(fpTotal)}
+              </span>
+              <span style={{ fontSize:10, color:"var(--cat-green-tx)", opacity:0.7 }}>
+                {fpProjects.length}/{ps.length} project{ps.length!==1?"s":""} with footprint
+              </span>
+            </div>
+            <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", background:"var(--border)", marginBottom:6 }}>
+              {fpTotal>0&&<>
+                <div style={{ width:Math.min(100,(fpNP/fpTotal)*100)+"%", background:"var(--teal)", transition:"width 0.5s" }}/>
+                <div style={{ width:Math.min(100,(fpRP/fpTotal)*100)+"%", background:"var(--blue)", transition:"width 0.5s" }}/>
+              </>}
+            </div>
+            <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+              <span style={{ fontSize:10, display:"flex", alignItems:"center", gap:5, color:"var(--muted)" }}>
+                <span style={{ width:10,height:10,borderRadius:2,background:"var(--teal)",display:"inline-block" }}/>
+                NP <strong style={{ color:"var(--teal)", fontFamily:"var(--mono)" }}>{fmtFP(fpNP)}</strong>
+              </span>
+              <span style={{ fontSize:10, display:"flex", alignItems:"center", gap:5, color:"var(--muted)" }}>
+                <span style={{ width:10,height:10,borderRadius:2,background:"var(--blue)",display:"inline-block" }}/>
+                RP <strong style={{ color:"var(--blue)", fontFamily:"var(--mono)" }}>{fmtFP(fpRP)}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+
         <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10 }}>
           {ps.map(p=><ProjectCard key={p.id} p={p}/>)}
         </div>
@@ -3525,6 +3656,16 @@ function PortfolioView({ projects, onClose, onSelect }) {
             {projects.length} project{projects.length!==1?"s":""} &middot; {allAspects.length} aspects &middot; {allOpps.length} opportunities
             {totalGhg>0&&<span style={{ marginLeft:12,color:"var(--teal-dk)",fontFamily:"var(--mono)",fontWeight:500 }}>{fmtKg(totalGhg)}</span>}
           </p>
+          {totalFp>0&&(
+            <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6,flexWrap:"wrap" }}>
+              <span style={{ fontSize:10,fontWeight:700,color:"var(--cat-green-hd)",fontFamily:"var(--mono)",
+                textTransform:"uppercase",letterSpacing:"0.07em" }}>Material CO₂ footprint:</span>
+              <span style={{ fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--cat-green-hd)" }}>{fmtFPH(totalFp)}</span>
+              <span style={{ fontSize:10,padding:"2px 10px",borderRadius:10,background:"var(--teal-bg)",color:"var(--teal)",border:"1px solid var(--teal-bd)" }}>NP {fmtFPH(totalFpNP)}</span>
+              <span style={{ fontSize:10,padding:"2px 10px",borderRadius:10,background:"var(--blue-bg)",color:"var(--blue)",border:"1px solid var(--blue-bd)" }}>RP {fmtFPH(totalFpRP)}</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{allFpProj.length}/{projects.length} projects</span>
+            </div>
+          )}
         </div>
         <button onClick={onClose} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",cursor:"pointer",fontSize:12 }}>Close</button>
       </div>
@@ -4143,6 +4284,8 @@ function FootprintTab({ project, onChange }) {
   const [suggestions, setSuggestions]     = useState(project.footprintSuggestions || {});
   const [corLoading, setCorLoading]       = useState({});
   const [corOverrides, setCorOverrides]   = useState(project.footprintCorOverrides || {});
+  const [overrideHistory, setOverrideHistory] = useState([project.footprintCorOverrides || {}]);
+  const [historyIdx, setHistoryIdx]           = useState(0);
   const [overrideInput, setOverrideInput] = useState({});  // rowKey -> typed string
   const [remapSelections, setRemapSelections] = useState({});  // unknownCode -> selectedReplacement
   const [toast, setToast] = useState("");
@@ -4152,6 +4295,19 @@ function FootprintTab({ project, onChange }) {
   const [colHighlight, setColHighlight] = useState(null);  // "sheetName|colName"
   const hlTimer = React.useRef(null);
   const wbRef   = React.useRef(null);
+
+  // ── Keyboard Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z for undo/redo ─────────────────
+  React.useEffect(() => {
+    const handler = e => {
+      if (step !== "result") return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (e.key === "z" && !e.shiftKey) { e.preventDefault(); doUndo(); }
+      if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); doRedo(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });  // no dep array — captures latest closure vals via doUndo/doRedo refs
 
   // displayResult = base result with overrides applied
   const displayResult = React.useMemo(
@@ -4281,41 +4437,75 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── COR override helpers ─────────────────────────────────────────────────────
+  // ── History-aware override commit ────────────────────────────────────────────
+  const commitOverrides = (upd, msg) => {
+    setCorOverrides(upd);
+    // Truncate future history if we branched
+    const newHist = [...overrideHistory.slice(0, historyIdx + 1), upd];
+    setOverrideHistory(newHist);
+    setHistoryIdx(newHist.length - 1);
+    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+    if (msg) { setToast(msg); setTimeout(() => setToast(""), 2500); }
+  };
+  const doUndo = () => {
+    if (historyIdx <= 0) return;
+    const prev = overrideHistory[historyIdx - 1];
+    setHistoryIdx(historyIdx - 1);
+    setCorOverrides(prev);
+    onChange({ ...project, footprint: result, footprintCorOverrides: prev });
+    setToast("Undo (" + (historyIdx - 1) + " steps back)");
+    setTimeout(() => setToast(""), 1800);
+  };
+  const doRedo = () => {
+    if (historyIdx >= overrideHistory.length - 1) return;
+    const next = overrideHistory[historyIdx + 1];
+    setHistoryIdx(historyIdx + 1);
+    setCorOverrides(next);
+    onChange({ ...project, footprint: result, footprintCorOverrides: next });
+    setToast("Redo");
+    setTimeout(() => setToast(""), 1800);
+  };
   const setOverride = (rowKey, corCode) => {
     if (!COR_MAP[corCode]) return;
     const upd = { ...corOverrides, [rowKey]: corCode };
-    setCorOverrides(upd);
     setOverrideInput(p => ({ ...p, [rowKey]: corCode }));
-    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+    commitOverrides(upd, null);
   };
   const clearOverride = (rowKey) => {
     const upd = { ...corOverrides };
     delete upd[rowKey];
-    setCorOverrides(upd);
     setOverrideInput(p => { const n = {...p}; delete n[rowKey]; return n; });
-    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+    commitOverrides(upd, null);
+  };
+  const resetAllOverrides = () => {
+    if (Object.keys(corOverrides).length === 0) return;
+    if (!window.confirm("Clear all " + Object.keys(corOverrides).length + " override(s)? This can be undone with Ctrl+Z.")) return;
+    commitOverrides({}, "All overrides cleared");
+    setOverrideInput({});
+    setRemapSelections({});
   };
 
   // Apply a remap to ALL rows currently using a given COR code
   const applyRemap = (fromCode, toCode) => {
     if (!COR_MAP[toCode]) return;
-    const rowsToFix = (displayResult.allRows || []).filter(r => r.cor === fromCode);
+    const rowsToFix = (displayResult.allRows || []).filter(r => r.cor === fromCode && !r._overridden);
+    if (rowsToFix.length === 0) return;
     const upd = { ...corOverrides };
     rowsToFix.forEach(r => { upd[r.sheet + "|" + r.rowNum] = toCode; });
-    setCorOverrides(upd);
-    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
-    const showMsg = () => { setToast(rowsToFix.length + " row" + (rowsToFix.length !== 1 ? "s" : "") + " remapped to " + toCode); setTimeout(() => setToast(""), 2500); };
-    showMsg();
+    commitOverrides(upd, rowsToFix.length + " row" + (rowsToFix.length !== 1 ? "s" : "") + " remapped → " + toCode);
   };
 
   // Stamp the current footprint result to the project dashboard
   const addToProject = () => {
     if (!displayResult || !displayResult.success) return;
+    const vRows = (displayResult.allRows || []).filter(r => r.status === "VALID");
     const summary = {
       combined: displayResult.combined,
       mtoTotal: displayResult.mtoTotal,
       melTotal: displayResult.melTotal,
-      validRows: (displayResult.allRows || []).filter(r => r.status === "VALID").length,
+      npTotal:  vRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      rpTotal:  vRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      validRows: vRows.length,
       overrideCount: Object.keys(corOverrides).length,
       date: new Date().toISOString(),
       fileName: fileName,
@@ -4752,11 +4942,39 @@ function FootprintTab({ project, onChange }) {
             Upload new<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           </label>
         </div>
-        {toast && (
-          <div style={{ padding: "6px 16px", background: T.tealBg, border: "1px solid " + T.tealBd,
-            borderRadius: 6, fontSize: 11, fontWeight: 500, color: T.teal, fontFamily: T.mono,
-            marginTop: 6 }}>{toast}</div>
-        )}
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+          {/* Undo/redo */}
+          <button onClick={doUndo} disabled={historyIdx <= 0}
+            title="Undo (Ctrl+Z)"
+            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.border, minHeight: 28,
+              background: "transparent", color: historyIdx > 0 ? T.text : T.faint,
+              fontSize: 13, cursor: historyIdx > 0 ? "pointer" : "not-allowed", fontFamily: T.sans }}>
+            ↩
+          </button>
+          <button onClick={doRedo} disabled={historyIdx >= overrideHistory.length - 1}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.border, minHeight: 28,
+              background: "transparent", color: historyIdx < overrideHistory.length - 1 ? T.text : T.faint,
+              fontSize: 13, cursor: historyIdx < overrideHistory.length - 1 ? "pointer" : "not-allowed", fontFamily: T.sans }}>
+            ↪
+          </button>
+          {Object.keys(corOverrides).length > 0 && (
+            <button onClick={resetAllOverrides}
+              style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.redBd, minHeight: 28,
+                background: T.redBg, color: T.red, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}>
+              Reset all overrides ({Object.keys(corOverrides).length})
+            </button>
+          )}
+          {historyIdx > 0 && (
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.faint }}>
+              step {historyIdx}/{overrideHistory.length - 1}
+            </span>
+          )}
+          {toast && (
+            <span style={{ padding: "4px 12px", background: T.tealBg, border: "1px solid " + T.tealBd,
+              borderRadius: 5, fontSize: 11, fontWeight: 500, color: T.teal, fontFamily: T.mono }}>{toast}</span>
+          )}
+        </div>
       </div>
 
       {/* ── Status ── */}
@@ -5056,9 +5274,8 @@ function FootprintTab({ project, onChange }) {
                                     const upd = { ...corOverrides };
                                     (result && result.allRows || []).filter(r => r.cor === code)
                                       .forEach(r => { delete upd[r.sheet + "|" + r.rowNum]; });
-                                    setCorOverrides(upd);
                                     setRemapSelections(p => { const n = {...p}; delete n[code]; return n; });
-                                    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+                                    commitOverrides(upd, "Overrides cleared for " + code);
                                   }}
                                     style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.redBd,
                                       background: "transparent", color: T.red, fontSize: 10, cursor: "pointer" }}>
