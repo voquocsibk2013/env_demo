@@ -4395,8 +4395,24 @@ function FootprintTab({ project, onChange }) {
   const [dFilter, setDFilter] = useState("ALL");
   const [dSearch, setDSearch] = useState("");
   const [colHighlight, setColHighlight] = useState(null);  // "sheetName|colName"
-  const hlTimer = React.useRef(null);
-  const wbRef   = React.useRef(null);
+  const hlTimer     = React.useRef(null);
+  const wbRef       = React.useRef(null);      // raw ArrayBuffer kept for re-calc
+  const workerRef   = React.useRef(null);
+  const [workerBusy, setWorkerBusy]   = useState(false);
+  const [workerPct, setWorkerPct]     = useState(0);
+  const [workerLabel, setWorkerLabel] = useState("");
+
+  // spawn / reuse worker
+  const getWorker = () => {
+    if (workerRef.current) return workerRef.current;
+    const w = new Worker(new URL("./fpWorker.js", import.meta.url));
+    workerRef.current = w;
+    return w;
+  };
+  const killWorker = () => {
+    if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null; }
+    setWorkerBusy(false); setWorkerPct(0); setWorkerLabel("");
+  };
 
   // ── Keyboard Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z for undo/redo ─────────────────
   React.useEffect(() => {
@@ -4461,18 +4477,32 @@ function FootprintTab({ project, onChange }) {
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
-  // ── File intake ──────────────────────────────────────────────────────────────
+  // ── File intake — worker-based ───────────────────────────────────────────────
   const ingestFile = async (file) => {
+    killWorker();
     setFileName(file.name);
+    setWorkerBusy(true); setWorkerPct(5); setWorkerLabel("Reading file…");
     const buf = await file.arrayBuffer();
-    const wb  = XLSX.read(buf, { type: "array" });
-    wbRef.current = wb;
-    const metas = detectSheets(wb);
-    if (metas.length === 0) {
-      setResult({ success: false, fatalError: "No sheets with usable column headers found." });
-      setStep("result"); return;
-    }
-    setSheetMetas(metas); setResult(null); setSuggestions({}); setStep("mapping");
+    wbRef.current = buf;                       // store raw buffer, not parsed wb
+    const w = getWorker();
+    w.onmessage = e => {
+      const { type, sheetMetas: metas, pct, label, message } = e.data;
+      if (type === "PROGRESS") { setWorkerPct(pct); setWorkerLabel(label); }
+      else if (type === "DETECT_DONE") {
+        setWorkerBusy(false);
+        if (!metas || metas.length === 0) {
+          setResult({ success: false, fatalError: "No sheets with usable column headers found." });
+          setStep("result");
+        } else {
+          setSheetMetas(metas); setResult(null); setSuggestions({}); setStep("mapping");
+        }
+      } else if (type === "ERROR") {
+        setWorkerBusy(false);
+        setResult({ success: false, fatalError: "Could not read file: " + message });
+        setStep("result");
+      }
+    };
+    w.postMessage({ type: "DETECT", buffer: buf, fileName: file.name }, [buf.slice(0)]);
   };
   const onFile = e => { const f = e.target.files && e.target.files[0]; if (f) { ingestFile(f); e.target.value = ""; } };
   const onDrop = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingestFile(f); };
@@ -4527,15 +4557,31 @@ function FootprintTab({ project, onChange }) {
     }));
   };
 
-  // ── Run calculation ──────────────────────────────────────────────────────────
+  // ── Run calculation — worker-based ──────────────────────────────────────────
   const doCalc = () => {
     if (!wbRef.current) return;
-    const cal = calcSheets(wbRef.current, sheetMetas);
-    setResult(cal); setView("summary"); setStep("result");
-    setCorOverrides({});
-    onChange({ ...project, footprint: cal, footprintFile: fileName,
-               footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
-    setSuggestions({});
+    killWorker();
+    setWorkerBusy(true); setWorkerPct(5); setWorkerLabel("Preparing…");
+    const w = getWorker();
+    w.onmessage = e => {
+      const { type, result: cal, pct, label, message } = e.data;
+      if (type === "PROGRESS") { setWorkerPct(pct); setWorkerLabel(label); }
+      else if (type === "CALC_DONE") {
+        setWorkerBusy(false);
+        setResult(cal); setView("summary"); setStep("result");
+        setCorOverrides({});
+        onChange({ ...project, footprint: cal, footprintFile: fileName,
+                   footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
+        setSuggestions({});
+      } else if (type === "ERROR") {
+        setWorkerBusy(false);
+        setResult({ success: false, fatalError: "Calculation failed: " + message });
+        setStep("result");
+      }
+    };
+    // Transfer a copy so the original buffer stays for potential re-calc
+    const bufCopy = wbRef.current.slice(0);
+    w.postMessage({ type: "CALC", buffer: bufCopy, sheetMetas }, [bufCopy]);
   };
 
   // ── COR override helpers ─────────────────────────────────────────────────────
@@ -4688,12 +4734,39 @@ function FootprintTab({ project, onChange }) {
   // ════════════════════════════════════════════════════════════════════════════
   // STEP 1 — UPLOAD
   // ════════════════════════════════════════════════════════════════════════════
+  // ── Worker loading overlay (shown during detect AND calc) ───────────────────
+  if (workerBusy) {
+    return (
+      <div style={{ padding: "2.5rem 1.5rem", textAlign: "center" }}>
+        <div style={{ fontSize: 36, marginBottom: 14 }}>⚙️</div>
+        <p style={{ fontSize: 14, fontWeight: 600, color: T.teal, margin: "0 0 6px" }}>
+          {workerLabel || "Processing…"}
+        </p>
+        <p style={{ fontSize: 11, color: T.muted, margin: "0 0 20px" }}>
+          {fileName} — running in background, UI stays responsive
+        </p>
+        {/* Progress bar */}
+        <div style={{ maxWidth: 320, margin: "0 auto 16px", height: 8, borderRadius: 4,
+          background: T.border, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: workerPct + "%", background: T.teal,
+            borderRadius: 4, transition: "width 0.4s ease" }} />
+        </div>
+        <button onClick={killWorker}
+          style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid " + T.border,
+            background: "transparent", color: T.muted, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}>
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
   if (step === "upload" && !result) {
     return (
       <div style={{ padding: "1.5rem" }}>
         <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
         <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>
           Upload any MTO or MEL workbook — column names are matched automatically.
+          Large files are processed in a background thread so the app stays responsive.
         </p>
         <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ display: "block", border: "2px dashed " + T.border, borderRadius: 12,
@@ -4701,7 +4774,8 @@ function FootprintTab({ project, onChange }) {
           <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
           <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 8px" }}>Drop workbook or click to browse</p>
-          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>Auto-detects MTO and MEL sheets · fuzzy column matching · AI fallback</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 6px" }}>Auto-detects MTO and MEL sheets · fuzzy column matching</p>
+          <p style={{ fontSize: 11, color: T.faint, margin: 0 }}>Large files (10 MB+) handled without freezing</p>
         </label>
         {result && !result.success && (
           <div style={{ marginTop: "1rem", padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8 }}>
@@ -4745,10 +4819,11 @@ function FootprintTab({ project, onChange }) {
             <label style={{ ...btnSm(false), display: "inline-flex", alignItems: "center", padding: "6px 14px" }}>
               Different file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
             </label>
-            <button onClick={doCalc} disabled={!canCalc}
+            <button onClick={doCalc} disabled={!canCalc || workerBusy}
               style={{ padding: "7px 20px", borderRadius: 6, border: "none",
-                background: canCalc ? T.teal : T.border, color: canCalc ? "#fff" : T.muted,
-                fontSize: 13, fontWeight: 600, cursor: canCalc ? "pointer" : "not-allowed", minHeight: 34 }}>
+                background: canCalc && !workerBusy ? T.teal : T.border,
+                color: canCalc && !workerBusy ? "#fff" : T.muted,
+                fontSize: 13, fontWeight: 600, cursor: canCalc && !workerBusy ? "pointer" : "not-allowed", minHeight: 34 }}>
               Calculate →
             </button>
           </div>
@@ -5187,10 +5262,10 @@ function FootprintTab({ project, onChange }) {
                 {/* Legend */}
                 <div style={{ display: "flex", gap: 14, marginTop: 10, paddingTop: 8, borderTop: "1px solid " + T.border }}>
                   <span style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, color: T.muted }}>
-                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.teal, display: "inline-block" }} />NP — Not Part of module
+                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.teal, display: "inline-block" }} />NP — New Permanently
                   </span>
                   <span style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, color: T.muted }}>
-                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.blue, display: "inline-block" }} />RP — Ready for Pack-out
+                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.blue, display: "inline-block" }} />RP — Removal of Permanent items
                   </span>
                 </div>
               </div>
