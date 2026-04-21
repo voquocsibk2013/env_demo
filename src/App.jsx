@@ -2626,90 +2626,186 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
 
-          {/* ── Material footprint card ── */}
+          {/* ── Emission Footprint card ── */}
           {project.footprintSummary && (() => {
-            const fp = project.footprintSummary;
-            const fmtV = v => { const n=Number(v); return n>=1 ? n.toFixed(3)+" tCO₂e" : (n*1000).toFixed(2)+" kgCO₂e"; };
-            const d = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
-            // Visual NP/RP split — stored on summary if available, else show combined
-            const npVal = fp.npTotal != null ? fp.npTotal : null;
-            const rpVal = fp.rpTotal != null ? fp.rpTotal : null;
-            const tot   = Number(fp.combined);
-            const npPct = npVal != null && tot > 0 ? Math.min(100, (npVal/tot)*100) : 50;
-            const rpPct = rpVal != null && tot > 0 ? Math.min(100, (rpVal/tot)*100) : 50;
+            const fp   = project.footprintSummary;
+            const fmtT = v => Number(v).toFixed(3) + " tCO₂e";
+            const d    = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
+            // Scope totals — only what has data
+            const s3c1 = Number(fp.combined || 0);  // only scope we have so far
+            const s1   = Number(fp.scope1   || 0);
+            const s2   = Number(fp.scope2   || 0);
+            const grandTotal = s1 + s2 + s3c1;
+            // NP / RP
+            const np   = Number(fp.npTotal  || 0);
+            const rp   = Number(fp.rpTotal  || 0);
+            const npPct = s3c1 > 0 ? Math.min(100, (np / s3c1) * 100) : 0;
+            const rpPct = s3c1 > 0 ? Math.min(100, (rp / s3c1) * 100) : 0;
+            // Category breakdown
+            const cats = fp.catBreakdown || [];
+            const SCOPE_COLORS = {
+              "Scope 1":        { c:T.red,   bg:T.redBg,    bd:T.redBd    },
+              "Scope 2":        { c:T.amber, bg:T.amberBg,  bd:T.amberBd  },
+              "Scope 3 Cat 1":  { c:T.teal,  bg:T.tealBg,   bd:T.tealBd   },
+              "Scope 3 Cat 4":  { c:T.purple,bg:T.purpleBg, bd:T.purpleBd },
+            };
+            const CAT_COLORS = [T.teal,T.blue,T.purple,T.amber,T.green,T.slate,T.red,T.tealDark];
             return (
               <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden",
-                border:"1px solid var(--cat-green-bd)", background:T.surface }}>
-                {/* Header bar */}
-                <div style={{ padding:"10px 16px", background:"var(--cat-green-bg)",
-                  borderBottom:"1px solid var(--cat-green-bd)",
-                  display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:10, fontWeight:700, color:"var(--cat-green-hd)",
-                    fontFamily:T.mono, textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                    Material CO₂ Footprint
-                  </span>
-                  {d && <span style={{ fontSize:10, color:"var(--cat-green-tx)", opacity:0.7 }}>{d}</span>}
-                  {fp.fileName && <span style={{ fontFamily:T.mono, fontSize:9, color:"var(--cat-green-tx)", opacity:0.6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:200 }}>{fp.fileName}</span>}
+                border:"1px solid "+T.border, background:T.surface }}>
+
+                {/* ── Card header ── */}
+                <div style={{ padding:"9px 14px", background:T.surface2,
+                  borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text,
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Emission Footprint</span>
+                  {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{d}</span>}
                   <button onClick={()=>setTab("footprint")}
-                    style={{ marginLeft:"auto", fontSize:10, padding:"3px 10px", borderRadius:4,
-                      border:"1px solid var(--cat-green-bd)", background:"transparent",
-                      color:"var(--cat-green-hd)", cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
-                    Open footprint tab →
+                    style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5,
+                      border:"1px solid "+T.tealBd, background:"transparent",
+                      color:T.teal, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+                    Open footprint →
                   </button>
                   <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
-                    style={{ fontSize:11, padding:"3px 7px", borderRadius:4, border:"1px solid var(--cat-green-bd)",
-                      background:"transparent", color:"var(--cat-green-tx)", cursor:"pointer", opacity:0.5 }}>
-                    ×
-                  </button>
+                    style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
+                      border:"1px solid "+T.border, background:"transparent",
+                      color:T.faint, cursor:"pointer" }}>×</button>
                 </div>
-                {/* Body */}
-                <div style={{ padding:"14px 16px" }}>
-                  <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:"0 24px", alignItems:"center" }}>
-                    {/* Big number */}
-                    <div>
-                      <p style={{ margin:"0 0 2px", fontFamily:T.mono, fontSize:28, fontWeight:700,
-                        color:"var(--cat-green-hd)", lineHeight:1 }}>
-                        {Number(tot) >= 1 ? tot.toFixed(3) : (tot*1000).toFixed(2)}
-                      </p>
-                      <p style={{ margin:0, fontFamily:T.mono, fontSize:11, color:"var(--cat-green-tx)", opacity:0.8 }}>
-                        {Number(tot) >= 1 ? "tCO₂e combined" : "kgCO₂e combined"}
-                        {fp.validRows ? " · " + fp.validRows + " rows" : ""}
-                        {fp.overrideCount > 0 ? " · " + fp.overrideCount + " override" + (fp.overrideCount!==1?"s":"") : ""}
-                      </p>
-                    </div>
-                    {/* MTO / MEL breakdown */}
-                    <div>
-                      <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-                        <div style={{ flex:1, padding:"7px 12px", borderRadius:6, background:T.tealBg, border:"1px solid "+T.tealBd }}>
-                          <p style={{ margin:"0 0 2px", fontFamily:T.mono, fontSize:8, color:T.teal, textTransform:"uppercase", letterSpacing:"0.08em" }}>MTO</p>
-                          <p style={{ margin:0, fontFamily:T.mono, fontSize:14, fontWeight:700, color:T.teal }}>{fmtV(fp.mtoTotal)}</p>
-                        </div>
-                        <div style={{ flex:1, padding:"7px 12px", borderRadius:6, background:T.blueBg, border:"1px solid "+T.blueBd }}>
-                          <p style={{ margin:"0 0 2px", fontFamily:T.mono, fontSize:8, color:T.blue, textTransform:"uppercase", letterSpacing:"0.08em" }}>MEL</p>
-                          <p style={{ margin:0, fontFamily:T.mono, fontSize:14, fontWeight:700, color:T.blue }}>{fmtV(fp.melTotal)}</p>
-                        </div>
+
+                {/* ── Scope rows ── */}
+                <div style={{ padding:"12px 14px", borderBottom:"1px solid "+T.border }}>
+                  <p style={{ fontFamily:T.mono, fontSize:8, fontWeight:600, color:T.faint,
+                    textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>
+                    Scopes with data
+                  </p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+
+                    {/* Scope 1 — placeholder, shown only if data */}
+                    {s1 > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        borderRadius:7, background:T.redBg, border:"1px solid "+T.redBd }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.red,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 1</span>
+                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.red }}>
+                          {fmtT(s1)}
+                        </span>
+                        <span style={{ fontSize:10, color:T.red, opacity:0.7, marginLeft:"auto" }}>
+                          Direct emissions
+                        </span>
                       </div>
-                      {/* NP/RP stacked bar */}
-                      {(npVal != null || rpVal != null) && (
-                        <div>
-                          <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", background:T.border }}>
-                            <div style={{ width:npPct+"%", background:T.teal, transition:"width 0.5s" }} title={"NP: "+fmtV(npVal||0)} />
-                            <div style={{ width:rpPct+"%", background:T.blue, transition:"width 0.5s" }} title={"RP: "+fmtV(rpVal||0)} />
-                          </div>
-                          <div style={{ display:"flex", gap:10, marginTop:4 }}>
-                            <span style={{ fontSize:10, color:T.teal, display:"flex", alignItems:"center", gap:4 }}>
-                              <span style={{ width:8,height:8,borderRadius:2,background:T.teal,display:"inline-block" }}/>
-                              NP {fmtV(npVal||0)}
-                            </span>
-                            <span style={{ fontSize:10, color:T.blue, display:"flex", alignItems:"center", gap:4 }}>
-                              <span style={{ width:8,height:8,borderRadius:2,background:T.blue,display:"inline-block" }}/>
-                              RP {fmtV(rpVal||0)}
-                            </span>
-                          </div>
+                    )}
+
+                    {/* Scope 2 — placeholder, shown only if data */}
+                    {s2 > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        borderRadius:7, background:T.amberBg, border:"1px solid "+T.amberBd }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.amber,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 2</span>
+                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.amber }}>
+                          {fmtT(s2)}
+                        </span>
+                        <span style={{ fontSize:10, color:T.amber, opacity:0.7, marginLeft:"auto" }}>
+                          Energy indirect
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Scope 3 Cat 1 — always shown when footprint exists */}
+                    {s3c1 > 0 && (
+                      <div style={{ borderRadius:7, background:T.tealBg, border:"1px solid "+T.tealBd, overflow:"hidden" }}>
+                        {/* Row header */}
+                        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px" }}>
+                          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.teal,
+                            minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                            Scope 3 Cat 1
+                          </span>
+                          <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.teal }}>
+                            {fmtT(s3c1)}
+                          </span>
+                          <span style={{ fontSize:10, color:T.teal, opacity:0.7, marginLeft:"auto" }}>
+                            Purchased goods &amp; services (MTO/MEL)
+                          </span>
                         </div>
-                      )}
-                    </div>
+                        {/* NP / RP stacked bar */}
+                        {(np > 0 || rp > 0) && (
+                          <div style={{ padding:"0 12px 8px" }}>
+                            <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden",
+                              background:T.border, marginBottom:5 }}>
+                              <div style={{ width:npPct+"%", background:T.teal }} />
+                              <div style={{ width:rpPct+"%", background:T.blue }} />
+                            </div>
+                            <div style={{ display:"flex", gap:12 }}>
+                              {np > 0 && <span style={{ fontSize:10, color:T.teal }}>
+                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(np)}</span> NP
+                              </span>}
+                              {rp > 0 && <span style={{ fontSize:10, color:T.blue }}>
+                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(rp)}</span> RP
+                              </span>}
+                            </div>
+                          </div>
+                        )}
+                        {/* Category breakdown — only if > 1 category */}
+                        {cats.length > 1 && (
+                          <div style={{ padding:"0 12px 10px",
+                            borderTop:"1px solid "+T.tealBd, paddingTop:8, marginTop:2 }}>
+                            <p style={{ fontFamily:T.mono, fontSize:8, color:T.teal, opacity:0.7,
+                              textTransform:"uppercase", letterSpacing:"0.07em", margin:"0 0 6px" }}>
+                              By COR category
+                            </p>
+                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                              {cats.map(({ cat, tco2e }, ci) => {
+                                const col = CAT_COLORS[ci % CAT_COLORS.length];
+                                const pct = s3c1 > 0 ? Math.min(100, (tco2e / s3c1) * 100) : 0;
+                                return (
+                                  <div key={cat}>
+                                    <div style={{ display:"flex", justifyContent:"space-between",
+                                      marginBottom:2, alignItems:"center" }}>
+                                      <span style={{ fontSize:10, color:T.text }}>{cat}</span>
+                                      <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:col }}>
+                                        {tco2e.toFixed(3)} tCO₂e
+                                      </span>
+                                    </div>
+                                    <div style={{ height:4, borderRadius:2, background:T.border, overflow:"hidden" }}>
+                                      <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Placeholder rows for scopes not yet calculated */}
+                    {[
+                      s1 === 0 && { label:"Scope 1", sub:"Direct — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
+                      s2 === 0 && { label:"Scope 2", sub:"Energy indirect — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
+                    ].filter(Boolean).map(row => (
+                      <div key={row.label} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 12px",
+                        borderRadius:7, background:row.bg, border:"1px solid "+row.bd, opacity:0.5 }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:row.c,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>{row.label}</span>
+                        <span style={{ fontSize:10, color:row.c, fontStyle:"italic" }}>{row.sub}</span>
+                        <span style={{ fontFamily:T.mono, fontSize:12, color:row.c, marginLeft:"auto" }}>—</span>
+                      </div>
+                    ))}
                   </div>
+                </div>
+
+                {/* ── Grand total footer ── */}
+                <div style={{ padding:"9px 14px", background:T.surface2,
+                  display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Total (all scopes)</span>
+                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:T.text }}>
+                    {grandTotal.toFixed(3)} tCO₂e
+                  </span>
+                  {(s1 === 0 || s2 === 0) && (
+                    <span style={{ fontSize:10, color:T.faint, fontStyle:"italic" }}>
+                      · partial (Scope {[s1===0&&"1",s2===0&&"2"].filter(Boolean).join(" & ")} pending)
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -3382,7 +3478,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
   const totalFp    = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.combined)||0),0);
   const totalFpNP  = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.npTotal)||0),0);
   const totalFpRP  = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.rpTotal)||0),0);
-  const fmtFPH = v => { const n=Number(v); return n>=1 ? n.toFixed(2)+" t CO₂e" : (n*1000).toFixed(1)+" kg CO₂e"; };
+  const fmtFPH = v => Number(v).toFixed(3)+" tCO₂e";
 
   const MiniDonut = ({ segments, size=52, strokeW=9 }) => {
     const r=(size-strokeW)/2; const circ=2*Math.PI*r;
@@ -3459,28 +3555,34 @@ function PortfolioView({ projects, onClose, onSelect }) {
             </span>
           </div>}
           {p.footprintSummary && (() => {
-            const fp=p.footprintSummary;
-            const fmtF=v=>{ const n=Number(v); return n>=1?n.toFixed(3)+" t":((n*1000).toFixed(1))+" kg"; };
-            const tot=Number(fp.combined);
-            const npPct=fp.npTotal!=null&&tot>0?Math.min(100,(fp.npTotal/tot)*100):50;
-            const rpPct=fp.rpTotal!=null&&tot>0?Math.min(100,(fp.rpTotal/tot)*100):50;
+            const fp  = p.footprintSummary;
+            const tot = Number(fp.combined || 0);
+            const np  = Number(fp.npTotal  || 0);
+            const rp  = Number(fp.rpTotal  || 0);
+            const fmtF = v => Number(v).toFixed(3);
+            const npPct = tot > 0 ? Math.min(100,(np/tot)*100) : 0;
+            const rpPct = tot > 0 ? Math.min(100,(rp/tot)*100) : 0;
+            const d = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
             return (
-              <div style={{ padding:"7px 10px", borderRadius:6, border:"1px solid var(--cat-green-bd)",
-                background:"var(--cat-green-bg)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                  <span style={{ fontSize:9, fontWeight:700, color:"var(--cat-green-hd)", fontFamily:"var(--mono)",
-                    textTransform:"uppercase", letterSpacing:"0.07em" }}>CO₂ footprint</span>
-                  <span style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:700, color:"var(--cat-green-hd)" }}>
-                    {fmtF(tot)} CO₂e
+              <div style={{ padding:"8px 10px", borderRadius:6,
+                border:"1px solid var(--teal-bd)", background:"var(--teal-bg)" }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:5 }}>
+                  <span style={{ fontSize:9, fontWeight:700, color:"var(--teal-dk)",
+                    fontFamily:"var(--mono)", textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                    {fp.scope || "Scope 3 Cat 1"}
                   </span>
+                  <span style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:700, color:"var(--teal-dk)" }}>
+                    {fmtF(tot)} tCO₂e
+                  </span>
+                  {d && <span style={{ fontSize:9, color:"var(--teal)", opacity:0.7, marginLeft:"auto" }}>{d}</span>}
                 </div>
                 <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:"var(--border)" }}>
-                  <div style={{ width:npPct+"%", background:"var(--teal)" }} title={"NP "+(fp.npTotal!=null?fmtF(fp.npTotal):"")} />
-                  <div style={{ width:rpPct+"%", background:"var(--blue)" }} title={"RP "+(fp.rpTotal!=null?fmtF(fp.rpTotal):"")} />
+                  <div style={{ width:npPct+"%", background:"var(--teal)" }} />
+                  <div style={{ width:rpPct+"%", background:"var(--blue)" }} />
                 </div>
-                <div style={{ display:"flex", gap:8, marginTop:3 }}>
-                  {fp.npTotal!=null&&<span style={{ fontSize:9, color:"var(--teal)" }}>NP {fmtF(fp.npTotal)}</span>}
-                  {fp.rpTotal!=null&&<span style={{ fontSize:9, color:"var(--blue)" }}>RP {fmtF(fp.rpTotal)}</span>}
+                <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                  {np > 0 && <span style={{ fontSize:9, color:"var(--teal)" }}>NP {fmtF(np)}</span>}
+                  {rp > 0 && <span style={{ fontSize:9, color:"var(--blue)" }}>RP {fmtF(rp)}</span>}
                 </div>
               </div>
             );
@@ -3518,7 +3620,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const fpTotal=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.combined)||0),0);
     const fpNP=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.npTotal)||0),0);
     const fpRP=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.rpTotal)||0),0);
-    const fmtFP=v=>{ const n=Number(v); return n>=1?n.toFixed(2)+" tCO₂e":(n*1000).toFixed(1)+" kgCO₂e"; };
+    const fmtFP=v=>Number(v).toFixed(3)+" tCO₂e";
     return (
       <div style={{ marginBottom:"2rem" }}>
         <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:"0.75rem",
@@ -4499,30 +4601,38 @@ function FootprintTab({ project, onChange }) {
   const addToProject = () => {
     if (!displayResult || !displayResult.success) return;
     const vRows = (displayResult.allRows || []).filter(r => r.status === "VALID");
+    const tot   = displayResult.combined;
+    // Category breakdown (only categories with > 0 tCO2e)
+    const byCat = {};
+    vRows.forEach(r => {
+      const k = r.category || "Unknown";
+      byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0);
+    });
+    const catBreakdown = Object.entries(byCat)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, v]) => ({ cat, tco2e: v }));
     const summary = {
-      combined: displayResult.combined,
-      mtoTotal: displayResult.mtoTotal,
-      melTotal: displayResult.melTotal,
-      npTotal:  vRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
-      rpTotal:  vRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
-      validRows: vRows.length,
-      overrideCount: Object.keys(corOverrides).length,
+      scope: "Scope 3 Cat 1",            // value-chain upstream emissions
+      combined: tot,
+      npTotal: vRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      rpTotal: vRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      catBreakdown,
       date: new Date().toISOString(),
-      fileName: fileName,
     };
     const entry = { id: Date.now().toString(), ts: new Date().toISOString(),
-      action: "Added material footprint",
-      detail: "Combined: " + displayResult.combined.toFixed(3) + " tCO₂e",
+      action: "Updated Scope 3 Cat 1 emission footprint",
+      detail: tot.toFixed(3) + " tCO₂e",
       fields: [
-        { k: "MTO", v: displayResult.mtoTotal.toFixed(3) + " tCO₂e" },
-        { k: "MEL", v: displayResult.melTotal.toFixed(3) + " tCO₂e" },
-        { k: "Combined", v: displayResult.combined.toFixed(3) + " tCO₂e" },
-        { k: "Rows", v: String(summary.validRows) },
+        { k: "Scope", v: "Scope 3 Cat 1 — Purchased goods & services" },
+        { k: "NP", v: summary.npTotal.toFixed(3) + " tCO₂e" },
+        { k: "RP", v: summary.rpTotal.toFixed(3) + " tCO₂e" },
+        { k: "Combined", v: tot.toFixed(3) + " tCO₂e" },
       ]
     };
     onChange({ ...project, footprintSummary: summary,
                changelog: [...(project.changelog || []), entry] });
-    setToast("Footprint added to project dashboard ✓");
+    setToast("Scope 3 footprint saved to project dashboard ✓");
     setTimeout(() => setToast(""), 2500);
   };
 
