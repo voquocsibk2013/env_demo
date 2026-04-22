@@ -243,7 +243,7 @@ function detectSheets(wb) {
                   headerRowIdx, rawPreview,
                   type, mapping, confidence,
                   totalRows: Math.max(0, raw.length - 1 - headerRowIdx),
-                  include: true });
+                  include: false });
   }
   return result;
 }

@@ -4186,7 +4186,7 @@ function detectSheets(wb) {
                   headerRowIdx, rawPreview,
                   type, mapping, confidence,
                   totalRows: Math.max(0, raw.length - 1 - headerRowIdx),
-                  include: true });
+                  include: false });
   }
   return result;
 }
@@ -4737,25 +4737,32 @@ function FootprintTab({ project, onChange }) {
   // ── Worker loading overlay (shown during detect AND calc) ───────────────────
   if (workerBusy) {
     return (
-      <div style={{ padding: "2.5rem 1.5rem", textAlign: "center" }}>
+      <div style={{ padding: "2.5rem 1.5rem", textAlign: "center", maxWidth: 400, margin: "0 auto" }}>
         <div style={{ fontSize: 36, marginBottom: 14 }}>⚙️</div>
-        <p style={{ fontSize: 14, fontWeight: 600, color: T.teal, margin: "0 0 6px" }}>
+        <p style={{ fontSize: 15, fontWeight: 700, color: T.teal, margin: "0 0 6px" }}>
           {workerLabel || "Processing…"}
         </p>
-        <p style={{ fontSize: 11, color: T.muted, margin: "0 0 20px" }}>
-          {fileName} — running in background, UI stays responsive
-        </p>
+        <p style={{ fontSize: 12, color: T.muted, margin: "0 0 6px" }}>{fileName}</p>
         {/* Progress bar */}
-        <div style={{ maxWidth: 320, margin: "0 auto 16px", height: 8, borderRadius: 4,
+        <div style={{ maxWidth: 320, margin: "0 auto 14px", height: 8, borderRadius: 4,
           background: T.border, overflow: "hidden" }}>
           <div style={{ height: "100%", width: workerPct + "%", background: T.teal,
             borderRadius: 4, transition: "width 0.4s ease" }} />
         </div>
-        <button onClick={killWorker}
-          style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid " + T.border,
-            background: "transparent", color: T.muted, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}>
-          Cancel
-        </button>
+        {/* Do-not-navigate warning */}
+        <div style={{ padding: "8px 16px", borderRadius: 7, background: T.amberBg,
+          border: "1px solid " + T.amberBd, marginBottom: 14, display: "inline-block" }}>
+          <span style={{ fontSize: 12, color: T.amber, fontWeight: 600 }}>
+            ⚠ Please stay on this tab until complete
+          </span>
+        </div>
+        <div>
+          <button onClick={killWorker}
+            style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid " + T.border,
+              background: "transparent", color: T.muted, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}>
+            Cancel
+          </button>
+        </div>
       </div>
     );
   }
@@ -4766,7 +4773,6 @@ function FootprintTab({ project, onChange }) {
         <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
         <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>
           Upload any MTO or MEL workbook — column names are matched automatically.
-          Large files are processed in a background thread so the app stays responsive.
         </p>
         <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ display: "block", border: "2px dashed " + T.border, borderRadius: 12,
@@ -4774,8 +4780,7 @@ function FootprintTab({ project, onChange }) {
           <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
           <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 8px" }}>Drop workbook or click to browse</p>
-          <p style={{ fontSize: 12, color: T.muted, margin: "0 0 6px" }}>Auto-detects MTO and MEL sheets · fuzzy column matching</p>
-          <p style={{ fontSize: 11, color: T.faint, margin: 0 }}>Large files (10 MB+) handled without freezing</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>Supports any column naming — auto-detects MTO and MEL sheets</p>
         </label>
         {result && !result.success && (
           <div style={{ marginTop: "1rem", padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8 }}>
@@ -4872,38 +4877,86 @@ function FootprintTab({ project, onChange }) {
                 </button>
               </div>
 
-              {/* Field pills — click to jump to column */}
-              <div style={{ padding: "10px 16px", borderBottom: "1px solid " + T.border,
-                display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: T.surface2 }}>
-                <span style={{ fontSize: 10, color: T.faint, marginRight: 2, whiteSpace: "nowrap" }}>Fields — click to jump:</span>
-                {fields.map(f => {
-                  const col = sm.mapping[f.key];
-                  const isLit = colHighlight === (sm.name + "|" + col);
-                  return (
-                    <div key={f.key}
-                      onClick={() => highlightCol(sm.name, col)}
-                      style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px 5px 8px",
-                        borderRadius: 20, cursor: col ? "pointer" : "default", userSelect: "none",
-                        background: isLit ? f.color : col ? f.bg : T.surface,
-                        border: "2px solid " + (isLit ? f.color : col ? f.bd : T.border),
-                        transition: "all 0.15s", minHeight: 28 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%",
-                        background: isLit ? "#fff" : col ? f.color : T.faint, flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, fontWeight: 600, color: isLit ? "#fff" : col ? f.color : T.faint }}>
-                        {f.label}
-                      </span>
-                      {f.req && !col && <span style={{ fontSize: 9, color: T.red, fontWeight: 700 }}>*</span>}
-                      {col && (
-                        <>
-                          <span style={{ fontSize: 10, fontFamily: T.mono, color: isLit ? "#ffffffcc" : f.color, opacity: 0.85 }}>→ {col}</span>
-                          <button onClick={e => { e.stopPropagation(); setMapping(sm.name, f.key, ""); }}
-                            style={{ fontSize: 13, color: isLit ? "#fff" : f.color, background: "transparent",
-                              border: "none", cursor: "pointer", padding: "0 0 0 2px", lineHeight: 1, opacity: 0.7 }}>×</button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Field assignment grid — large selects, easy to click */}
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid " + T.border,
+                background: T.surface }}>
+                <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint,
+                  textTransform: "uppercase", letterSpacing: "0.09em", margin: "0 0 10px" }}>
+                  Assign columns to fields — then click Calculate
+                </p>
+                <div style={{ display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+                  {fields.map(f => {
+                    const col    = sm.mapping[f.key];
+                    const isLit  = colHighlight === (sm.name + "|" + col);
+                    const isMiss = f.req && !col;
+                    return (
+                      <div key={f.key}
+                        style={{ borderRadius: 8, overflow: "hidden",
+                          border: "2px solid " + (isLit ? T.amber : isMiss ? T.redBd : col ? f.bd : T.border),
+                          transition: "border-color 0.2s" }}>
+                        {/* Field label bar */}
+                        <div style={{ padding: "6px 10px", display: "flex", alignItems: "center", gap: 7,
+                          background: isLit ? T.amberBg : col ? f.bg : T.surface2,
+                          borderBottom: "1px solid " + (col ? f.bd : T.border) }}>
+                          <span style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+                            background: col ? f.color : T.faint }} />
+                          <span style={{ fontSize: 12, fontWeight: 700,
+                            color: isLit ? T.amber : col ? f.color : T.text }}>
+                            {f.label}
+                          </span>
+                          {isMiss && <span style={{ fontSize: 10, color: T.red, fontWeight: 700, marginLeft: 2 }}>required</span>}
+                          {col && (
+                            <button onClick={() => setMapping(sm.name, f.key, "")}
+                              style={{ marginLeft: "auto", fontSize: 12, color: f.color, fontWeight: 700,
+                                background: "transparent", border: "none", cursor: "pointer",
+                                padding: "0 2px", lineHeight: 1, opacity: 0.7 }}
+                              title="Clear assignment">×</button>
+                          )}
+                        </div>
+                        {/* Column selector */}
+                        <div style={{ padding: "6px 8px", background: T.surface }}>
+                          <select value={col || ""}
+                            onChange={e => {
+                              const newCol = e.target.value;
+                              setSheetMetas(prev => prev.map(s => {
+                                if (s.name !== sm.name) return s;
+                                const m = { ...s.mapping };
+                                // clear this field's old col; clear any other field that had newCol
+                                Object.keys(m).forEach(k => {
+                                  if (m[k] === col && k === f.key) m[k] = null;
+                                  if (m[k] === newCol && k !== f.key) m[k] = null;
+                                });
+                                m[f.key] = newCol || null;
+                                return { ...s, mapping: m };
+                              }));
+                              if (newCol) setTimeout(() => highlightCol(sm.name, newCol), 50);
+                            }}
+                            style={{ width: "100%", padding: "7px 10px", fontSize: 12, borderRadius: 5,
+                              minHeight: 36, cursor: "pointer",
+                              border: "1px solid " + (col ? f.bd : T.border),
+                              background: col ? f.bg : T.surface2,
+                              color: col ? f.color : T.muted,
+                              fontWeight: col ? 600 : 400 }}>
+                            <option value="">— select column —</option>
+                            {sm.headers.filter(h => !h.startsWith("_col")).map(h => (
+                              <option key={h} value={h}>{h}</option>
+                            ))}
+                          </select>
+                          {/* Show sample value from first data row */}
+                          {col && sm.sampleRows && sm.sampleRows[0] != null && (
+                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint,
+                              margin: "4px 2px 0", overflow: "hidden", textOverflow: "ellipsis",
+                              whiteSpace: "nowrap" }}
+                              title={String(sm.sampleRows[0][col] ?? "")}>
+                              e.g. {String(sm.sampleRows[0][col] ?? "—").slice(0, 50) || "—"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Raw row picker */}
@@ -4958,10 +5011,10 @@ function FootprintTab({ project, onChange }) {
                 );
               })()}
 
-              {/* Column assignment */}
+              {/* Data preview — colour-coded by assignment */}
               {sm.headers.length > 0 ? (
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                  <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: "100%" }}>
                     <thead>
                       <tr>
                         {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
@@ -4971,36 +5024,20 @@ function FootprintTab({ project, onChange }) {
                           const colId = "fp-col-" + (sm.name + "-" + h).replace(/[^a-zA-Z0-9]/g, "_");
                           return (
                             <th key={h} id={colId}
-                              style={{ padding: 0, borderRight: "1px solid " + T.border,
+                              style={{ padding: "6px 10px", borderRight: "1px solid " + T.border,
                                 borderBottom: "3px solid " + (isHl ? T.amber : fDef ? fDef.color : T.border),
-                                background: isHl ? T.amberBg + "88" : fDef ? fDef.bg : T.surface2,
-                                minWidth: 140, maxWidth: 220,
-                                transition: "background 0.3s, border-color 0.3s" }}>
-                              <div style={{ padding: "7px 10px 6px" }}>
-                                <div style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
-                                  color: isHl ? T.amber : fDef ? fDef.color : T.text,
-                                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                                  maxWidth: 200, marginBottom: 5 }} title={h}>{h}</div>
-                                <select value={fk || ""}
-                                  onChange={e => {
-                                    const newKey = e.target.value;
-                                    setSheetMetas(prev => prev.map(s => {
-                                      if (s.name !== sm.name) return s;
-                                      const m = { ...s.mapping };
-                                      Object.keys(m).forEach(k => { if (m[k] === h) m[k] = null; });
-                                      if (newKey && m[newKey] && m[newKey] !== h) m[newKey] = null;
-                                      if (newKey) m[newKey] = h;
-                                      return { ...s, mapping: m };
-                                    }));
-                                  }}
-                                  style={{ width: "100%", fontSize: 10, padding: "4px 6px", borderRadius: 4, minHeight: 26,
-                                    border: "1px solid " + (fDef ? fDef.bd : T.border),
-                                    background: fDef ? fDef.bg : T.surface, color: fDef ? fDef.color : T.muted,
-                                    cursor: "pointer", fontWeight: fDef ? 600 : 400 }}>
-                                  <option value="">— assign field —</option>
-                                  {fields.map(f => <option key={f.key} value={f.key}>{f.label}{f.req ? " *" : ""}</option>)}
-                                </select>
-                              </div>
+                                background: isHl ? T.amberBg : fDef ? fDef.bg : T.surface2,
+                                minWidth: 120, transition: "background 0.25s, border-color 0.25s",
+                                textAlign: "left" }}>
+                              <span style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
+                                color: isHl ? T.amber : fDef ? fDef.color : T.text,
+                                display: "block", overflow: "hidden", textOverflow: "ellipsis",
+                                whiteSpace: "nowrap", maxWidth: 180 }} title={h}>{h}</span>
+                              {fDef && (
+                                <span style={{ fontFamily: T.mono, fontSize: 8, color: fDef.color,
+                                  textTransform: "uppercase", letterSpacing: "0.06em",
+                                  opacity: 0.8 }}>{fDef.label}</span>
+                              )}
                             </th>
                           );
                         })}
@@ -5019,8 +5056,8 @@ function FootprintTab({ project, onChange }) {
                               <td key={h} style={{ padding: "5px 10px", borderRight: "1px solid " + T.border,
                                 borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
                                 color: isHl ? T.amber : fDef ? fDef.color : T.muted,
-                                background: isHl ? T.amberBg + "44" : fDef ? fDef.bg + "44" : undefined,
-                                fontWeight: fDef ? 500 : 400, maxWidth: 220,
+                                background: isHl ? T.amberBg + "44" : fDef ? fDef.bg + "33" : undefined,
+                                fontWeight: fDef ? 500 : 400, maxWidth: 200,
                                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                                 title={disp}>
                                 {disp || <span style={{ color: T.faint }}>—</span>}
@@ -5034,7 +5071,7 @@ function FootprintTab({ project, onChange }) {
                 </div>
               ) : (
                 <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
-                  No columns detected — try selecting a different header row.
+                  No columns detected — try selecting a different header row above.
                 </div>
               )}
 
