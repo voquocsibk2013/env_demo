@@ -601,21 +601,24 @@ const T = {
 
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
-function calcScore({ severity, probability, recSensitivity, scale, duration }) {
+function calcScore({ severity, probability }) {
+  // Risk score = Consequence × Probability (pure matrix — no modifiers)
   if (!severity || !probability) return null;
-  let s = severity * probability;
-  if (recSensitivity === "High") s += 5; else if (recSensitivity === "Medium") s += 2;
-  if (scale === "Global") s += 4; else if (scale === "Regional") s += 2;
-  if (duration && duration.startsWith("Permanent")) s += 3;
-  else if (duration && duration.startsWith("Long-term")) s += 1;
-  return s;
+  return severity * probability;
 }
 function calcSig(a) {
   const score = calcScore(a);
   if (score === null) return null;
-  if (a.legalThreshold === "Y" || a.stakeholderConcern === "Y" || score >= 12) return "SIGNIFICANT";
-  if (score >= 8) return "WATCH";
-  return "Low";
+  // Legal/stakeholder override always → SIGNIFICANT
+  if (a.legalThreshold === "Y" || a.stakeholderConcern === "Y") return "SIGNIFICANT";
+  // Matrix colour bands (from image):
+  //   Red   (SIGNIFICANT): score ≥ 12
+  //   Yellow (WATCH):      score 6–11, OR score ≤ 5 with consequence ≥ 4
+  //   Green  (Low):        score ≤ 5 AND consequence ≤ 3
+  const c = parseInt(a.severity) || 0;
+  if (score >= 12) return "SIGNIFICANT";
+  if (score <= 5 && c <= 3) return "Low";
+  return "WATCH";
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
 function snapKg(phase) {
@@ -925,7 +928,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <Fld label="Duration"><select value={f.duration} onChange={e=>set("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
-          <Fld label="Severity (1-5)"><input type="number" min={1} max={5} value={f.severity} onChange={e=>set("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={f.severity} onChange={e=>set("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
           <Fld label="Probability (1-5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
           <Fld label="Legal threshold"><select value={f.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
           <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
@@ -934,7 +937,19 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid "+T.tealBd,
                         display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
             <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
-              Score: <strong style={{ fontSize:20, color:T.text }}>{score}</strong>
+              Risk score:{" "}
+              <strong style={{ fontSize:22,
+                color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
+                {score}
+              </strong>
+              <span style={{ marginLeft:6, fontSize:10,
+                padding:"2px 8px", borderRadius:4, fontFamily:T.sans,
+                background: sig==="SIGNIFICANT" ? T.redBg : sig==="WATCH" ? T.amberBg : T.greenBg,
+                color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green,
+                border: "1px solid " + (sig==="SIGNIFICANT" ? T.redBd : sig==="WATCH" ? T.amberBd : T.greenBd)
+              }}>
+                = C{f.severity||"?"} × P{f.probability||"?"}
+              </span>
             </span>
             <span style={sigStyle(sig)}>{sig}</span>
             {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
@@ -2122,7 +2137,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 <Fld label="Duration"><select value={riskForm.duration} onChange={e=>setRF("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
-                <Fld label="Severity (1-5)"><input type="number" min={1} max={5} value={riskForm.severity} onChange={e=>setRF("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+                <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={riskForm.severity} onChange={e=>setRF("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
                 <Fld label="Probability (1-5)"><input type="number" min={1} max={5} value={riskForm.probability} onChange={e=>setRF("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
                 <Fld label="Legal threshold"><select value={riskForm.legalThreshold} onChange={e=>setRF("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
                 <Fld label="Stakeholder concern"><select value={riskForm.stakeholderConcern} onChange={e=>setRF("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
@@ -2131,7 +2146,19 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
                               display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                   <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
-                    Score: <strong style={{ fontSize:20, color:T.text }}>{riskScore}</strong>
+                    Risk score:{" "}
+                    <strong style={{ fontSize:22,
+                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="WATCH" ? T.amber : T.green }}>
+                      {riskScore}
+                    </strong>
+                    <span style={{ marginLeft:6, fontSize:10,
+                      padding:"2px 8px", borderRadius:4, fontFamily:T.sans,
+                      background: riskSig==="SIGNIFICANT" ? T.redBg : riskSig==="WATCH" ? T.amberBg : T.greenBg,
+                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="WATCH" ? T.amber : T.green,
+                      border: "1px solid " + (riskSig==="SIGNIFICANT" ? T.redBd : riskSig==="WATCH" ? T.amberBd : T.greenBd)
+                    }}>
+                      = C{riskForm.severity||"?"} × P{riskForm.probability||"?"}
+                    </span>
                   </span>
                   <span style={sigStyle(riskSig)}>{riskSig}</span>
                   {riskForm.legalThreshold==="Y"&&<span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
@@ -2231,7 +2258,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       d("Impact",    prev.impact,    withTs.impact,    v=>v&&v.slice(0,60));
       d("Condition", prev.condition, withTs.condition);
       if(prev.severity!==withTs.severity||prev.probability!==withTs.probability)
-        f.push({k:"Score",from:`C${prev.severity||"?"}×P${prev.probability||"?"}`,to:`C${withTs.severity}×P${withTs.probability}`});
+        f.push({k:"Risk score",from:`C${prev.severity||"?"}×P${prev.probability||"?"}`,to:`C${withTs.severity}×P${withTs.probability}`});
       d("Status",          prev.status,         withTs.status);
       d("Legal threshold", prev.legalThreshold, withTs.legalThreshold);
       d("Control",  prev.control,  withTs.control,  v=>v&&v.slice(0,50));
@@ -2242,7 +2269,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       {k:"Phase",     v:withTs.phase},
       {k:"Area",      v:withTs.area},
       {k:"Condition", v:withTs.condition},
-      {k:"Score",     v:`C${withTs.severity}×P${withTs.probability}`},
+      {k:"Risk score", v:`C${withTs.severity}×P${withTs.probability}`},
     ];
     onChange({ ...project, aspects:updated,
                changelog:logChange(isEdit?"Edited aspect":"Added aspect",
@@ -2470,7 +2497,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <PlainTH>Cond.</PlainTH>
           <PlainTH>Abnormal</PlainTH>
           <STH col="impact" label="Impact / Receptor"/>
-          <STH col="score" label="Score"/>
+          <STH col="score" label="Risk score"/>
           <STH col="sig" label="Significance"/>
           <STH col="status" label="Status"/>
           <STH col="createdAt" label="Created"/>
@@ -2518,7 +2545,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                   {a.receptors && <div style={{ fontFamily:T.mono, fontSize:10, color:T.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.receptors}</div>}
                 </td>
                 <td style={{ padding:"9px 12px", textAlign:"center" }}>
-                  <span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score!==null?score:"—"}</span>
+                  {score !== null
+                    ? <span style={{ fontFamily:T.mono, fontWeight:700, fontSize:13,
+                        color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>{score}</span>
+                    : <span style={{ color:T.faint }}>—</span>}
                 </td>
                 <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>
@@ -3118,14 +3148,18 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         );
 
         // ─── Risk matrix data + rendering ─────────────────────────────────────────
-        const CON_LABELS  = { 1:"Negligible", 2:"Minor", 3:"Moderate", 4:"Major", 5:"Catastrophic" };
-        const PROB_LABELS = { 1:"Very unlikely|(< 1%)", 2:"Unlikely|(1–5%)", 3:"Possible|(5–25%)", 4:"Likely|(25–50%)", 5:"Very likely|(> 50%)" };
+        const CON_LABELS  = { 1:"C1\nNegligible", 2:"C2\nMinor", 3:"C3\nModerate", 4:"C4\nMajor", 5:"C5\nHuge" };
+        const PROB_LABELS = { 1:"P1\nVery unlikely|(0–1%)", 2:"P2\nUnlikely|(1–5%)", 3:"P3\nLess likely|(5–25%)", 4:"P4\nLikely|(25–50%)", 5:"P5\nVery Likely|(50–100%)" };
 
         const sigCell = (sv, pb) => {
-          const r = sv*pb;
-          if (r >= 13) return { bg:"#FFEBEE", bd:"#EF9A9A", zone:"SIGNIFICANT" };
-          if (r >= 8)  return { bg:"#FFF8E1", bd:"#FFE082", zone:"WATCH"       };
-          return             { bg:"#E8F5E9", bd:"#A5D6A7", zone:"Low"          };
+          const r = sv * pb;
+          // Exact matrix bands matching image:
+          //   Red   (≥12): C3×P4, C3×P5, C4×P3..P5, C5×P3..P5
+          //   Yellow(WATCH): score 6–11 OR score≤5 with C≥4
+          //   Green (Low):  score≤5 AND C≤3
+          if (r >= 12)           return { bg:"#FFCDD2", bd:"#E57373", zone:"SIGNIFICANT" };
+          if (r <= 5 && sv <= 3) return { bg:"#C8E6C9", bd:"#81C784", zone:"Low"         };
+          return                         { bg:"#FFF9C4", bd:"#F9A825", zone:"WATCH"       };
         };
         const zoneTextC = { SIGNIFICANT:T.redBd, WATCH:T.amberBd, Low:T.greenBd };
 
@@ -3169,7 +3203,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <div>
             {/* ══ Risk matrix ══════════════════════════════════════════════════════════ */}
             <MatrixHeader isFirst title="Environmental risk matrix"
-              subtitle="Consequence × Probability per NORSOK S-003 / ISO 14001 · R ≥ 13 = SIGNIFICANT · R 8–12 = WATCH · R ≤ 7 = Low"/>
+              subtitle="Consequence × Probability · Score ≥ 12 = Significant · Score 6–11 or C≥4 = Watch · Score ≤ 5 and C≤3 = Low"/>
 
             {aspects.length === 0
               ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
@@ -3181,7 +3215,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                   <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
                     <YAxis title="Probability of occurrence →" labels={PROB_LABELS}/>
                     <div>
-                      <XAxis labels={CON_LABELS} footerLabel="Consequence / severity →"/>
+                      <XAxis labels={CON_LABELS} footerLabel="Consequence →"/>
                       {[5,4,3,2,1].map(pb => (
                         <div key={pb} style={{ display:"flex" }}>
                           {[1,2,3,4,5].map(sv => {
@@ -3207,7 +3241,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                                               :                            "3px solid "+T.red;
                                   return (
                                     <div key={i}
-                                      title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nConsequence: "+a.severity+" · Probability: "+a.probability+" · Score: "+sv*pb}
+                                      title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nConsequence: C"+a.severity+" · Probability: P"+a.probability+" · Risk score: "+sv*pb}
                                       onClick={()=>setEditAspect(a)}
                                       style={{ width:18, height:18, borderRadius:"50%",
                                                background:fill, border:bdr,
