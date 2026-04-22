@@ -606,19 +606,27 @@ function calcScore({ severity, probability }) {
   if (!severity || !probability) return null;
   return severity * probability;
 }
+// Exact cell-by-cell colour from matrix image (user confirmed):
+//   Red:    C5×any | C4×P4 | C4×P5 | C3×P5
+//   Green:  C1×any | C2×P1 | C2×P2 | C3×P1
+//   Yellow: everything else
+function matrixZone(c, p) {
+  if (c === 5) return "SIGNIFICANT";
+  if (c === 4 && p >= 4) return "SIGNIFICANT";
+  if (c === 3 && p === 5) return "SIGNIFICANT";
+  if (c === 1) return "Low";
+  if (c === 2 && p <= 2) return "Low";
+  if (c === 3 && p === 1) return "Low";
+  return "WATCH";
+}
 function calcSig(a) {
   const score = calcScore(a);
   if (score === null) return null;
-  // Legal/stakeholder override always → SIGNIFICANT
   if (a.legalThreshold === "Y" || a.stakeholderConcern === "Y") return "SIGNIFICANT";
-  // Matrix colour bands (from image):
-  //   Red   (SIGNIFICANT): score ≥ 12
-  //   Yellow (WATCH):      score 6–11, OR score ≤ 5 with consequence ≥ 4
-  //   Green  (Low):        score ≤ 5 AND consequence ≤ 3
-  const c = parseInt(a.severity) || 0;
-  if (score >= 12) return "SIGNIFICANT";
-  if (score <= 5 && c <= 3) return "Low";
-  return "WATCH";
+  const c = Math.min(5, Math.max(1, parseInt(a.severity)   || 0));
+  const p = Math.min(5, Math.max(1, parseInt(a.probability) || 0));
+  if (!c || !p) return null;
+  return matrixZone(c, p);
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
 function snapKg(phase) {
@@ -670,7 +678,7 @@ function inferOppType(oppText) {
 // ── Templates ─────────────────────────────────────────────────────────────────
 const emptyAspect = () => ({
   phase:"", area:"", activity:"", aspect:"", condition:"Normal",
-  isAbnormal:false, abnormalType:"",
+  isAbnormal:false, abnormalType:"", abnormalDesc:"",
   impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
   severity:3, probability:3, duration:"Temporary (<1yr)",
   legalThreshold:"N", stakeholderConcern:"N",
@@ -900,20 +908,29 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <Fld label="Specific activity" wide><input value={f.activity} onChange={e=>set("activity",e.target.value)} placeholder="Specific activity giving rise to the aspect" style={iw}/></Fld>
           <Fld label="Environmental aspect" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust generation (PM10/PM2.5)" style={iw}/></Fld>
           <Fld label="Condition"><select value={f.condition} onChange={e=>set("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
-          <Fld label="Abnormal condition" wide>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom: f.isAbnormal ? 6 : 0 }}>
+          <Fld label="" wide>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer",
+              padding:"6px 10px", borderRadius:6,
+              border:"1px solid " + (f.isAbnormal ? "var(--amber-bd)" : "var(--border)"),
+              background: f.isAbnormal ? "var(--amber-bg)" : "transparent" }}>
               <input type="checkbox" checked={!!f.isAbnormal}
-                onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) set("abnormalType",""); }}
-                style={{ width:14, height:14, accentColor:"var(--amber)", cursor:"pointer" }}/>
-              <span style={{ fontSize:12, color: f.isAbnormal ? "var(--amber)" : "var(--muted)", fontWeight: f.isAbnormal ? 600 : 400 }}>
-                Abnormal condition applies
+                onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) { set("abnormalType",""); set("abnormalDesc",""); } }}
+                style={{ width:15, height:15, accentColor:"var(--amber)", cursor:"pointer", flexShrink:0 }}/>
+              <span style={{ fontSize:12, fontWeight:600, color: f.isAbnormal ? "var(--amber)" : "var(--muted)" }}>
+                Abnormal condition
               </span>
             </label>
             {f.isAbnormal && (
-              <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)} style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
-                <option value="">— select type —</option>
-                {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
-              </select>
+              <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
+                <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)}
+                  style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
+                  <option value="">— select type —</option>
+                  {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
+                </select>
+                <textarea value={f.abnormalDesc||""} onChange={e=>set("abnormalDesc",e.target.value)}
+                  rows={2} placeholder="Describe the abnormal condition…"
+                  style={{ ...iw, resize:"vertical", borderColor:"var(--amber-bd)", background:"var(--amber-bg)" }}/>
+              </div>
             )}
           </Fld>
           <Fld label="Receptors affected"><input value={f.receptors} onChange={e=>set("receptors",e.target.value)} placeholder="e.g. Air, Human health, Ecology" style={iw}/></Fld>
@@ -2104,29 +2121,50 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             <Card style={{ marginBottom:"1rem" }} accent={T.red}>
               <SectionLabel>Activity details</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-                <Fld label="Phase"><select value={riskForm.phase} onChange={e=>setRF("phase",e.target.value)} style={iw}><option value="">Select</option>{PHASES.map(p=><option key={p}>{p}</option>)}</select></Fld>
+                {/* Phase — multi-select */}
+                <Fld label="Phase (select one or more)" wide>
+                  <select multiple value={(riskForm.phase||"").split(",").filter(Boolean)}
+                    onChange={e => {
+                      const selected = Array.from(e.target.selectedOptions, o => o.value);
+                      setRF("phase", selected.join(","));
+                    }}
+                    style={{ ...iw, height:120, resize:"none" }}>
+                    {PHASES.map(p=><option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <p style={{ fontFamily:"var(--mono,monospace)", fontSize:9, color:"var(--faint)", margin:"3px 0 0" }}>
+                    Hold Ctrl / Cmd to select multiple
+                  </p>
+                </Fld>
                 <Fld label="Activity area"><input value={riskForm.area} onChange={e=>setRF("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-                <Fld label="Specific activity" wide><input value={riskForm.activity} onChange={e=>setRF("activity",e.target.value)} style={iw}/></Fld>
                 <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
-                <Fld label="Condition"><select value={riskForm.condition} onChange={e=>setRF("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
-                <Fld label="Abnormal condition" wide>
-                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom: riskForm.isAbnormal ? 6 : 0 }}>
+                <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
+                {/* Abnormal condition */}
+                <Fld label="" wide>
+                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer",
+                    padding:"6px 10px", borderRadius:6,
+                    border:"1px solid " + (riskForm.isAbnormal ? "var(--amber-bd)" : "var(--border)"),
+                    background: riskForm.isAbnormal ? "var(--amber-bg)" : "transparent" }}>
                     <input type="checkbox" checked={!!riskForm.isAbnormal}
-                      onChange={e => { setRF("isAbnormal", e.target.checked); if (!e.target.checked) setRF("abnormalType",""); }}
-                      style={{ width:14, height:14, accentColor:"var(--amber)", cursor:"pointer" }}/>
-                    <span style={{ fontSize:12, color: riskForm.isAbnormal ? "var(--amber)" : "var(--muted)", fontWeight: riskForm.isAbnormal ? 600 : 400 }}>
-                      Abnormal condition applies
+                      onChange={e => { setRF("isAbnormal", e.target.checked); if (!e.target.checked) { setRF("abnormalType",""); setRF("abnormalDesc",""); } }}
+                      style={{ width:15, height:15, accentColor:"var(--amber)", cursor:"pointer", flexShrink:0 }}/>
+                    <span style={{ fontSize:12, fontWeight:600,
+                      color: riskForm.isAbnormal ? "var(--amber)" : "var(--muted)" }}>
+                      Abnormal condition
                     </span>
                   </label>
                   {riskForm.isAbnormal && (
-                    <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)} style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
-                      <option value="">— select type —</option>
-                      {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
-                    </select>
+                    <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
+                      <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)}
+                        style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
+                        <option value="">— select type —</option>
+                        {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                      <textarea value={riskForm.abnormalDesc||""} onChange={e=>setRF("abnormalDesc",e.target.value)}
+                        rows={2} placeholder="Describe the abnormal condition…"
+                        style={{ ...iw, resize:"vertical", borderColor:"var(--amber-bd)", background:"var(--amber-bg)" }}/>
+                    </div>
                   )}
                 </Fld>
-                <Fld label="Receptors affected"><input value={riskForm.receptors} onChange={e=>setRF("receptors",e.target.value)} placeholder="e.g. Air, Human health" style={iw}/></Fld>
-                <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
               </div>
             </Card>
             <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
@@ -2537,6 +2575,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                         background:"var(--amber-bg)", color:"var(--amber)", border:"1px solid var(--amber-bd)",
                         display:"inline-block", marginBottom:2 }}>Abnormal</span>
                       {a.abnormalType && <div style={{ fontFamily:"var(--mono,monospace)", fontSize:9, color:"var(--muted)", marginTop:2 }}>{a.abnormalType}</div>}
+                      {a.abnormalDesc && <div style={{ fontSize:9, color:"var(--faint)", marginTop:1, maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.abnormalDesc}>{a.abnormalDesc}</div>}
                     </div>
                   )}
                 </td>
@@ -3063,7 +3102,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
         // ─── Shared sub-components ────────────────────────────────────────────────
         // Axis descriptor column (left side, shared layout)
-        const YAxis = ({ title, labels }) => (
+        const YAxis = ({ title, labels, order="desc" }) => (
           <div style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
             {/* Rotated title */}
             <div style={{ width:20, marginTop:XLAB, height:CELL*5,
@@ -3075,13 +3114,13 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             </div>
             {/* Row labels */}
             <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
-              {[5,4,3,2,1].map(v => (
+              {(order==="asc" ? [1,2,3,4,5] : [5,4,3,2,1]).map(v => (
                 <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
                                        justifyContent:"flex-end", paddingRight:10 }}>
                   <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{v}</div>
-                    {(labels[v]||"").split("|").map((ln,i) => (
-                      <div key={i} style={{ fontSize:9, color:T.faint, lineHeight:1.35 }}>{ln}</div>
+                    {(labels[v]||"").split("\n").map((ln,i) => (
+                      <div key={i} style={{ fontSize: i===0?11:9, fontWeight:i===0?700:400,
+                        color:i===0?T.text:T.faint, lineHeight:1.35 }}>{ln}</div>
                     ))}
                   </div>
                 </div>
@@ -3096,8 +3135,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             <div style={{ display:"flex", height:XLAB, alignItems:"flex-end", paddingBottom:6 }}>
               {[1,2,3,4,5].map(v => (
                 <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{v}</div>
-                  <div style={{ fontSize:9, color:T.faint, lineHeight:1.35 }}>{labels[v]||""}</div>
+                  {(labels[v]||"").split("\n").map((ln,i) => (
+                    <div key={i} style={{ fontSize:i===0?11:9, fontWeight:i===0?700:400,
+                      color:i===0?T.text:T.faint, lineHeight:1.35 }}>{ln}</div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -3152,14 +3193,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         const PROB_LABELS = { 1:"P1\nVery unlikely|(0–1%)", 2:"P2\nUnlikely|(1–5%)", 3:"P3\nLess likely|(5–25%)", 4:"P4\nLikely|(25–50%)", 5:"P5\nVery Likely|(50–100%)" };
 
         const sigCell = (sv, pb) => {
-          const r = sv * pb;
-          // Exact matrix bands matching image:
-          //   Red   (≥12): C3×P4, C3×P5, C4×P3..P5, C5×P3..P5
-          //   Yellow(WATCH): score 6–11 OR score≤5 with C≥4
-          //   Green (Low):  score≤5 AND C≤3
-          if (r >= 12)           return { bg:"#FFCDD2", bd:"#E57373", zone:"SIGNIFICANT" };
-          if (r <= 5 && sv <= 3) return { bg:"#C8E6C9", bd:"#81C784", zone:"Low"         };
-          return                         { bg:"#FFF9C4", bd:"#F9A825", zone:"WATCH"       };
+          const z = matrixZone(sv, pb);
+          if (z === "SIGNIFICANT") return { bg:"#FFCDD2", bd:"#E57373", zone:"SIGNIFICANT" };
+          if (z === "Low")         return { bg:"#C8E6C9", bd:"#81C784", zone:"Low"         };
+          return                           { bg:"#FFF9C4", bd:"#F9A825", zone:"WATCH"       };
         };
         const zoneTextC = { SIGNIFICANT:T.redBd, WATCH:T.amberBd, Low:T.greenBd };
 
@@ -3203,7 +3240,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <div>
             {/* ══ Risk matrix ══════════════════════════════════════════════════════════ */}
             <MatrixHeader isFirst title="Environmental risk matrix"
-              subtitle="Consequence × Probability · Score ≥ 12 = Significant · Score 6–11 or C≥4 = Watch · Score ≤ 5 and C≤3 = Low"/>
+              subtitle="Consequence (C1–C5) × Probability (P1–P5) · Red = Significant · Yellow = Watch · Green = Low"/>
 
             {aspects.length === 0
               ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
@@ -3213,12 +3250,12 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                 </div>
               : <>
                   <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
-                    <YAxis title="Probability of occurrence →" labels={PROB_LABELS}/>
+                    <YAxis title="Consequence →" labels={CON_LABELS} order="asc"/>
                     <div>
-                      <XAxis labels={CON_LABELS} footerLabel="Consequence →"/>
-                      {[5,4,3,2,1].map(pb => (
-                        <div key={pb} style={{ display:"flex" }}>
-                          {[1,2,3,4,5].map(sv => {
+                      <XAxis labels={PROB_LABELS} footerLabel="Probability of occurrence →"/>
+                      {[1,2,3,4,5].map(sv => (
+                        <div key={sv} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(pb => {
                             const c     = sigCell(sv,pb);
                             const items = riskGrid[sv+","+pb]||[];
                             return (
