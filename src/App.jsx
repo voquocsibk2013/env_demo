@@ -318,7 +318,7 @@ const RISK_CATEGORIES = [
       { id:'air_01', sub: 'Plant stack / vent emissions', hint: 'Integrated combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
       { id:'air_02', sub: 'Diesel engine emissions', hint: 'Standalone generators, temporary construction machinery', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
       { id:'air_03', sub: 'Flaring volumes & composition', hint: 'Commissioning purge, emergency relief, production upsets', aspect: 'Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability' },
-      { id:'air_04', sub: 'Fugitive emissions', hint: 'HCs, VOCs from flanges, valve stems, loading operations, tank venting, HVAC', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
+      { id:'air_04', sub: 'Fugitive emissions', hint: 'HCs, VOCs from flanges, valve stems, loading operations, tank venting, HVAC, from loosen seals/bolt caused by vibration', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
       { id:'air_05', sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
       { id:'air_06', sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
       { id:'air_07', sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
@@ -2335,15 +2335,24 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     setEditOpp(null);
   };
   const deleteAspect = (a) => {
+    if (!window.confirm(`Delete aspect ${a.ref||""}${a.aspect ? " — \""+a.aspect.slice(0,50)+"\"" : ""}?
+
+This cannot be undone.`)) return;
     onChange({ ...project, aspects:aspects.filter(x=>x.id!==a.id),
                changelog:logChange("Deleted aspect", `${a.ref} — ${(a.aspect||"").slice(0,60)}`,[{k:"Phase",v:a.phase},{k:"Area",v:a.area},{k:"Significance",v:calcSig(a)||"—"}]) });
   };
   const deleteOpp = (o) => {
+    if (!window.confirm(`Delete opportunity ${o.ref||""}${(o.type||o.description) ? " — \""+((o.type||o.description)||"").slice(0,50)+"\"" : ""}?
+
+This cannot be undone.`)) return;
     onChange({ ...project, opportunities:opps.filter(x=>x.id!==o.id),
                changelog:logChange("Deleted opportunity", `${o.ref} — ${(o.type||o.description||"").slice(0,60)}`,[{k:"Score",v:String(calcOppScore(o))}]) });
   };
 
   const bulkDeleteAspects = () => {
+    if (!window.confirm(`Delete ${selectedAsp.size} selected aspect${selectedAsp.size!==1?"s":""}?
+
+This cannot be undone.`)) return;
     const kept = aspects.filter(a=>!selectedAsp.has(a.id));
     const log  = logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed",[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
     onChange({ ...project, aspects:kept, changelog:[...(project.changelog||[]), log] });
@@ -2356,6 +2365,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     setSelectedAsp(new Set());
   };
   const bulkDeleteOpps = () => {
+    if (!window.confirm(`Delete ${selectedOpp.size} selected opportunit${selectedOpp.size!==1?"ies":"y"}?
+
+This cannot be undone.`)) return;
     const kept = opps.filter(o=>!selectedOpp.has(o.id));
     const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed",[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
     onChange({ ...project, opps:kept, changelog:[...(project.changelog||[]), log] });
@@ -2398,6 +2410,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else if(aspSort.col==="category"){va=getCategoryLabel(a)||"";vb=getCategoryLabel(b)||"";}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
     return r;
@@ -2407,6 +2420,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     return [...dashAspects].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else if(aspSort.col==="category"){va=getCategoryLabel(a)||"";vb=getCategoryLabel(b)||"";}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
   })();
@@ -2451,6 +2465,17 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
   // Colour helper for rows
   const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
+  const getCategoryLabel = (a) => {
+    if (a._screeningId) {
+      const found = RISK_CATEGORIES.find(c => c.items.some(i => i.id === a._screeningId));
+      if (found) return found.cat;
+    }
+    if (a._color) {
+      const found = RISK_CATEGORIES.find(c => c.color === a._color);
+      if (found) return found.cat;
+    }
+    return null;
+  };
   // Date display helper
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—";
 
@@ -2513,8 +2538,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
           <STH col="aspect" label="Aspect"/>
+          <STH col="category" label="Category"/>
           <PlainTH>Abnormal</PlainTH>
-          <STH col="impact" label="Impact / Receptor"/>
           <STH col="score" label="Risk score"/>
           <STH col="sig" label="Significance"/>
           <STH col="status" label="Status"/>
@@ -2547,6 +2572,20 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                                 fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
                   {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
                 </td>
+                <td style={{ padding:"9px 12px", maxWidth:160 }}>
+                  {(() => {
+                    const cat = getCategoryLabel(a);
+                    const rc2 = rowColor(a);
+                    if (!cat) return <span style={{ color:T.faint }}>—</span>;
+                    const shortCat = cat.replace(/^\d+\.\s*/, "");
+                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                      background: rc2 ? rc2.bg : T.slateBg,
+                      color: rc2 ? rc2.head : T.slate,
+                      border: "1px solid " + (rc2 ? rc2.border : T.border),
+                      display:"inline-block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                      maxWidth:150 }} title={cat}>{shortCat}</span>;
+                  })()}
+                </td>
                 <td style={{ padding:"9px 12px" }}>
                   {a.isAbnormal && (
                     <div>
@@ -2557,9 +2596,6 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                       {a.abnormalDesc && <div style={{ fontSize:9, color:"var(--faint)", marginTop:1, maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.abnormalDesc}>{a.abnormalDesc}</div>}
                     </div>
                   )}
-                </td>
-                <td style={{ padding:"9px 12px", maxWidth:200 }}>
-                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.muted }} title={a.impact}>{a.impact||"—"}</div>
                 </td>
                 <td style={{ padding:"9px 12px", textAlign:"center" }}>
                   {score !== null
@@ -2579,7 +2615,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>x</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)} title="Delete aspect">🗑</Btn>
                 </td>
               </tr>
             );
@@ -2663,7 +2699,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)} title="Delete opportunity">🗑</Btn>
                 </td>
               </tr>
             );
