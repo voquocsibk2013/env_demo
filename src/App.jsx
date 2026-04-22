@@ -4818,15 +4818,60 @@ function FootprintTab({ project, onChange }) {
                 }
                 const ROW_COL_W = 46; // px width of row-number column
                 return (
-                  <div style={{ overflowX: "auto" }}>
-                    <div style={{ padding: "5px 14px 5px", background: T.surface2,
-                      borderBottom: "1px solid " + T.border, borderTop: "1px solid " + T.border,
+                  <div>
+                    {/* ── Field tag bar — click a tag to jump to its column ── */}
+                    <div style={{ padding: "8px 14px", borderTop: "1px solid " + T.border,
+                      borderBottom: "1px solid " + T.border, background: T.surface2,
+                      display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      {fields.map(f => {
+                        const col   = sm.mapping[f.key];
+                        const isLit = colHighlight === (sm.name + "|" + col);
+                        const miss  = f.req && !col;
+                        return (
+                          <button key={f.key}
+                            onClick={() => highlightCol(sm.name, col)}
+                            disabled={!col}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                              padding: "5px 12px 5px 8px", borderRadius: 20,
+                              cursor: col ? "pointer" : "default",
+                              userSelect: "none", border: "2px solid " + (isLit ? f.color : col ? f.bd : miss ? T.redBd : T.border),
+                              background: isLit ? f.color : col ? f.bg : T.surface,
+                              transition: "all 0.15s", fontFamily: T.sans, minHeight: 30 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                              background: isLit ? "#fff" : col ? f.color : miss ? T.red : T.faint }} />
+                            <span style={{ fontSize: 11, fontWeight: 700,
+                              color: isLit ? "#fff" : col ? f.color : miss ? T.red : T.faint }}>
+                              {f.label}
+                            </span>
+                            {miss && <span style={{ fontSize: 9, color: T.red }}>*</span>}
+                            {col && (
+                              <>
+                                <span style={{ fontSize: 10, fontFamily: T.mono,
+                                  color: isLit ? "#ffffffcc" : f.color, opacity: 0.85,
+                                  maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  → {col}
+                                </span>
+                                <span onClick={e => { e.stopPropagation(); setMapping(sm.name, f.key, ""); }}
+                                  style={{ fontSize: 14, color: isLit ? "#fff" : f.color, cursor: "pointer",
+                                    paddingLeft: 2, lineHeight: 1, opacity: 0.7 }}>×</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      })}
+                      <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 10,
+                        color: T.teal, fontWeight: 600 }}>Header: row {hIdx + 1}</span>
+                    </div>
+
+                    {/* ── Table (row picker + dropdowns + data) ── */}
+                    <div style={{ overflowX: "auto" }}>
+                    <div style={{ padding: "4px 14px", background: T.surface2,
+                      borderBottom: "1px solid " + T.border,
                       display: "flex", alignItems: "center", gap: 12 }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint,
-                        textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Click row № to set header · Click column title to jump · Use dropdowns to assign fields
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.faint,
+                        letterSpacing: "0.07em" }}>
+                        Click row № to set header · Click column title to highlight · Use dropdowns to assign
                       </span>
-                      <span style={{ fontSize: 11, color: T.teal, fontWeight: 600 }}>Header: row {hIdx + 1}</span>
                     </div>
                     <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
                       <thead>
@@ -4963,6 +5008,7 @@ function FootprintTab({ project, onChange }) {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 );
               })()}
