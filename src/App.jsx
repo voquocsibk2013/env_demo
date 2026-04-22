@@ -908,28 +908,21 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <Fld label="Specific activity" wide><input value={f.activity} onChange={e=>set("activity",e.target.value)} placeholder="Specific activity giving rise to the aspect" style={iw}/></Fld>
           <Fld label="Environmental aspect" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust generation (PM10/PM2.5)" style={iw}/></Fld>
           <Fld label="Condition"><select value={f.condition} onChange={e=>set("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
-          <Fld label="" wide>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer",
-              padding:"6px 10px", borderRadius:6,
-              border:"1px solid " + (f.isAbnormal ? "var(--amber-bd)" : "var(--border)"),
-              background: f.isAbnormal ? "var(--amber-bg)" : "transparent" }}>
+          <Fld label="Abnormal condition" wide>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
               <input type="checkbox" checked={!!f.isAbnormal}
                 onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) { set("abnormalType",""); set("abnormalDesc",""); } }}
-                style={{ width:15, height:15, accentColor:"var(--amber)", cursor:"pointer", flexShrink:0 }}/>
-              <span style={{ fontSize:12, fontWeight:600, color: f.isAbnormal ? "var(--amber)" : "var(--muted)" }}>
-                Abnormal condition
-              </span>
+                style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
+              <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
             </label>
             {f.isAbnormal && (
-              <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
-                <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)}
-                  style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
+              <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:5 }}>
+                <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)} style={iw}>
                   <option value="">— select type —</option>
                   {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
                 </select>
                 <textarea value={f.abnormalDesc||""} onChange={e=>set("abnormalDesc",e.target.value)}
-                  rows={2} placeholder="Describe the abnormal condition…"
-                  style={{ ...iw, resize:"vertical", borderColor:"var(--amber-bd)", background:"var(--amber-bg)" }}/>
+                  rows={2} placeholder="Describe the abnormal condition…" style={{ ...iw, resize:"vertical" }}/>
               </div>
             )}
           </Fld>
@@ -959,14 +952,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
                 color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
                 {score}
               </strong>
-              <span style={{ marginLeft:6, fontSize:10,
-                padding:"2px 8px", borderRadius:4, fontFamily:T.sans,
-                background: sig==="SIGNIFICANT" ? T.redBg : sig==="WATCH" ? T.amberBg : T.greenBg,
-                color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green,
-                border: "1px solid " + (sig==="SIGNIFICANT" ? T.redBd : sig==="WATCH" ? T.amberBd : T.greenBd)
-              }}>
-                = C{f.severity||"?"} × P{f.probability||"?"}
-              </span>
+
             </span>
             <span style={sigStyle(sig)}>{sig}</span>
             {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
@@ -2121,47 +2107,49 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
             <Card style={{ marginBottom:"1rem" }} accent={T.red}>
               <SectionLabel>Activity details</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-                {/* Phase — multi-select */}
-                <Fld label="Phase (select one or more)" wide>
-                  <select multiple value={(riskForm.phase||"").split(",").filter(Boolean)}
-                    onChange={e => {
-                      const selected = Array.from(e.target.selectedOptions, o => o.value);
-                      setRF("phase", selected.join(","));
-                    }}
-                    style={{ ...iw, height:120, resize:"none" }}>
-                    {PHASES.map(p=><option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <p style={{ fontFamily:"var(--mono,monospace)", fontSize:9, color:"var(--faint)", margin:"3px 0 0" }}>
-                    Hold Ctrl / Cmd to select multiple
-                  </p>
+                {/* Phase — toggle pill buttons, left column */}
+                <Fld label="Phase">
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                    {PHASES.map(p => {
+                      const sel = (riskForm.phase||"").split(",").filter(Boolean);
+                      const active = sel.includes(p);
+                      return (
+                        <button key={p} type="button"
+                          onClick={() => {
+                            const cur = (riskForm.phase||"").split(",").filter(Boolean);
+                            const next = active ? cur.filter(x=>x!==p) : [...cur, p];
+                            setRF("phase", next.join(","));
+                          }}
+                          style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+                            cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
+                            background: active ? T.tealBg : "transparent",
+                            color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
+                            fontFamily:"var(--sans,system-ui)" }}>
+                          {p}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Fld>
                 <Fld label="Activity area"><input value={riskForm.area} onChange={e=>setRF("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
                 <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
-                <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
-                {/* Abnormal condition */}
-                <Fld label="" wide>
-                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer",
-                    padding:"6px 10px", borderRadius:6,
-                    border:"1px solid " + (riskForm.isAbnormal ? "var(--amber-bd)" : "var(--border)"),
-                    background: riskForm.isAbnormal ? "var(--amber-bg)" : "transparent" }}>
+                <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
+                {/* Abnormal condition — plain, no colour coding */}
+                <Fld label="Abnormal condition" wide>
+                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
                     <input type="checkbox" checked={!!riskForm.isAbnormal}
                       onChange={e => { setRF("isAbnormal", e.target.checked); if (!e.target.checked) { setRF("abnormalType",""); setRF("abnormalDesc",""); } }}
-                      style={{ width:15, height:15, accentColor:"var(--amber)", cursor:"pointer", flexShrink:0 }}/>
-                    <span style={{ fontSize:12, fontWeight:600,
-                      color: riskForm.isAbnormal ? "var(--amber)" : "var(--muted)" }}>
-                      Abnormal condition
-                    </span>
+                      style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
+                    <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
                   </label>
                   {riskForm.isAbnormal && (
-                    <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
-                      <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)}
-                        style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
+                    <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:5 }}>
+                      <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)} style={iw}>
                         <option value="">— select type —</option>
                         {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
                       </select>
                       <textarea value={riskForm.abnormalDesc||""} onChange={e=>setRF("abnormalDesc",e.target.value)}
-                        rows={2} placeholder="Describe the abnormal condition…"
-                        style={{ ...iw, resize:"vertical", borderColor:"var(--amber-bd)", background:"var(--amber-bg)" }}/>
+                        rows={2} placeholder="Describe the abnormal condition…" style={{ ...iw, resize:"vertical" }}/>
                     </div>
                   )}
                 </Fld>
@@ -2189,14 +2177,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                       color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="WATCH" ? T.amber : T.green }}>
                       {riskScore}
                     </strong>
-                    <span style={{ marginLeft:6, fontSize:10,
-                      padding:"2px 8px", borderRadius:4, fontFamily:T.sans,
-                      background: riskSig==="SIGNIFICANT" ? T.redBg : riskSig==="WATCH" ? T.amberBg : T.greenBg,
-                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="WATCH" ? T.amber : T.green,
-                      border: "1px solid " + (riskSig==="SIGNIFICANT" ? T.redBd : riskSig==="WATCH" ? T.amberBd : T.greenBd)
-                    }}>
-                      = C{riskForm.severity||"?"} × P{riskForm.probability||"?"}
-                    </span>
+
                   </span>
                   <span style={sigStyle(riskSig)}>{riskSig}</span>
                   {riskForm.legalThreshold==="Y"&&<span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
