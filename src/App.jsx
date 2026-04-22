@@ -2513,7 +2513,6 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
           <STH col="aspect" label="Aspect"/>
-          <PlainTH>Cond.</PlainTH>
           <PlainTH>Abnormal</PlainTH>
           <STH col="impact" label="Impact / Receptor"/>
           <STH col="score" label="Risk score"/>
@@ -2548,7 +2547,6 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                                 fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
                   {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
                 </td>
-                <td style={{ padding:"9px 12px" }}>{a.condition && <span style={condStyle(a.condition)}>{a.condition}</span>}</td>
                 <td style={{ padding:"9px 12px" }}>
                   {a.isAbnormal && (
                     <div>
@@ -2562,7 +2560,6 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                 </td>
                 <td style={{ padding:"9px 12px", maxWidth:200 }}>
                   <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.muted }} title={a.impact}>{a.impact||"—"}</div>
-                  {a.receptors && <div style={{ fontFamily:T.mono, fontSize:10, color:T.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.receptors}</div>}
                 </td>
                 <td style={{ padding:"9px 12px", textAlign:"center" }}>
                   {score !== null
@@ -3242,34 +3239,43 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                             return (
                               <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
                                                      background:c.bg, border:"1px solid "+c.bd,
-                                                     display:"flex", flexWrap:"wrap",
-                                                     alignContent:"center", justifyContent:"center",
-                                                     gap:4, padding:5, boxSizing:"border-box" }}>
-                                {items.length===0 && (
-                                  <span style={{ fontSize:10, fontWeight:700,
-                                                 color:zoneTextC[c.zone], opacity:0.5 }}>{sv*pb}</span>
-                                )}
-                                {items.map((a,i) => {
-                                  const sig = calcSig(a);
-                                  const fill  = sig==="SIGNIFICANT"?T.redBg   :sig==="WATCH"?T.amberBg  :T.greenBg;
-                                  const fillC = sig==="SIGNIFICANT"?T.red     :sig==="WATCH"?T.amber    :T.green;
-                                  const fillBd= sig==="SIGNIFICANT"?T.redBd   :sig==="WATCH"?T.amberBd  :T.greenBd;
-                                  const bdr   = a.status==="Closed"      ?"2px solid "+T.green
-                                              : a.status==="In Progress" ?"2px dashed "+T.amber
-                                              :                            "3px solid "+T.red;
-                                  return (
-                                    <div key={i}
-                                      title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nConsequence: C"+a.severity+" · Probability: P"+a.probability+" · Risk score: "+sv*pb}
-                                      onClick={()=>setEditAspect(a)}
-                                      style={{ width:18, height:18, borderRadius:"50%",
-                                               background:fill, border:bdr,
-                                               cursor:"pointer", flexShrink:0,
-                                               display:"flex", alignItems:"center", justifyContent:"center",
-                                               fontSize:8, fontWeight:700, color:fillC }}>
-                                      {items.length>1&&i===0?items.length:""}
-                                    </div>
-                                  );
-                                })}
+                                                     position:"relative", boxSizing:"border-box" }}>
+                                {/* Score number always in top-left */}
+                                <span style={{ position:"absolute", top:3, left:4,
+                                               fontSize:9, fontWeight:700, lineHeight:1,
+                                               color:zoneTextC[c.zone], opacity:0.6,
+                                               pointerEvents:"none", userSelect:"none" }}>{sv*pb}</span>
+                                {/* Dots centred */}
+                                <div style={{ position:"absolute", inset:0,
+                                              display:"flex", flexWrap:"wrap", gap:3,
+                                              alignContent:"center", justifyContent:"center", padding:"16px 4px 4px" }}>
+                                  {items.map((a,i) => {
+                                    const sig   = calcSig(a);
+                                    // Fill = significance colour (solid)
+                                    const fill  = sig==="SIGNIFICANT"?"#ef5350":sig==="WATCH"?"#fb8c00":"#43a047";
+                                    // Status shown as inner dot pattern
+                                    const statusMark =
+                                        a.status==="Closed"      ? { ring:"#1b5e20", dash:false }
+                                      : a.status==="In Progress" ? { ring:"#e65100", dash:true  }
+                                      :                            { ring:"#b71c1c", dash:false };
+                                    return (
+                                      <div key={i}
+                                        title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+a.severity+"×P"+pb+" = "+sv*pb}
+                                        onClick={()=>setEditAspect(a)}
+                                        style={{ width:20, height:20, borderRadius:"50%",
+                                                 background:fill,
+                                                 border:"3px solid "+statusMark.ring,
+                                                 outline: statusMark.dash ? "2px dashed "+statusMark.ring : "none",
+                                                 outlineOffset:1,
+                                                 cursor:"pointer", flexShrink:0,
+                                                 display:"flex", alignItems:"center", justifyContent:"center",
+                                                 fontSize:8, fontWeight:700, color:"#fff",
+                                                 boxSizing:"border-box" }}>
+                                        {items.length>1&&i===0?items.length:""}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             );
                           })}
@@ -3279,19 +3285,19 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                   </div>
                   <LegendBlock groups={[
                     { title:"Cell colour — risk zone", items:[
-                        { bg:"#FFEBEE", bd:"1px solid #EF9A9A", br:"3px", sw:14, sh:14, label:"SIGNIFICANT", sub:"R ≥ 13" },
-                        { bg:"#FFF8E1", bd:"1px solid #FFE082", br:"3px", sw:14, sh:14, label:"WATCH",        sub:"R 8–12" },
-                        { bg:"#E8F5E9", bd:"1px solid #A5D6A7", br:"3px", sw:14, sh:14, label:"Low",          sub:"R ≤ 7"  },
+                        { bg:"#FFCDD2", bd:"1px solid #E57373", br:"3px", sw:14, sh:14, label:"Significant" },
+                        { bg:"#FFF9C4", bd:"1px solid #F9A825", br:"3px", sw:14, sh:14, label:"Watch"       },
+                        { bg:"#C8E6C9", bd:"1px solid #81C784", br:"3px", sw:14, sh:14, label:"Low"         },
                     ]},
-                    { title:"Dot fill — significance", items:[
-                        { bg:T.redBg,   bd:"2px solid "+T.redBd,   label:"SIGNIFICANT" },
-                        { bg:T.amberBg, bd:"2px solid "+T.amberBd, label:"WATCH"       },
-                        { bg:T.greenBg, bd:"2px solid "+T.greenBd, label:"Low"         },
+                    { title:"Dot — significance (fill colour)", items:[
+                        { bg:"#ef5350", bd:"2px solid #b71c1c", label:"Significant" },
+                        { bg:"#fb8c00", bd:"2px solid #e65100", label:"Watch"       },
+                        { bg:"#43a047", bd:"2px solid #1b5e20", label:"Low"         },
                     ]},
                     { title:"Dot border — management status", items:[
-                        { bg:T.slateBg, bd:"3px solid "+T.red,          label:"Open"        },
-                        { bg:T.slateBg, bd:"2px dashed "+T.amber,       label:"In Progress" },
-                        { bg:T.slateBg, bd:"2px solid "+T.green,        label:"Closed"      },
+                        { bg:"#ef5350", bd:"3px solid #b71c1c",                 label:"Open — solid dark border"   },
+                        { bg:"#fb8c00", bd:"3px solid #e65100", extra:"dashed", label:"In Progress — dashed outline" },
+                        { bg:"#43a047", bd:"3px solid #1b5e20",                 label:"Closed — solid dark border"  },
                     ]},
                   ]}/>
                   {unplotted.length>0 && (
