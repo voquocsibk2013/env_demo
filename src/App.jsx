@@ -4191,33 +4191,7 @@ function detectSheets(wb) {
   return result;
 }
 
-async function aiMapSheet(sheetMeta) {
-  const { name, headers, sampleRows } = sheetMeta;
-  const corList = COR_LOOKUP.map(c => c.code + "(" + c.cat + ")").join(", ");
-  const prompt =
-    "Sheet name: \"" + name + "\"\n" +
-    "Columns: " + JSON.stringify(headers) + "\n" +
-    "Sample rows: " + JSON.stringify(sampleRows.slice(0, 3)) + "\n\n" +
-    "Determine if this is MTO (Material Take-Off) or MEL (Equipment List). " +
-    "Map columns to: desc (item/equip description), mat (material, MTO only), " +
-    "cor (COR/cost code — values look like: " + corList.slice(0, 120) + "...), " +
-    "mhc (module handling code), weight (gross dry weight in kg). " +
-    "Return ONLY JSON: {\"type\":\"MTO\",\"mapping\":{\"desc\":\"ColName\",\"mat\":\"ColName\",\"cor\":\"ColName\",\"mhc\":\"ColName\",\"weight\":\"ColName\"}}. " +
-    "Use null for not found. Use exact column names.";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514", max_tokens: 400,
-      system: "You are a data extraction expert. Return ONLY valid JSON, no markdown, no explanation.",
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-  const d   = await res.json();
-  const txt = ((d.content && d.content[0] && d.content[0].text) || "")
-    .replace(/```json|```/g, "").trim();
-  return JSON.parse(txt);
-}
+
 
 // ── Calculation (works with any column mapping) ───────────────────────────────
 function calcSheets(wb, sheetMetas) {
@@ -4382,9 +4356,7 @@ function FootprintTab({ project, onChange }) {
   const [fileName, setFileName]   = useState(project.footprintFile || "");
   const [sheetMetas, setSheetMetas] = useState(project.footprintMeta || []);
   const [result, setResult]       = useState(project.footprint || null);
-  const [aiLoading, setAiLoading] = useState({});
-  const [suggestions, setSuggestions]     = useState(project.footprintSuggestions || {});
-  const [corLoading, setCorLoading]       = useState({});
+  const [suggestions, setSuggestions] = useState({});
   const [corOverrides, setCorOverrides]   = useState(project.footprintCorOverrides || {});
   const [overrideHistory, setOverrideHistory] = useState([project.footprintCorOverrides || {}]);
   const [historyIdx, setHistoryIdx]           = useState(0);
@@ -4507,23 +4479,7 @@ function FootprintTab({ project, onChange }) {
   const onFile = e => { const f = e.target.files && e.target.files[0]; if (f) { ingestFile(f); e.target.value = ""; } };
   const onDrop = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingestFile(f); };
 
-  // ── AI mapping for one sheet ─────────────────────────────────────────────────
-  const doAiMap = async (sheetName) => {
-    const meta = sheetMetas.find(s => s.name === sheetName);
-    if (!meta) return;
-    setAiLoading(p => ({ ...p, [sheetName]: true }));
-    try {
-      const res = await aiMapSheet(meta);
-      setSheetMetas(prev => prev.map(s => {
-        if (s.name !== sheetName) return s;
-        const type    = (res.type === "MTO" || res.type === "MEL") ? res.type : s.type;
-        const mapping = { ...s.mapping };
-        Object.entries(res.mapping || {}).forEach(([k, v]) => { if (v) mapping[k] = v; });
-        return { ...s, type, mapping, confidence: 1, aiMapped: true };
-      }));
-    } catch (err) { alert("AI mapping failed: " + err.message); }
-    setAiLoading(p => ({ ...p, [sheetName]: false }));
-  };
+
 
   const setMapping = (sheetName, field, value) => {
     setSheetMetas(prev => prev.map(s =>
@@ -4683,31 +4639,6 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── AI COR suggestion ────────────────────────────────────────────────────────
-  const doSuggestCOR = async (code, affectedRows) => {
-    if (suggestions[code] || corLoading[code]) return;
-    setCorLoading(p => ({ ...p, [code]: true }));
-    try {
-      const ex  = affectedRows.slice(0, 3).map(r => r.desc || r.cor).join("; ");
-      const lst = COR_LOOKUP.map(c => c.code + "(" + c.cat + " - " + c.desc + ", EF=" + c.ef + ")").join("\n");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514", max_tokens: 400,
-          system: "Expert in COR codes for oil & gas CO2 footprint. Return ONLY a JSON array of 3 objects: {code,category,description,ef,reason}. No markdown.",
-          messages: [{ role: "user", content: "COR code '" + code + "' used for: \"" + ex + "\". Best 3 from:\n" + lst }]
-        })
-      });
-      const d    = await res.json();
-      const txt  = ((d.content && d.content[0] && d.content[0].text) || "").replace(/```json|```/g, "").trim();
-      const data = JSON.parse(txt);
-      const upd  = { ...suggestions, [code]: Array.isArray(data) ? data : [] };
-      setSuggestions(upd);
-      onChange({ ...project, footprint: result, footprintFile: fileName, footprintSuggestions: upd });
-    } catch (err) {
-      setSuggestions(p => ({ ...p, [code]: [{ code: "—", category: "Error", description: err.message, ef: "—", reason: "" }] }));
-    }
-    setCorLoading(p => ({ ...p, [code]: false }));
-  };
 
   // ── Colour helpers ───────────────────────────────────────────────────────────
   const CC = { Architect:{bg:T.slateBg,c:T.slate,bd:T.slateBd}, Instrument:{bg:T.blueBg,c:T.blue,bd:T.blueBd},
@@ -4838,7 +4769,6 @@ function FootprintTab({ project, onChange }) {
           const fields    = getFields(sm.type);
           const reqFields = fields.filter(f => f.req);
           const mappedReq = reqFields.filter(f => sm.mapping[f.key]).length;
-          const isLoading = !!aiLoading[sm.name];
           const colToKey  = {};
           Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToKey[col] = fk; });
 
@@ -4868,212 +4798,174 @@ function FootprintTab({ project, onChange }) {
                   border: "1px solid " + (mappedReq === reqFields.length ? T.greenBd : mappedReq > 0 ? T.amberBd : T.redBd) }}>
                   {mappedReq}/{reqFields.length} required fields
                 </span>
-                {sm.aiMapped && <span style={{ fontFamily: T.mono, fontSize: 9, color: T.purple, background: T.purpleBg, padding: "2px 8px", borderRadius: 10, border: "1px solid " + T.purpleBd }}>AI mapped</span>}
-                <button onClick={() => doAiMap(sm.name)} disabled={isLoading}
-                  style={{ marginLeft: "auto", padding: "5px 14px", borderRadius: 6, minHeight: 30,
-                    border: "1px solid " + T.purpleBd, background: isLoading ? T.purpleBg : "transparent",
-                    color: T.purple, fontSize: 11, fontWeight: 500, cursor: isLoading ? "not-allowed" : "pointer" }}>
-                  {isLoading ? "AI mapping…" : "✨ Ask AI"}
-                </button>
+
               </div>
 
-              {/* Field assignment grid — large selects, easy to click */}
-              <div style={{ padding: "14px 16px", borderBottom: "1px solid " + T.border,
-                background: T.surface }}>
-                <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint,
-                  textTransform: "uppercase", letterSpacing: "0.09em", margin: "0 0 10px" }}>
-                  Assign columns to fields — then click Calculate
-                </p>
-                <div style={{ display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
-                  {fields.map(f => {
-                    const col    = sm.mapping[f.key];
-                    const isLit  = colHighlight === (sm.name + "|" + col);
-                    const isMiss = f.req && !col;
-                    return (
-                      <div key={f.key}
-                        style={{ borderRadius: 8, overflow: "hidden",
-                          border: "2px solid " + (isLit ? T.amber : isMiss ? T.redBd : col ? f.bd : T.border),
-                          transition: "border-color 0.2s" }}>
-                        {/* Field label bar */}
-                        <div style={{ padding: "6px 10px", display: "flex", alignItems: "center", gap: 7,
-                          background: isLit ? T.amberBg : col ? f.bg : T.surface2,
-                          borderBottom: "1px solid " + (col ? f.bd : T.border) }}>
-                          <span style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
-                            background: col ? f.color : T.faint }} />
-                          <span style={{ fontSize: 12, fontWeight: 700,
-                            color: isLit ? T.amber : col ? f.color : T.text }}>
-                            {f.label}
-                          </span>
-                          {isMiss && <span style={{ fontSize: 10, color: T.red, fontWeight: 700, marginLeft: 2 }}>required</span>}
-                          {col && (
-                            <button onClick={() => setMapping(sm.name, f.key, "")}
-                              style={{ marginLeft: "auto", fontSize: 12, color: f.color, fontWeight: 700,
-                                background: "transparent", border: "none", cursor: "pointer",
-                                padding: "0 2px", lineHeight: 1, opacity: 0.7 }}
-                              title="Clear assignment">×</button>
-                          )}
-                        </div>
-                        {/* Column selector */}
-                        <div style={{ padding: "6px 8px", background: T.surface }}>
-                          <select value={col || ""}
-                            onChange={e => {
-                              const newCol = e.target.value;
-                              setSheetMetas(prev => prev.map(s => {
-                                if (s.name !== sm.name) return s;
-                                const m = { ...s.mapping };
-                                // clear this field's old col; clear any other field that had newCol
-                                Object.keys(m).forEach(k => {
-                                  if (m[k] === col && k === f.key) m[k] = null;
-                                  if (m[k] === newCol && k !== f.key) m[k] = null;
-                                });
-                                m[f.key] = newCol || null;
-                                return { ...s, mapping: m };
-                              }));
-                              if (newCol) setTimeout(() => highlightCol(sm.name, newCol), 50);
-                            }}
-                            style={{ width: "100%", padding: "7px 10px", fontSize: 12, borderRadius: 5,
-                              minHeight: 36, cursor: "pointer",
-                              border: "1px solid " + (col ? f.bd : T.border),
-                              background: col ? f.bg : T.surface2,
-                              color: col ? f.color : T.muted,
-                              fontWeight: col ? 600 : 400 }}>
-                            <option value="">— select column —</option>
-                            {sm.headers.filter(h => !h.startsWith("_col")).map(h => (
-                              <option key={h} value={h}>{h}</option>
-                            ))}
-                          </select>
-                          {/* Show sample value from first data row */}
-                          {col && sm.sampleRows && sm.sampleRows[0] != null && (
-                            <p style={{ fontFamily: T.mono, fontSize: 9, color: T.faint,
-                              margin: "4px 2px 0", overflow: "hidden", textOverflow: "ellipsis",
-                              whiteSpace: "nowrap" }}
-                              title={String(sm.sampleRows[0][col] ?? "")}>
-                              e.g. {String(sm.sampleRows[0][col] ?? "—").slice(0, 50) || "—"}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Raw row picker */}
-              {(sm.rawPreview || []).length > 0 && (() => {
-                const rawPrev = sm.rawPreview;
+              {/* ── Unified table: row picker + field selectors + data preview ── */}
+              {(() => {
+                const rawPrev = sm.rawPreview || [];
                 const hIdx    = sm.headerRowIdx != null ? sm.headerRowIdx : 0;
-                const maxCols = Math.min(Math.max(...rawPrev.map(r => r.length), 1), 20);
+                const visHdrs = sm.headers.filter(h => !h.startsWith("_col"));
+                // Raw rows above+at header; data rows are sampleRows
+                const rawAbove = rawPrev.slice(0, hIdx + 1);
+                const dataSamples = sm.sampleRows || [];
+                if (visHdrs.length === 0 && rawAbove.length === 0) {
+                  return (
+                    <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
+                      No columns detected — try a different file.
+                    </div>
+                  );
+                }
+                const ROW_COL_W = 46; // px width of row-number column
                 return (
-                  <div style={{ borderBottom: "1px solid " + T.border }}>
-                    <div style={{ padding: "5px 14px", background: T.surface2, borderBottom: "1px solid " + T.border,
-                      display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Raw data — click a row number to set header row
+                  <div style={{ overflowX: "auto" }}>
+                    <div style={{ padding: "5px 14px 5px", background: T.surface2,
+                      borderBottom: "1px solid " + T.border, borderTop: "1px solid " + T.border,
+                      display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint,
+                        textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Click row № to set header · Click column title to jump · Use dropdowns to assign fields
                       </span>
                       <span style={{ fontSize: 11, color: T.teal, fontWeight: 600 }}>Header: row {hIdx + 1}</span>
                     </div>
-                    <div style={{ overflowX: "auto", maxHeight: 220, overflowY: "auto" }}>
-                      <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
-                        <tbody>
-                          {rawPrev.map((row, ri) => {
-                            const isH = ri === hIdx, isA = ri < hIdx;
-                            return (
-                              <tr key={ri} style={{
-                                background: isH ? T.tealBg : isA ? T.surface2 : ri % 2 === 0 ? T.surface : T.surface2,
-                                borderBottom: "1px solid " + (isH ? T.tealBd : T.rowBd),
-                                opacity: isA ? 0.4 : 1 }}>
-                                <td onClick={() => setHeaderRow(sm.name, ri)}
-                                  style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
-                                    color: isH ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
-                                    background: isH ? T.tealBg : T.surface2,
-                                    borderRight: "2px solid " + (isH ? T.tealBd : T.border),
-                                    minWidth: 44, textAlign: "center", whiteSpace: "nowrap" }}>
-                                  {isH ? "▶ HDR" : ri + 1}
-                                </td>
-                                {Array.from({ length: maxCols }, (_, ci) => {
-                                  const val = String(row[ci] == null ? "" : row[ci]);
-                                  return (
-                                    <td key={ci} style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 10,
-                                      fontWeight: isH ? 700 : 400, color: isH ? T.teal : val ? T.text : T.faint,
-                                      borderRight: "1px solid " + T.rowBd, maxWidth: 160,
-                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                      title={val}>{val || (isH ? "" : <span style={{ opacity: 0.25 }}>·</span>)}</td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Data preview — colour-coded by assignment */}
-              {sm.headers.length > 0 ? (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: "100%" }}>
-                    <thead>
-                      <tr>
-                        {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
-                          const fk   = colToKey[h];
-                          const fDef = fk ? fields.find(f => f.key === fk) : null;
-                          const isHl = colHighlight === (sm.name + "|" + h);
-                          const colId = "fp-col-" + (sm.name + "-" + h).replace(/[^a-zA-Z0-9]/g, "_");
-                          return (
-                            <th key={h} id={colId}
-                              style={{ padding: "6px 10px", borderRight: "1px solid " + T.border,
-                                borderBottom: "3px solid " + (isHl ? T.amber : fDef ? fDef.color : T.border),
-                                background: isHl ? T.amberBg : fDef ? fDef.bg : T.surface2,
-                                minWidth: 120, transition: "background 0.25s, border-color 0.25s",
-                                textAlign: "left" }}>
-                              <span style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
-                                color: isHl ? T.amber : fDef ? fDef.color : T.text,
-                                display: "block", overflow: "hidden", textOverflow: "ellipsis",
-                                whiteSpace: "nowrap", maxWidth: 180 }} title={h}>{h}</span>
-                              {fDef && (
-                                <span style={{ fontFamily: T.mono, fontSize: 8, color: fDef.color,
-                                  textTransform: "uppercase", letterSpacing: "0.06em",
-                                  opacity: 0.8 }}>{fDef.label}</span>
-                              )}
-                            </th>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(sm.sampleRows || []).slice(0, 6).map((row, ri) => (
-                        <tr key={ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2 }}>
-                          {sm.headers.filter(h => !h.startsWith("_col")).map(h => {
+                    <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                      <thead>
+                        <tr>
+                          {/* Row-number column header (blank) */}
+                          <th style={{ width: ROW_COL_W, minWidth: ROW_COL_W, padding: "6px 8px",
+                            background: T.surface2, borderRight: "2px solid " + T.border,
+                            borderBottom: "3px solid " + T.border, position: "sticky", left: 0, zIndex: 2 }} />
+                          {visHdrs.map(h => {
                             const fk   = colToKey[h];
                             const fDef = fk ? fields.find(f => f.key === fk) : null;
                             const isHl = colHighlight === (sm.name + "|" + h);
-                            const val  = row[h];
-                            const disp = val == null || val === "" ? "" : String(val);
+                            const colId = "fp-col-" + (sm.name + "-" + h).replace(/[^a-zA-Z0-9]/g, "_");
                             return (
-                              <td key={h} style={{ padding: "5px 10px", borderRight: "1px solid " + T.border,
-                                borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
-                                color: isHl ? T.amber : fDef ? fDef.color : T.muted,
-                                background: isHl ? T.amberBg + "44" : fDef ? fDef.bg + "33" : undefined,
-                                fontWeight: fDef ? 500 : 400, maxWidth: 200,
-                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                title={disp}>
-                                {disp || <span style={{ color: T.faint }}>—</span>}
-                              </td>
+                              <th key={h} id={colId}
+                                style={{ padding: 0, minWidth: 150, maxWidth: 240,
+                                  borderRight: "1px solid " + T.border,
+                                  borderBottom: "3px solid " + (isHl ? T.amber : fDef ? fDef.color : T.border),
+                                  background: isHl ? T.amberBg : fDef ? fDef.bg : T.surface2,
+                                  transition: "background 0.2s, border-color 0.2s",
+                                  verticalAlign: "top" }}>
+                                {/* Clickable column title — jumps+highlights */}
+                                <button onClick={() => highlightCol(sm.name, h)}
+                                  style={{ display: "block", width: "100%", textAlign: "left",
+                                    padding: "6px 10px 4px", background: "transparent", border: "none",
+                                    cursor: "pointer", borderBottom: "1px solid " + (fDef ? fDef.bd : T.border) }}>
+                                  <span style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
+                                    color: isHl ? T.amber : fDef ? fDef.color : T.text,
+                                    display: "block", overflow: "hidden", textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap", maxWidth: 210 }} title={h}>{h}</span>
+                                  {fDef && (
+                                    <span style={{ fontFamily: T.mono, fontSize: 8, color: fDef.color,
+                                      textTransform: "uppercase", letterSpacing: "0.06em" }}>{fDef.label}</span>
+                                  )}
+                                </button>
+                                {/* Field assignment dropdown */}
+                                <div style={{ padding: "4px 8px 6px" }}>
+                                  <select value={fk || ""}
+                                    onChange={e => {
+                                      const newKey = e.target.value;
+                                      setSheetMetas(prev => prev.map(s => {
+                                        if (s.name !== sm.name) return s;
+                                        const m = { ...s.mapping };
+                                        Object.keys(m).forEach(k => { if (m[k] === h) m[k] = null; });
+                                        if (newKey && m[newKey] && m[newKey] !== h) m[newKey] = null;
+                                        if (newKey) m[newKey] = h;
+                                        return { ...s, mapping: m };
+                                      }));
+                                    }}
+                                    style={{ width: "100%", padding: "5px 6px", fontSize: 11, borderRadius: 4,
+                                      minHeight: 30, cursor: "pointer",
+                                      border: "1px solid " + (fDef ? fDef.bd : T.border),
+                                      background: fDef ? fDef.bg : T.surface,
+                                      color: fDef ? fDef.color : T.muted,
+                                      fontWeight: fDef ? 600 : 400 }}>
+                                    <option value="">— not assigned —</option>
+                                    {fields.map(f => (
+                                      <option key={f.key} value={f.key}>
+                                        {f.label}{f.req ? " *" : ""}
+                                        {sm.mapping[f.key] && sm.mapping[f.key] !== h ? " (→ " + sm.mapping[f.key] + ")" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </th>
                             );
                           })}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
-                  No columns detected — try selecting a different header row above.
-                </div>
-              )}
+                      </thead>
+                      <tbody>
+                        {/* Raw rows up to and including header — greyed above, teal AT header */}
+                        {rawAbove.map((rawRow, ri) => {
+                          const isH = ri === hIdx;
+                          const isA = ri < hIdx;
+                          return (
+                            <tr key={"raw-" + ri} style={{
+                              background: isH ? T.tealBg : isA ? T.surface2 : T.surface,
+                              borderBottom: "1px solid " + (isH ? T.tealBd : T.rowBd),
+                              opacity: isA ? 0.45 : 1 }}>
+                              {/* Row number cell */}
+                              <td onClick={() => setHeaderRow(sm.name, ri)}
+                                style={{ padding: "4px 8px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
+                                  color: isH ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
+                                  background: isH ? T.tealBg : T.surface2, textAlign: "center",
+                                  borderRight: "2px solid " + (isH ? T.tealBd : T.border),
+                                  whiteSpace: "nowrap", position: "sticky", left: 0, zIndex: 1 }}>
+                                {isH ? "▶ HDR" : ri + 1}
+                              </td>
+                              {visHdrs.map((h, ci) => {
+                                // find position of h in raw header row
+                                const rawHdrRow = rawPrev[hIdx] || [];
+                                const pos = rawHdrRow.findIndex(v => String(v||"").trim() === h);
+                                const val = pos >= 0 ? String(rawRow[pos] == null ? "" : rawRow[pos]) : "";
+                                return (
+                                  <td key={h} style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 10,
+                                    fontWeight: isH ? 700 : 400, color: isH ? T.teal : val ? T.text : T.faint,
+                                    borderRight: "1px solid " + T.rowBd, maxWidth: 200,
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                    title={val}>{val || (isH ? "" : <span style={{ opacity: 0.2 }}>·</span>)}</td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                        {/* Sample data rows */}
+                        {dataSamples.slice(0, 6).map((row, ri) => (
+                          <tr key={"data-" + ri} style={{ background: ri % 2 === 0 ? T.surface : T.surface2,
+                            borderBottom: "1px solid " + T.rowBd }}>
+                            <td style={{ padding: "4px 8px", fontFamily: T.mono, fontSize: 9,
+                              color: T.faint, background: T.surface2, textAlign: "center",
+                              borderRight: "2px solid " + T.border,
+                              position: "sticky", left: 0, zIndex: 1 }}>
+                              {hIdx + ri + 2}
+                            </td>
+                            {visHdrs.map(h => {
+                              const fk   = colToKey[h];
+                              const fDef = fk ? fields.find(f => f.key === fk) : null;
+                              const isHl = colHighlight === (sm.name + "|" + h);
+                              const val  = row[h];
+                              const disp = val == null || val === "" ? "" : String(val);
+                              return (
+                                <td key={h} style={{ padding: "5px 10px", borderRight: "1px solid " + T.border,
+                                  borderBottom: "1px solid " + T.rowBd, fontFamily: T.mono, fontSize: 10,
+                                  color: isHl ? T.amber : fDef ? fDef.color : T.muted,
+                                  background: isHl ? T.amberBg + "44" : fDef ? fDef.bg + "33" : undefined,
+                                  fontWeight: fDef ? 500 : 400, maxWidth: 200,
+                                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                  title={disp}>
+                                  {disp || <span style={{ color: T.faint }}>—</span>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
 
               {/* Missing required warning */}
               {reqFields.some(f => !sm.mapping[f.key]) && sm.include && (
