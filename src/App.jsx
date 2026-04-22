@@ -4589,14 +4589,18 @@ function FootprintTab({ project, onChange }) {
     setRemapSelections({});
   };
 
-  // Apply a remap to ALL rows currently using a given COR code
+  // Apply a remap to ALL rows with a given original COR code
+  // Uses result.allRows (ground truth) + corOverrides directly — never derived state
   const applyRemap = (fromCode, toCode) => {
     if (!COR_MAP[toCode]) return;
-    const rowsToFix = (displayResult.allRows || []).filter(r => r.cor === fromCode && !r._overridden);
-    if (rowsToFix.length === 0) return;
+    const baseRows = (result && result.allRows) || [];
+    // All rows whose ORIGINAL cor code matches (regardless of current override state)
+    const targets = baseRows.filter(r => r.cor === fromCode);
+    if (targets.length === 0) return;
     const upd = { ...corOverrides };
-    rowsToFix.forEach(r => { upd[r.sheet + "|" + r.rowNum] = toCode; });
-    commitOverrides(upd, rowsToFix.length + " row" + (rowsToFix.length !== 1 ? "s" : "") + " remapped → " + toCode);
+    targets.forEach(r => { upd[r.sheet + "|" + r.rowNum] = toCode; });
+    const n = targets.length;
+    commitOverrides(upd, n + " row" + (n !== 1 ? "s" : "") + " remapped → " + toCode);
   };
 
   // Stamp the current footprint result to the project dashboard
@@ -5072,7 +5076,13 @@ function FootprintTab({ project, onChange }) {
   const mtoRows   = displayResult.mtoRows   || [];
   const melRows   = displayResult.melRows   || [];
   const errList   = displayResult.errors    || [];
-  const unkCors   = displayResult.unknownCors || [];
+  // Compute unknown COR codes directly from raw result (never from derived displayResult)
+  // This ensures the remap panel is always in sync with actual data
+  const unkCors = [...new Set(
+    ((result && result.allRows) || [])
+      .filter(r => r.status === "ERROR" && Array.isArray(r.errors) && r.errors.some(e => e.notFound))
+      .map(r => r.cor)
+  )].filter(Boolean);
   const validRows = allRows.filter(r => r.status === "VALID");
   const errCount  = errList.length;
   const isOk      = displayResult.status === "success";
@@ -5118,39 +5128,7 @@ function FootprintTab({ project, onChange }) {
             Upload new<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           </label>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-          {/* Undo/redo */}
-          <button onClick={doUndo} disabled={historyIdx <= 0}
-            title="Undo (Ctrl+Z)"
-            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.border, minHeight: 28,
-              background: "transparent", color: historyIdx > 0 ? T.text : T.faint,
-              fontSize: 13, cursor: historyIdx > 0 ? "pointer" : "not-allowed", fontFamily: T.sans }}>
-            ↩
-          </button>
-          <button onClick={doRedo} disabled={historyIdx >= overrideHistory.length - 1}
-            title="Redo (Ctrl+Shift+Z)"
-            style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.border, minHeight: 28,
-              background: "transparent", color: historyIdx < overrideHistory.length - 1 ? T.text : T.faint,
-              fontSize: 13, cursor: historyIdx < overrideHistory.length - 1 ? "pointer" : "not-allowed", fontFamily: T.sans }}>
-            ↪
-          </button>
-          {Object.keys(corOverrides).length > 0 && (
-            <button onClick={resetAllOverrides}
-              style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.redBd, minHeight: 28,
-                background: T.redBg, color: T.red, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}>
-              Reset all overrides ({Object.keys(corOverrides).length})
-            </button>
-          )}
-          {historyIdx > 0 && (
-            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.faint }}>
-              step {historyIdx}/{overrideHistory.length - 1}
-            </span>
-          )}
-          {toast && (
-            <span style={{ padding: "4px 12px", background: T.tealBg, border: "1px solid " + T.tealBd,
-              borderRadius: 5, fontSize: 11, fontWeight: 500, color: T.teal, fontFamily: T.mono }}>{toast}</span>
-          )}
-        </div>
+
       </div>
 
       {/* ── Status ── */}
@@ -5331,6 +5309,53 @@ function FootprintTab({ project, onChange }) {
       )}
 
       {/* ════ ERRORS ════ */}
+      {/* Fixed undo/redo overlay — visible whenever results are shown */}
+      {step === "result" && (
+        <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 200,
+          display: "flex", alignItems: "center", gap: 0,
+          boxShadow: "0 2px 12px rgba(0,0,0,0.15)", borderRadius: 8, overflow: "hidden" }}>
+          {/* Toast — grows leftward */}
+          {toast && (
+            <div style={{ padding: "8px 14px", background: T.tealBg, border: "1px solid " + T.tealBd,
+              borderRight: "none", fontSize: 12, fontWeight: 600, color: T.teal,
+              fontFamily: T.mono, whiteSpace: "nowrap", borderRadius: "8px 0 0 8px" }}>
+              {toast}
+            </div>
+          )}
+          {/* Reset button — only when overrides exist */}
+          {Object.keys(corOverrides).length > 0 && !toast && (
+            <div style={{ padding: "8px 12px", background: T.redBg, border: "1px solid " + T.redBd,
+              borderRight: "none", fontSize: 11, fontWeight: 600, color: T.red,
+              fontFamily: T.sans, cursor: "pointer", whiteSpace: "nowrap",
+              borderRadius: toast ? 0 : "8px 0 0 8px" }}
+              onClick={resetAllOverrides}>
+              Reset ({Object.keys(corOverrides).length})
+            </div>
+          )}
+          {/* Undo */}
+          <button onClick={doUndo} disabled={historyIdx <= 0}
+            title="Undo (Ctrl+Z)"
+            style={{ padding: "10px 14px", border: "1px solid " + T.border, borderRight: "none",
+              background: historyIdx > 0 ? T.surface : T.surface2,
+              color: historyIdx > 0 ? T.text : T.faint,
+              fontSize: 16, cursor: historyIdx > 0 ? "pointer" : "not-allowed",
+              fontFamily: T.sans, borderRadius: 0, margin: 0 }}>
+            ↩
+          </button>
+          {/* Redo */}
+          <button onClick={doRedo} disabled={historyIdx >= overrideHistory.length - 1}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{ padding: "10px 14px", border: "1px solid " + T.border,
+              background: historyIdx < overrideHistory.length - 1 ? T.surface : T.surface2,
+              color: historyIdx < overrideHistory.length - 1 ? T.text : T.faint,
+              fontSize: 16, cursor: historyIdx < overrideHistory.length - 1 ? "pointer" : "not-allowed",
+              fontFamily: T.sans, borderRadius: "0 8px 8px 0", margin: 0 }}>
+            ↪
+          </button>
+        </div>
+      )}
+
+      {/* ════ ERRORS ════ */}
       {view === "errors" && (
         <div>
           {/* COR datalist kept for possible future use */}
@@ -5365,13 +5390,15 @@ function FootprintTab({ project, onChange }) {
                     </thead>
                     <tbody>
                       {unkCors.map(code => {
-                        const pending    = (displayResult.allRows || []).filter(r => r.cor === code && !r._overridden);
-                        const done       = (displayResult.allRows || []).filter(r => r._overridden && (result && (result.allRows || []).find(x => x.sheet === r.sheet && x.rowNum === r.rowNum && x.cor === code)));
+                        // Use result.allRows (ground truth) + corOverrides directly
+                        const baseRows   = ((result && result.allRows) || []).filter(r => r.cor === code);
+                        const pending    = baseRows.filter(r => !corOverrides[r.sheet + "|" + r.rowNum]);
+                        const done       = baseRows.filter(r =>  !!corOverrides[r.sheet + "|" + r.rowNum]);
                         const sel        = remapSelections[code] || "";
                         const selEntry   = sel ? COR_MAP[sel] : null;
                         const allDone    = pending.length === 0 && done.length > 0;
                         const grouped    = COR_LOOKUP.reduce((acc, c) => { (acc[c.cat] = acc[c.cat] || []).push(c); return acc; }, {});
-                        const allSamples = [...new Set([...pending, ...done].map(r => r.desc).filter(Boolean))].slice(0, 6);
+                        const allSamples = [...new Set(baseRows.map(r => r.desc).filter(Boolean))].slice(0, 6);
                         const localSugs  = localSuggestCOR(allSamples);
                         return (
                           <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg + "33" : undefined, verticalAlign: "top" }}>
