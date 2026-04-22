@@ -3110,9 +3110,9 @@ This cannot be undone.`)) return;
 
       {tab === "matrix" && (() => {
         // ─── Shared constants ──────────────────────────────────────────────────────
-        const CELL = 80;       // px per grid cell
-        const YLAB = 130;      // total width of Y-axis (rotated label + descriptors)
-        const XLAB = 44;       // height of X-axis header row
+        const CELL = 66;       // px per grid cell
+        const YLAB = 106;      // total width of Y-axis (rotated label + descriptors)
+        const XLAB = 50;       // height of X-axis header row
 
         // ─── Shared sub-components ────────────────────────────────────────────────
         // Axis descriptor column (left side, shared layout)
@@ -3133,8 +3133,8 @@ This cannot be undone.`)) return;
                                        justifyContent:"flex-end", paddingRight:10 }}>
                   <div style={{ textAlign:"right" }}>
                     {(labels[v]||"").split("\n").map((ln,i) => (
-                      <div key={i} style={{ fontSize: i===0?11:9, fontWeight:i===0?700:400,
-                        color:i===0?T.text:T.faint, lineHeight:1.35 }}>{ln}</div>
+                      <div key={i} style={{ fontSize: i===0?10:8, fontWeight:i===0?700:400,
+                        color:i===0?T.text:T.faint, lineHeight:1.25 }}>{ln.replace("|"," ")}</div>
                     ))}
                   </div>
                 </div>
@@ -3150,13 +3150,13 @@ This cannot be undone.`)) return;
               {[1,2,3,4,5].map(v => (
                 <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
                   {(labels[v]||"").split("\n").map((ln,i) => (
-                    <div key={i} style={{ fontSize:i===0?11:9, fontWeight:i===0?700:400,
-                      color:i===0?T.text:T.faint, lineHeight:1.35 }}>{ln}</div>
+                    <div key={i} style={{ fontSize:i===0?10:8, fontWeight:i===0?700:400,
+                      color:i===0?T.text:T.faint, lineHeight:1.25 }}>{ln.replace("|"," ")}</div>
                   ))}
                 </div>
               ))}
             </div>
-            <div style={{ paddingTop:6, fontSize:10, fontWeight:700, color:T.muted,
+            <div style={{ paddingTop:3, fontSize:9, fontWeight:600, color:T.faint,
                            letterSpacing:"0.07em", textTransform:"uppercase" }}>
               {footerLabel}
             </div>
@@ -3164,41 +3164,30 @@ This cannot be undone.`)) return;
         );
 
         // Unified legend block — used by both matrices
-        const LegendBlock = ({ groups }) => (
-          <div style={{ marginTop:"1.25rem", padding:"12px 16px",
-                         background:T.surface, border:"1px solid "+T.border,
-                         borderRadius:8, display:"flex", gap:24, flexWrap:"wrap",
-                         alignItems:"flex-start" }}>
-            {groups.map((g, gi) => (
-              <div key={gi} style={{ minWidth:0 }}>
-                <p style={{ margin:"0 0 7px", fontSize:9, fontWeight:700, color:T.faint,
-                             letterSpacing:"0.09em", textTransform:"uppercase" }}>{g.title}</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                  {g.items.map((item, ii) => (
-                    <span key={ii} style={{ display:"flex", alignItems:"center", gap:8,
-                                            fontSize:11, color:T.text, whiteSpace:"nowrap" }}>
-                      <span style={{ width:item.sw||14, height:item.sh||14, borderRadius:item.br||"50%",
-                                     background:item.bg, border:item.bd||"none",
-                                     flexShrink:0, display:"inline-block" }}/>
-                      <span>{item.label}{item.sub && <span style={{ color:T.faint }}> — {item.sub}</span>}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <span style={{ marginLeft:"auto", fontSize:11, color:T.faint, alignSelf:"flex-end" }}>
-              Click any dot to edit
-            </span>
-          </div>
-        );
-
         // Shared section header
-        const MatrixHeader = ({ title, subtitle, isFirst }) => (
-          <div style={{ marginBottom:"1rem",
-                         paddingTop: isFirst ? 0 : "1.75rem",
-                         borderTop: isFirst ? "none" : "2px solid "+T.border }}>
-            <h3 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>{title}</h3>
-            <p style={{ margin:0, fontSize:12, color:T.muted }}>{subtitle}</p>
+        const MatrixHeader = ({ title, subtitle, isFirst, legend }) => (
+          <div style={{ marginBottom:"0.6rem", paddingTop: isFirst?0:"1.25rem",
+                         borderTop: isFirst?"none":"1px solid "+T.border,
+                         display:"flex", alignItems:"flex-start", justifyContent:"space-between",
+                         gap:12, flexWrap:"wrap" }}>
+            <div>
+              <h3 style={{ margin:"0 0 1px", fontSize:12, fontWeight:700, color:T.text,
+                textTransform:"uppercase", letterSpacing:"0.07em" }}>{title}</h3>
+              <p style={{ margin:0, fontSize:10, color:T.faint }}>{subtitle}</p>
+            </div>
+            {legend && (
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+                {legend.map((item,i) => (
+                  <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:4,
+                    fontSize:10, color:T.muted, whiteSpace:"nowrap" }}>
+                    <span style={{ width:item.sw||10, height:item.sh||10,
+                      borderRadius:item.br||"50%", background:item.bg,
+                      border:item.bd, flexShrink:0, display:"inline-block" }}/>
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         );
 
@@ -3254,7 +3243,15 @@ This cannot be undone.`)) return;
           <div>
             {/* ══ Risk matrix ══════════════════════════════════════════════════════════ */}
             <MatrixHeader isFirst title="Environmental risk matrix"
-              subtitle="Consequence (C1–C5) × Probability (P1–P5) · Red = Significant · Yellow = Watch · Green = Low"/>
+              subtitle="Consequence × Probability"
+              legend={[
+                { bg:"#FFCDD2", bd:"1px solid #E57373", br:"3px", sw:12, sh:12, label:"Significant" },
+                { bg:"#FFF9C4", bd:"1px solid #F9A825", br:"3px", sw:12, sh:12, label:"Watch" },
+                { bg:"#C8E6C9", bd:"1px solid #81C784", br:"3px", sw:12, sh:12, label:"Low" },
+                { bg:"#ef5350", bd:"3px solid #b71c1c", label:"Open" },
+                { bg:"#fb8c00", bd:"3px solid #e65100", label:"In Progress" },
+                { bg:"#43a047", bd:"3px solid #1b5e20", label:"Closed" },
+              ]}/>
 
             {aspects.length === 0
               ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
@@ -3319,26 +3316,9 @@ This cannot be undone.`)) return;
                       ))}
                     </div>
                   </div>
-                  <LegendBlock groups={[
-                    { title:"Cell colour — risk zone", items:[
-                        { bg:"#FFCDD2", bd:"1px solid #E57373", br:"3px", sw:14, sh:14, label:"Significant" },
-                        { bg:"#FFF9C4", bd:"1px solid #F9A825", br:"3px", sw:14, sh:14, label:"Watch"       },
-                        { bg:"#C8E6C9", bd:"1px solid #81C784", br:"3px", sw:14, sh:14, label:"Low"         },
-                    ]},
-                    { title:"Dot — significance (fill colour)", items:[
-                        { bg:"#ef5350", bd:"2px solid #b71c1c", label:"Significant" },
-                        { bg:"#fb8c00", bd:"2px solid #e65100", label:"Watch"       },
-                        { bg:"#43a047", bd:"2px solid #1b5e20", label:"Low"         },
-                    ]},
-                    { title:"Dot border — management status", items:[
-                        { bg:"#ef5350", bd:"3px solid #b71c1c",                 label:"Open — solid dark border"   },
-                        { bg:"#fb8c00", bd:"3px solid #e65100", extra:"dashed", label:"In Progress — dashed outline" },
-                        { bg:"#43a047", bd:"3px solid #1b5e20",                 label:"Closed — solid dark border"  },
-                    ]},
-                  ]}/>
                   {unplotted.length>0 && (
                     <p style={{ fontSize:11, color:T.faint, marginTop:"0.5rem" }}>
-                      {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted — consequence or probability not set.
+                      {unplotted.length} not plotted (C/P missing)
                     </p>
                   )}
                 </>
@@ -3346,7 +3326,16 @@ This cannot be undone.`)) return;
 
             {/* ══ Opportunity matrix ═══════════════════════════════════════════════════ */}
             <MatrixHeader title="Opportunity priority matrix"
-              subtitle="Environmental benefit × Feasibility per ISO 14001:2015 Cl.6.1.2 · Dot size = business value · Quadrants guide prioritisation"/>
+              subtitle="Environmental benefit × Feasibility · dot size = business value"
+              legend={[
+                { bg:T.tealBg,   bd:"1px solid "+T.tealBd,   br:"3px", sw:12, sh:12, label:"Pursue" },
+                { bg:T.blueBg,   bd:"1px solid "+T.blueBd,   br:"3px", sw:12, sh:12, label:"Plan" },
+                { bg:T.purpleBg, bd:"1px solid "+T.purpleBd, br:"3px", sw:12, sh:12, label:"Quick win" },
+                { bg:T.slateBg,  bd:"1px solid "+T.slateBd,  br:"3px", sw:12, sh:12, label:"Deprioritise" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:10, sh:10, label:"Biz: low" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:14, sh:14, label:"med" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:18, sh:18, label:"high" },
+              ]}/>
 
             {opps.length === 0
               ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
@@ -3396,19 +3385,6 @@ This cannot be undone.`)) return;
                       ))}
                     </div>
                   </div>
-                  <LegendBlock groups={[
-                    { title:"Cell colour — priority quadrant", items:[
-                        { bg:T.tealBg,   bd:"1px solid "+T.tealBd,   br:"3px", sw:14, sh:14, label:"Pursue",       sub:"High benefit + easy"        },
-                        { bg:T.blueBg,   bd:"1px solid "+T.blueBd,   br:"3px", sw:14, sh:14, label:"Plan",          sub:"High benefit, harder"        },
-                        { bg:T.purpleBg, bd:"1px solid "+T.purpleBd, br:"3px", sw:14, sh:14, label:"Quick win",     sub:"Easy, lower impact"          },
-                        { bg:T.slateBg,  bd:"1px solid "+T.slateBd,  br:"3px", sw:14, sh:14, label:"Deprioritise",  sub:"Low benefit + hard"          },
-                    ]},
-                    { title:"Dot size — business value", items:[
-                        { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:10, sh:10, label:"1 — Low"  },
-                        { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:14, sh:14, label:"3 — Medium" },
-                        { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:18, sh:18, label:"5 — High" },
-                    ]},
-                  ]}/>
                 </>
             }
           </div>
