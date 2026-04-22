@@ -315,20 +315,15 @@ const RISK_CATEGORIES = [
     cat: '1. Emission to Air',
     color: 'red',
     items: [
-      { id:'air_01', sub: 'Stack / vent emissions', hint: 'Combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
-      { id:'air_02', sub: 'Diesel plant emissions', hint: 'Generators, construction plant, crane engines', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
+      { id:'air_01', sub: 'Plant stack / vent emissions', hint: 'Integrated combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
+      { id:'air_02', sub: 'Diesel engine emissions', hint: 'Standalone generators, temporary construction machinery', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
       { id:'air_03', sub: 'Flaring volumes & composition', hint: 'Commissioning purge, emergency relief, production upsets', aspect: 'Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability' },
-      { id:'air_04', sub: 'NOₓ emissions & NOₓ tax', hint: 'Gas turbines, engines, flaring, process heaters — offshore and nearshore', aspect: 'NOₓ emissions subject to Norwegian NOₓ tax (kr/kg NOₓ); obligation to join NOₓ Fund or pay full rate' },
-      { id:'air_05', sub: 'CO₂ emissions & CO₂ tax / ETS', hint: 'All combustion, flaring, venting, process releases from offshore installations', aspect: 'CO₂ emissions subject to Norwegian CO₂ tax and Norwegian ETS (kvotesystemet)' },
-      { id:'air_06', sub: 'GHG / CO₂ reporting', hint: 'All combustion, venting, flaring, process releases — all active phases', aspect: 'GHG emissions contributing to national inventory, carbon reporting, and regulatory/fiscal obligations' },
-      { id:'air_07', sub: 'Fugitive VOC & hydrocarbon emissions', hint: 'Flanges, valve stems, loading operations, tank venting', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
-      { id:'air_08', sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
-      { id:'air_09', sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
-      { id:'air_10', sub: 'Atmospheric dispersion modelling', hint: 'Stack design, siting near sensitive receptors', aspect: 'Air quality impact on community or ecological receptors' },
-      { id:'air_11', sub: 'Odour', hint: 'Wastewater treatment, waste handling, produced water, solvents, construction waste', aspect: 'Odour nuisance affecting community receptors' },
-      { id:'air_11', sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
-      { id:'air_12', sub: 'Paint & surface treatment VOCs', hint: 'Maintenance painting, blasting, coating operations', aspect: 'VOC emissions from solvents; contaminated blast grit; paint waste' },
-      { id:'air_13', sub: 'Air quality baseline monitoring', hint: 'Facilities near sensitive receptors (residential, schools, hospitals); emission permit applications under Forurensningsloven §11; EIA', aspect: 'Permit refused or inappropriate emission limit set without pre-project background data; inability to attribute project contribution' },
+      { id:'air_04', sub: 'Fugitive emissions', hint: 'HCs, VOCs from flanges, valve stems, loading operations, tank venting, HVAC', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
+      { id:'air_05', sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
+      { id:'air_06', sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
+      { id:'air_07', sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
+      { id:'air_08', sub: 'Paint & surface treatment VOCs', hint: 'Maintenance painting, blasting, coating operations', aspect: 'VOC emissions from solvents; contaminated blast grit; paint waste' },
+      { id:'air_09', sub: 'Air quality baseline monitoring', hint: 'Facilities near sensitive receptors (residential, schools, hospitals); emission permit applications under Forurensningsloven §11; EIA', aspect: 'Permit refused or inappropriate emission limit set without pre-project background data; inability to attribute project contribution' },
     ],
   },
   {
@@ -343,7 +338,7 @@ const RISK_CATEGORIES = [
       { id:'wat_06', sub: 'Process wastewater design', hint: 'Chemical injection, utility systems, drains', aspect: 'Design of wastewater streams — volume, composition, treatment route' },
       { id:'wat_07', sub: 'Seabed sediment disturbance', hint: 'Dredging, trenching, anchor dragging, jetting, structure installation', aspect: 'Sediment plume; burial of benthic communities; contaminant resuspension' },
       { id:'wat_08', sub: 'Water quality baseline', hint: 'Onshore watercourse crossings; discharge permitting under Forurensningsloven §11; offshore produced water permitting', aspect: 'Permit refused or inappropriate conditions set without baseline evidence; inability to demonstrate no deterioration under WFD Art. 4' },
-      { id:'wat_09', sub: 'Marine baseline survey *(benthic, ROV, seabed characterisation)*', hint: 'Offshore installation, pipeline or cable routing, anchor deployment, dredging', aspect: 'Unable to demonstrate pre-installation seabed condition; permit refused; unexpected sensitive habitat (cold-water coral, maerl) triggering stop-work' },
+      { id:'wat_09', sub: 'Marine baseline survey (benthic, ROV, seabed characterisation)', hint: 'Offshore installation, pipeline or cable routing, anchor deployment, dredging', aspect: 'Unable to demonstrate pre-installation seabed condition; permit refused; unexpected sensitive habitat (cold-water coral, maerl) triggering stop-work' },
       { id:'wat_10', sub: 'Geophysical / UXO survey', hint: 'Offshore seabed operations; pipeline or cable route survey; anchor pattern; jack-up preloading; construction in former conflict areas', aspect: 'Unknown seabed obstacles, contamination, UXO, or unstable ground; dropped object risk; unexpected habitat disturbance; jack-up punch-through' },
     ],
   },
@@ -351,18 +346,18 @@ const RISK_CATEGORIES = [
     cat: '3. Waste, Materials & Chemicals',
     color: 'amber',
     items: [
-      { id:'wst_01', sub: 'Hazardous substance inventory & REACH', hint: 'Chemical specification, procurement, materials selection', aspect: 'Failure to register or control SVHCs; non-compliant use of restricted substances' },
+      { id:'wst_01', sub: 'Chemicals & hazardous substance inventory (REACH)', hint: 'Chemical specification, procurement, materials selection', aspect: 'Failure to register or control SVHCs; non-compliant use of restricted substances' },
       { id:'wst_02', sub: 'Waste hierarchy — materials selection', hint: 'Design decisions, material specification', aspect: 'Generation of excess or non-recyclable waste due to poor design choices' },
       { id:'wst_03', sub: 'Hazardous waste', hint: 'Excavated contaminated soil, chemical containers, insulation, first-fill residues', aspect: 'Improper storage, transport, or disposal of hazardous waste categories' },
       { id:'wst_04', sub: 'Packaging waste', hint: 'Procurement of equipment, materials, consumables', aspect: 'Non-recyclable or excessive packaging waste volumes' },
       { id:'wst_05', sub: 'Refrigerants & blowing agents (F-gas)', hint: 'HVAC design, insulation foam specification, fire suppression systems', aspect: 'Use of high-GWP HFCs; F-gas leakage and loss' },
       { id:'wst_06', sub: 'Asbestos', hint: 'Legacy equipment, pipe lagging, insulation removal in older facilities', aspect: 'Asbestos fibre release during maintenance or demolition' },
-      { id:'wst_06', sub: 'NORM — naturally occurring radioactive material', hint: 'Produced water scaling, pigging returns, sand production, deposition in vessels', aspect: 'Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste' },
-      { id:'wst_07', sub: 'Radioactive measurement sources', hint: 'Density gauges, level gauges, nuclear logging tools', aspect: 'Loss, damage, or disposal of sealed radioactive sources' },
-      { id:'wst_08', sub: 'Heavy metals in systems', hint: 'Legacy coating systems (lead paint), alloy materials, anti-corrosion anodes', aspect: 'Release of lead, cadmium, mercury, or chromium during maintenance or decommissioning' },
-      { id:'wst_09', sub: 'Chemical flushing & pigging', hint: 'Commissioning clean-up, pipeline maintenance, change of service', aspect: 'Generation of chemically contaminated flush water requiring treatment and disposal' },
-      { id:'wst_10', sub: 'Tank cleaning', hint: 'Tank inspection, change of service, decommissioning', aspect: 'Oily sludge or chemical residue requiring hazardous waste disposal' },
-      { id:'wst_11', sub: 'Subsea structure removal', hint: 'Decommissioning of pipelines, umbilicals, templates, jackets', aspect: 'Contaminated materials, marine litter, seabed disturbance' },
+      { id:'wst_07', sub: 'NORM — naturally occurring radioactive material', hint: 'Produced water scaling, pigging returns, sand production, deposition in vessels', aspect: 'Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste' },
+      { id:'wst_08', sub: 'Radioactive measurement sources', hint: 'Density gauges, level gauges, nuclear logging tools', aspect: 'Loss, damage, or disposal of sealed radioactive sources' },
+      { id:'wst_09', sub: 'Heavy metals in systems', hint: 'Legacy coating systems (lead paint), alloy materials, anti-corrosion anodes', aspect: 'Release of lead, cadmium, mercury, or chromium during maintenance or decommissioning' },
+      { id:'wst_10', sub: 'Chemical flushing & pigging', hint: 'Commissioning clean-up, pipeline maintenance, change of service', aspect: 'Generation of chemically contaminated flush water requiring treatment and disposal' },
+      { id:'wst_11', sub: 'Tank cleaning', hint: 'Tank inspection, change of service, decommissioning', aspect: 'Oily sludge or chemical residue requiring hazardous waste disposal' },
+      { id:'wst_12', sub: 'Subsea structure removal', hint: 'Decommissioning of pipelines, umbilicals, templates, jackets', aspect: 'Contaminated materials, marine litter, seabed disturbance' },
     ],
   },
   {
@@ -388,44 +383,31 @@ const RISK_CATEGORIES = [
       { id:'eco_03', sub: 'Vegetation clearance', hint: 'Land clearing, access track construction, cable trenching', aspect: 'Habitat loss; harm to nesting birds or protected plant species' },
       { id:'eco_04', sub: 'Invasive species', hint: 'Earthworks, material import, equipment mobilisation', aspect: 'Introduction or spread of invasive plant or animal species' },
       { id:'eco_05', sub: 'Ecological connectivity', hint: 'Linear construction, fencing, culverting', aspect: 'Severance of wildlife corridors (hedgerows, riparian margins, migration routes)' },
-      { id:'eco_06', sub: 'Marine mammal protection', hint: 'Seismic surveys, piling, vessel operations, sonar', aspect: 'Acoustic disturbance, injury, or displacement of cetaceans and seals' },
-      { id:'eco_07', sub: 'Fish spawning & migration', hint: 'Seabed disturbance, dewatering outfall, cofferdam', aspect: 'Disruption to salmon, herring, or other protected fish migration or spawning' },
-      { id:'eco_08', sub: 'Seabed habitats', hint: 'Anchoring, trenching, structure installation, decommissioning', aspect: 'Physical damage to cold-water coral, maerl beds, biogenic reef, or priority seabed habitat' },
-      { id:'eco_09', sub: 'Bird collision & displacement', hint: 'Wind turbines, flare stacks, tall structures, marine platforms, construction lighting', aspect: 'Collision mortality or displacement of migratory or breeding birds' },
-      { id:'eco_10', sub: 'Light pollution & ecology', hint: 'Floodlighting, flare lighting, platform lighting', aspect: 'Disruption to nocturnal species (bats, insects, seabirds) behaviour and movement' },
-      { id:'eco_11', sub: 'Peat & carbon-rich soil disturbance', hint: 'Onshore trenching, grading, borrow pits in peatland', aspect: 'Release of stored carbon; peat subsidence; loss of protected bog habitat' },
-      { id:'eco_12', sub: 'Phase 1 Habitat Survey *(desk study + walkover)*', hint: 'Any onshore project with potential ecological sensitivity; EIA scoping; planning application', aspect: 'Failure to identify habitats or designated sites before design — consent delay, stop-work, or inadequate mitigation design' },
-      { id:'eco_13', sub: 'Phase 2 Ecological Survey *(NVC, protected species, extended walkover)*', hint: 'Triggered by Phase 1 findings; applies within seasonal survey windows (bat, reptile, bird nesting)', aspect: 'Incomplete species data leading to consent refusal, planning conditions, or missed mitigation opportunities; seasonal window missed delaying project' },
-      { id:'eco_14', sub: 'Noise boundary limits', hint: 'Compressors, turbines, processing plant, generators', aspect: 'Noise at community boundary exceeding regulatory or planning limits' },
-      { id:'eco_15', sub: 'Construction noise', hint: 'Piling, demolition, heavy plant, blasting', aspect: 'Community noise disturbance during construction works' },
-      { id:'eco_16', sub: 'Noise during commissioning', hint: 'Pressure testing, relief valve lift, venting, flaring', aspect: 'High-impulse or sustained noise during start-up and testing activities' },
-      { id:'eco_17', sub: 'Ground vibration', hint: 'Piling, blasting, heavy compaction, road traffic from heavy plant', aspect: 'Structural damage to third-party property; nuisance vibration' },
-      { id:'eco_18', sub: 'Underwater noise — pile driving', hint: 'Offshore monopile installation, jacket installation, subsea piling', aspect: 'Acoustic injury or disturbance to fish and marine mammals' },
-      { id:'eco_19', sub: 'Artificial light at night', hint: 'Floodlighting, flare stacks, platform lighting, construction lighting', aspect: 'Disruption to nocturnal wildlife (bats, insects, seabirds); community visual intrusion' },
-      { id:'eco_20', sub: 'Noise baseline survey', hint: 'Projects near sensitive receptors (residential, schools); Forurensningsloven §11 permit trigger; construction noise impact prediction', aspect: 'Permit conditions set without pre-project background; complaint risk; inadequate noise limits in contract or planning consent' },
+      { id:'eco_06', sub: 'Marine / freshwater ecosystem', hint: 'Seabed disturbance, anchoring/trenching, piling, dewatering outfall, cofferdam, seismic surveys, vessel operations, sonar', aspect: 'Disruption to protected species migration/spawning, acoustic disturbance, injury, or displacement; physical damage to cold-water coral, maerl beds, biogenic reef, or priority seabed habitat' },
+      { id:'eco_07', sub: 'Bird collision & displacement', hint: 'Wind turbines, flare stacks, tall structures, marine platforms, construction lighting', aspect: 'Collision mortality or displacement of migratory or breeding birds' },
+      { id:'eco_08', sub: 'Light pollution & ecology', hint: 'Floodlighting, flare lighting, platform lighting', aspect: 'Disruption to nocturnal species (bats, insects, seabirds) behaviour and movement' },
+      { id:'eco_09', sub: 'Peat & carbon-rich soil disturbance', hint: 'Onshore trenching, grading, borrow pits in peatland', aspect: 'Release of stored carbon; peat subsidence; loss of protected bog habitat' },
+      { id:'eco_10', sub: 'Habitat / Ecological survey (desk study/walk over)', hint: 'Any onshore project with potential ecological sensitivity; EIA scoping; planning application; consider seasonal survey windows', aspect: 'Failure to identify habitats or designated sites before design — consent delay, stop-work, or inadequate mitigation design' },
+      { id:'eco_11', sub: 'Noise boundary limits', hint: 'Compressors, turbines, processing plant, generators, pressure testing, relief valve lift, venting, flaring, piling or blasting', aspect: 'Noise at community boundary exceeding regulatory or planning limits; high impulse or sustained noise; disturbance to nesting habitats or interference to migratory pathways' },
+      { id:'eco_12', sub: 'Ground vibration', hint: 'Piling, blasting, heavy compaction, road traffic from heavy plant', aspect: 'Structural damage to third-party property; nuisance vibration' },
+      { id:'eco_13', sub: 'Underwater noise — pile driving', hint: 'Offshore monopile installation, jacket installation, subsea piling', aspect: 'Acoustic injury or disturbance to fish and marine mammals' },
     ],
   },
   {
-    cat: '6. Community, Heritage and Lanscape',
+    cat: '6. Community, Heritage and Landscape',
     color: 'purple',
     items: [
-      { id:'com_01', sub: 'Buried archaeological remains', hint: 'Ground breaking, piling, trenching in uncharted areas', aspect: 'Disturbance or destruction of legally protected archaeological remains' },
+      { id:'com_01', sub: 'Archaeological impact & desk-based assessment', hint: 'Ground breaking, piling, trenching, seabed operations; any ground disturbance onshore or planning application in areas of archaeological sensitivity', aspect: 'Disturbance or destruction of legally protected remains; failure to identify designated sites before works — stop-work, consent refused or conditions applied without adequate baseline' },
       { id:'com_02', sub: 'Historic buildings & structures', hint: 'Demolition, modification, or visual impact on listed buildings', aspect: 'Harm to protected or listed built heritage' },
       { id:'com_03', sub: 'Seabed cultural heritage', hint: 'Subsea pipeline, cable, or anchor installation', aspect: 'Disturbance of protected wrecks or seabed archaeological sites' },
       { id:'com_04', sub: 'Chance find procedure', hint: 'Any ground breaking activity', aspect: 'Unanticipated discovery of artefacts, structures, or human remains' },
       { id:'com_05', sub: 'Cultural landscape', hint: 'Design of installations in areas with designated cultural landscape value', aspect: 'Change to the character of a culturally significant landscape' },
-      { id:'com_06', sub: 'Archaeological Desk-Based Assessment (DBA)', hint: 'Any ground disturbance onshore; seabed operations; planning application in areas of potential archaeological sensitivity', aspect: 'Failure to identify designated sites or SMR-recorded finds before works; stop-work if remains discovered; planning consent refused or conditions set without adequate baseline' },
-      { id:'com_07', sub: 'Visual landscape impact', hint: 'Siting of above-ground structures, masts, flare stacks, wind turbines', aspect: 'Visual intrusion on protected landscape or sensitive scenic views' },
-      { id:'com_08', sub: 'Lighting & sky glow', hint: 'Site floodlighting, platform lighting, flare', aspect: 'Community visual intrusion; sky glow in rural, wilderness, or protected settings' },
-      { id:'com_09', sub: 'Cumulative visual impact', hint: 'Multiple wind turbines, platforms, or industrial structures in same viewshed', aspect: 'Combined visual impact greater than sum of individual structures' },
-      { id:'com_10', sub: 'Community stakeholder engagement', hint: 'All phases with potential community impact', aspect: 'Inadequate engagement; community complaints; loss of social licence' },
-      { id:'com_11', sub: 'Air quality & human health', hint: 'Emissions near residential areas, schools, hospitals', aspect: 'Exceedance of air quality standards affecting community health' },
-      { id:'com_12', sub: 'Noise & community disturbance', hint: 'Plant operations, construction, traffic', aspect: 'Breach of community noise limits; sleep disturbance; complaint trigger' },
-      { id:'com_13', sub: 'Emergency preparedness & community safety', hint: 'Hazardous operations near populated areas', aspect: 'Inadequate emergency planning for community receptors' },
-      { id:'com_14', sub: 'Traffic & access disruption', hint: 'Heavy haulage routes, port access, offshore logistics, abnormal loads', aspect: 'Road damage, traffic congestion, community access restriction' },
-      { id:'com_15', sub: 'Employment & local economy', hint: 'Project workforce planning, supply chain decisions', aspect: 'Missed opportunity for local content; social licence risk' },
-      { id:'com_16', sub: 'Indigenous peoples — Sámi', hint: 'Projects in Sámi traditional lands (Finnmark/Troms/Nordland)', aspect: 'Impact on Sámi reindeer herding, cultural heritage, and traditional land use' },
-      { id:'com_17', sub: 'Socioeconomic baseline', hint: 'Major projects near communities; EIA requirement; IFC PS1 projects; projects affecting employment, livelihoods, or access', aspect: 'Inadequate characterisation of baseline; EIA non-compliant; social licence risk; inability to detect and attribute project-induced socioeconomic change' },
+      { id:'com_06', sub: 'Visual landscape impact', hint: 'Siting of above-ground structures, masts, flare stacks, wind turbines', aspect: 'Visual intrusion on protected landscape or sensitive scenic views' },
+      { id:'com_07', sub: 'Community stakeholder engagement', hint: 'All phases with potential community impact', aspect: 'Inadequate engagement; community complaints; loss of social licence' },
+      { id:'com_08', sub: 'Traffic & access disruption', hint: 'Heavy haulage routes, port access, offshore logistics, abnormal loads', aspect: 'Road damage, traffic congestion, community access restriction' },
+      { id:'com_09', sub: 'Employment & local economy', hint: 'Project workforce planning, supply chain decisions', aspect: 'Missed opportunity for local content; social licence risk' },
+      { id:'com_10', sub: 'Indigenous peoples — Sámi', hint: 'Projects in Sámi traditional lands (Finnmark/Troms/Nordland)', aspect: 'Impact on Sámi reindeer herding, cultural heritage, and traditional land use' },
+      { id:'com_11', sub: 'Socioeconomic baseline', hint: 'Major projects near communities; EIA requirement; IFC PS1 projects; projects affecting employment, livelihoods, or access', aspect: 'Inadequate characterisation of baseline; EIA non-compliant; social licence risk; inability to detect and attribute project-induced socioeconomic change' },
     ],
   },
   {
@@ -433,7 +415,7 @@ const RISK_CATEGORIES = [
     color: 'darkred',
     items: [
       { id:'emg_01', sub: 'Oil spill response plan', hint: 'All offshore and coastal hydrocarbon operations', aspect: 'Inadequate preparedness for accidental oil release; environmental damage' },
-      { id:'emg_02', sub: 'Chemical spill & containment', hint: 'Chemical storage, dosing systems, loading and offloading', aspect: 'Release of hazardous chemicals to soil, water, or marine environment' },
+      { id:'emg_02', sub: 'Chemical spill & containment', hint: 'Chemical storage, dosing systems, loading and offloading, sample points', aspect: 'Release of hazardous chemicals to soil, water, or marine environment' },
       { id:'emg_03', sub: 'Spill protection — secondary containment', hint: 'Storage tanks, chemical bunds, drip trays, offshore deck drainage', aspect: 'Inadequate bunding or containment allowing release to ground or water' },
       { id:'emg_04', sub: 'Dropped objects — marine', hint: 'Offshore lifting, crane operations, deck work, personnel transfer', aspect: 'Loss of equipment or materials to seabed; marine debris' },
       { id:'emg_05', sub: 'Emergency venting & blowdown', hint: 'Process upsets, ESD activation, commissioning activities', aspect: 'Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes' },
@@ -441,6 +423,13 @@ const RISK_CATEGORIES = [
   }
 ];
 
+const ABNORMAL_CONDITIONS = [
+  'Unexpected findings',
+  'Equipment breakdown or malfunction',
+  'Unplanned modification changes',
+  'Unforeseen changes in scheduling',
+  'Other abnormal conditions',
+];
 
 // ── Color map for guide word categories ──────────────────────────────────────
 const COLOR_MAP = {
@@ -678,6 +667,7 @@ function inferOppType(oppText) {
 // ── Templates ─────────────────────────────────────────────────────────────────
 const emptyAspect = () => ({
   phase:"", area:"", activity:"", aspect:"", condition:"Normal",
+  isAbnormal:false, abnormalType:"",
   impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
   severity:3, probability:3, duration:"Temporary (<1yr)",
   legalThreshold:"N", stakeholderConcern:"N",
@@ -907,6 +897,22 @@ function AspectForm({ aspect, onSave, onCancel }) {
           <Fld label="Specific activity" wide><input value={f.activity} onChange={e=>set("activity",e.target.value)} placeholder="Specific activity giving rise to the aspect" style={iw}/></Fld>
           <Fld label="Environmental aspect" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust generation (PM10/PM2.5)" style={iw}/></Fld>
           <Fld label="Condition"><select value={f.condition} onChange={e=>set("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
+          <Fld label="Abnormal condition" wide>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom: f.isAbnormal ? 6 : 0 }}>
+              <input type="checkbox" checked={!!f.isAbnormal}
+                onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) set("abnormalType",""); }}
+                style={{ width:14, height:14, accentColor:"var(--amber)", cursor:"pointer" }}/>
+              <span style={{ fontSize:12, color: f.isAbnormal ? "var(--amber)" : "var(--muted)", fontWeight: f.isAbnormal ? 600 : 400 }}>
+                Abnormal condition applies
+              </span>
+            </label>
+            {f.isAbnormal && (
+              <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)} style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
+                <option value="">— select type —</option>
+                {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            )}
+          </Fld>
           <Fld label="Receptors affected"><input value={f.receptors} onChange={e=>set("receptors",e.target.value)} placeholder="e.g. Air, Human health, Ecology" style={iw}/></Fld>
           <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
         </div>
@@ -2088,6 +2094,22 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 <Fld label="Specific activity" wide><input value={riskForm.activity} onChange={e=>setRF("activity",e.target.value)} style={iw}/></Fld>
                 <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
                 <Fld label="Condition"><select value={riskForm.condition} onChange={e=>setRF("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
+                <Fld label="Abnormal condition" wide>
+                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom: riskForm.isAbnormal ? 6 : 0 }}>
+                    <input type="checkbox" checked={!!riskForm.isAbnormal}
+                      onChange={e => { setRF("isAbnormal", e.target.checked); if (!e.target.checked) setRF("abnormalType",""); }}
+                      style={{ width:14, height:14, accentColor:"var(--amber)", cursor:"pointer" }}/>
+                    <span style={{ fontSize:12, color: riskForm.isAbnormal ? "var(--amber)" : "var(--muted)", fontWeight: riskForm.isAbnormal ? 600 : 400 }}>
+                      Abnormal condition applies
+                    </span>
+                  </label>
+                  {riskForm.isAbnormal && (
+                    <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)} style={{ ...iw, borderColor:"var(--amber-bd)", background:"var(--amber-bg)", color:"var(--amber)" }}>
+                      <option value="">— select type —</option>
+                      {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  )}
+                </Fld>
                 <Fld label="Receptors affected"><input value={riskForm.receptors} onChange={e=>setRF("receptors",e.target.value)} placeholder="e.g. Air, Human health" style={iw}/></Fld>
                 <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
               </div>
@@ -2446,6 +2468,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           <STH col="phase" label="Phase"/>
           <STH col="aspect" label="Aspect"/>
           <PlainTH>Cond.</PlainTH>
+          <PlainTH>Abnormal</PlainTH>
           <STH col="impact" label="Impact / Receptor"/>
           <STH col="score" label="Score"/>
           <STH col="sig" label="Significance"/>
@@ -2480,6 +2503,16 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
                   {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
                 </td>
                 <td style={{ padding:"9px 12px" }}>{a.condition && <span style={condStyle(a.condition)}>{a.condition}</span>}</td>
+                <td style={{ padding:"9px 12px" }}>
+                  {a.isAbnormal && (
+                    <div>
+                      <span style={{ fontFamily:"var(--mono,monospace)", fontSize:9, padding:"2px 6px", borderRadius:3,
+                        background:"var(--amber-bg)", color:"var(--amber)", border:"1px solid var(--amber-bd)",
+                        display:"inline-block", marginBottom:2 }}>Abnormal</span>
+                      {a.abnormalType && <div style={{ fontFamily:"var(--mono,monospace)", fontSize:9, color:"var(--muted)", marginTop:2 }}>{a.abnormalType}</div>}
+                    </div>
+                  )}
+                </td>
                 <td style={{ padding:"9px 12px", maxWidth:200 }}>
                   <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.muted }} title={a.impact}>{a.impact||"—"}</div>
                   {a.receptors && <div style={{ fontFamily:T.mono, fontSize:10, color:T.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.receptors}</div>}
