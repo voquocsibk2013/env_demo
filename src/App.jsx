@@ -3215,8 +3215,8 @@ This cannot be undone.`)) return;
         const unplotted = aspects.filter(a => !a.severity || !a.probability);
 
         // ─── Opportunity matrix data + rendering ──────────────────────────────────
-        const OPP_ENV_LABELS  = { 1:"Negligible", 2:"Minor", 3:"Moderate", 4:"Significant", 5:"Major" };
-        const OPP_FEAS_LABELS = { 1:"Very difficult", 2:"Difficult", 3:"Moderate", 4:"Achievable", 5:"Easy" };
+        const OPP_ENV_LABELS  = { 1:"1\nNegligible", 2:"2\nMinor", 3:"3\nModerate", 4:"4\nSignificant", 5:"5\nMajor" };
+        const OPP_FEAS_LABELS = { 1:"1\nV.difficult", 2:"2\nDifficult", 3:"3\nModerate", 4:"4\nAchievable", 5:"5\nEasy" };
 
         const oppQuadrant = (ev, feas) => {
           const hE = ev>=4, hF = feas>=4;
