@@ -2410,7 +2410,7 @@ This cannot be undone.`)) return;
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
-      else if(aspSort.col==="category"){va=getCategoryLabel(a)||"";vb=getCategoryLabel(b)||"";}
+      else if(aspSort.col==="category"){va=(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
     return r;
@@ -2420,7 +2420,7 @@ This cannot be undone.`)) return;
     return [...dashAspects].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
-      else if(aspSort.col==="category"){va=getCategoryLabel(a)||"";vb=getCategoryLabel(b)||"";}
+      else if(aspSort.col==="category"){va=(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
   })();
@@ -2565,27 +2565,34 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
                 </td>
-                <td style={{ padding:"9px 12px" }}>
+                <td style={{ padding:"9px 12px", minWidth:60 }}>
                   {(() => {
                     const ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
                     const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
                     if (!phases.length) return <span style={{ color:T.faint }}>—</span>;
-                    return <div style={{ display:"flex", flexWrap:"wrap", gap:2 }}>
-                      {phases.map(p => <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px", borderRadius:3, background:T.slateBg, color:T.slate }}>{ABBR[p]||p.slice(0,3)}</span>)}
-                    </div>;
+                    return (
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, auto)", gap:2, width:"fit-content" }}>
+                        {phases.map(p => (
+                          <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px",
+                            borderRadius:3, background:T.slateBg, color:T.slate, textAlign:"center" }}>
+                            {ABBR[p]||p.slice(0,3)}
+                          </span>
+                        ))}
+                      </div>
+                    );
                   })()}
                 </td>
-                <td style={{ padding:"9px 12px", maxWidth:140 }}>
+                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:150 }}>
                   {(() => {
                     const cat = getCategoryLabel(a);
                     const rc2 = rowColor(a);
                     if (!cat) return <span style={{ color:T.faint }}>—</span>;
-                    const shortCat = cat.replace(/^\d+\.\s*/, "");
+                    const shortCat = cat.replace(/^[0-9]+\. */, "");
                     return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
                       background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
                       border: "1px solid " + (rc2 ? rc2.border : T.border),
-                      display:"inline-block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:135
-                    }} title={cat}>{shortCat}</span>;
+                      display:"inline-block", whiteSpace:"normal", lineHeight:1.3, wordBreak:"break-word"
+                    }}>{shortCat}</span>;
                   })()}
                 </td>
                 <td style={{ padding:"9px 12px", maxWidth:200 }}>
