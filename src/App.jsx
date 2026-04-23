@@ -1373,7 +1373,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
       <Card style={{marginBottom:"1rem"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
           <Fld label="Opportunity type">
-            {f.prefillGhgIds&&f.prefillGhgIds.length>0 ? (
+            {(f.prefillGhgIds&&f.prefillGhgIds.length>0)||(f.type&&(f.type.startsWith("Scope 1")||f.type.startsWith("Scope 2")||f.type.startsWith("Scope 3"))) ? (
               <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
                            border:"1px solid "+T.border,fontSize:12,color:T.text,fontWeight:500}}>
                 {f.type||"—"}
@@ -1406,12 +1406,23 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               </select>
             )}
           </Fld>
-          <Fld label="Materiality (CSRD)">
-            <select value={f.materiality} onChange={e=>set("materiality",e.target.value)} style={iw}>
-              <option>Inside-out (positive impact on environment)</option>
-              <option>Outside-in (financial / business benefit)</option>
-              <option>Both</option>
-            </select>
+          <Fld label="Materiality">
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {["Inside-out","Outside-in","Both"].map(opt => {
+                const active = (f.materiality||"").startsWith(opt);
+                return (
+                  <button key={opt} type="button"
+                    onClick={() => set("materiality", opt)}
+                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+                      cursor:"pointer", border:"1px solid "+(active ? T.purpleBd : T.border),
+                      background: active ? T.purpleBg : "transparent",
+                      color: active ? T.purple : T.muted, fontWeight: active ? 600 : 400,
+                      fontFamily:"var(--sans,system-ui)" }}>
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
           </Fld>
           <Fld label="Opportunity description" wide>
             <textarea value={f.description} onChange={e=>set("description",e.target.value)} rows={3}
@@ -1941,7 +1952,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
                                                marginRight:8 }}>{item.sub}</span>
-                                {!isAdded&&!isSkipped&&<span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>}
+                                <span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>
                               </div>
                               {/* Reference badge or actions */}
                               {isAdded&&addedItems[item.id]&&(
@@ -2051,7 +2062,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                               textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
                               {btn.label.replace("\n"," ")}
                             </span>
-                            {!isAdded&&!isSkipped&&<span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>}
+                            <span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>
                           </div>
                           {isAdded&&addedOpp2&&(
                             <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
@@ -2717,15 +2728,18 @@ This cannot be undone.`)) return;
                     style={{ cursor:"pointer", width:13, height:13 }}/>
                 </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
-                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:140 }}>
-                  {o.type
-                    ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
-                        background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
-                        border:"1px solid "+(rc?rc.border:T.purpleBd),
-                        display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
-                        {o.type}
-                      </span>
-                    : <span style={{ color:T.faint }}>—</span>}
+                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:120 }}>
+                  {(() => {
+                    if (!o.type) return <span style={{ color:T.faint }}>—</span>;
+                    const OPP_SHORT = {"Resource Efficiency":"Resource Efficiency","Circular Economy":"Circular Economy","Low-Carbon Technology":"Low-Carbon Tech","Nature-Based Solutions":"Nature-Based","Green Finance & Taxonomy":"Green Finance","New Business / Market":"New Business","Reputational / SLO":"Reputational","Climate Resilience":"Climate Resilience","Regulatory Incentive":"Regulatory","Biodiversity Net Gain":"Biodiversity"};
+                    const display = OPP_SHORT[o.type] || o.type;
+                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                      background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
+                      border:"1px solid "+(rc?rc.border:T.purpleBd),
+                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
+                      {display}
+                    </span>;
+                  })()}
                 </td>
                 <td style={{ padding:"9px 12px", minWidth:140, maxWidth:260 }}>
                   <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
@@ -2737,7 +2751,7 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
                 <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
-                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.startsWith("Inside")?("Inside-out"):o.materiality.startsWith("Outside")?("Outside-in"):o.materiality}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
@@ -3131,9 +3145,7 @@ This cannot be undone.`)) return;
             <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
             <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
               placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
-            <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>
-              {filteredOpps.length} of {opps.length} opportunit{opps.length!==1?"ies":"y"}
-            </span>
+
           </div>
           {opps.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
