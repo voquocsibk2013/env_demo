@@ -1806,7 +1806,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                      fontWeight:isRisks?600:400, border:"none",
                      background:isRisks?T.redBg:T.surface, color:isRisks?T.red:T.muted,
                      borderRight:"1px solid "+T.border }}>
-            Risks &amp; aspects
+            Risks
           </button>
           <button onClick={() => { setMode("opps"); setView("guide"); setScreenSearch(""); }}
             style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
@@ -1872,12 +1872,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                   <div style={{ height:4, width:pct+"%", background:T.teal, borderRadius:2, transition:"width 0.3s" }}/>
                 </div>
                 <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} aspects addressed</span>
+                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} risks addressed</span>
                   {skippedAll>0&&<span style={{ fontSize:11, color:T.faint }}>{skippedAll} skipped</span>}
                 </div>
               </div>
 
-              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No aspects match your search.</div>}
+              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No risks match your search.</div>}
 
               {filtered.map(cat=>{
                 const col=COLOR_MAP[cat.color]||COLOR_MAP.gray;
@@ -2200,7 +2200,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.red, color:"#fff",
                          cursor:riskForm.aspect.trim()?"pointer":"not-allowed", fontSize:12,
                          fontFamily:T.sans, fontWeight:500, opacity:riskForm.aspect.trim()?1:0.45 }}>
-                Save to aspects register
+                Save to risks register
               </button>
             </div>
           </div>
@@ -2539,7 +2539,7 @@ This cannot be undone.`)) return;
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
           <STH col="category" label="Category"/>
-          <STH col="aspect" label="Aspect"/>
+          <STH col="aspect" label="Risk"/>
           <PlainTH>Abnormal</PlainTH>
           <STH col="score" label="Risk score"/>
           <STH col="sig" label="Significance"/>
@@ -2591,14 +2591,16 @@ This cannot be undone.`)) return;
                     return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
                       background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
                       border: "1px solid " + (rc2 ? rc2.border : T.border),
-                      display:"inline-block", whiteSpace:"normal", lineHeight:1.3, wordBreak:"break-word"
+                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word"
                     }}>{shortCat}</span>;
                   })()}
                 </td>
-                <td style={{ padding:"9px 12px", maxWidth:200 }}>
-                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
-                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
+                <td style={{ padding:"9px 12px", minWidth:140, maxWidth:220 }}>
+                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint,
+                    marginBottom:2 }}>{a.area}</div>}
+                  <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
+                    whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}
+                    title={a.aspect}>{a.aspect||"—"}</div>
                 </td>
                 <td style={{ padding:"9px 12px" }}>
                   {a.isAbnormal && (
@@ -2692,12 +2694,21 @@ This cannot be undone.`)) return;
                     style={{ cursor:"pointer", width:13, height:13 }}/>
                 </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
-                <td style={{ padding:"9px 12px", maxWidth:130 }}>
-                  {o.type?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple, border:"1px solid "+(rc?rc.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>:<span style={{ color:T.faint }}>—</span>}
+                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:140 }}>
+                  {o.type
+                    ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                        background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
+                        border:"1px solid "+(rc?rc.border:T.purpleBd),
+                        display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
+                        {o.type}
+                      </span>
+                    : <span style={{ color:T.faint }}>—</span>}
                 </td>
-                <td style={{ padding:"9px 12px", maxWidth:200 }}>
-                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color: rc ? rc.head : T.text }} title={o.description}>{o.description||"—"}</div>
-                  {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
+                <td style={{ padding:"9px 12px", minWidth:140, maxWidth:260 }}>
+                  <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
+                    whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}>{o.description||"—"}</div>
+                  {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal,
+                    whiteSpace:"normal", wordBreak:"break-word" }}>Env: {o.envBenefit}</div>}
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
@@ -2723,7 +2734,7 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","aspects","opportunities","matrix","footprint","changes","settings"];
+  const TABS = ["dashboard","screening","risks","opportunities","matrix","footprint","changes","settings"];
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
@@ -3046,7 +3057,7 @@ This cannot be undone.`)) return;
         <ScreeningTab project={project} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
       )}
 
-      {tab === "aspects" && (
+      {tab === "risks" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
@@ -3074,7 +3085,7 @@ This cannot be undone.`)) return;
           {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
           {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
+              {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
             <div>
@@ -3269,7 +3280,7 @@ This cannot be undone.`)) return;
               ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
                                borderRadius:8, border:"1px solid "+T.border, color:T.faint,
                                fontSize:12, marginBottom:"2rem" }}>
-                  No aspects yet — use the Screening tab to get started.
+                  No risks yet — use the Screening tab to get started.
                 </div>
               : <>
                   <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
