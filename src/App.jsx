@@ -884,7 +884,7 @@ function ThemeToggle({ isDark, onToggle }) {
   );
 }
 
-// ── Aspect form ───────────────────────────────────────────────────────────────
+// ── Aspect form — matches screening form UI ───────────────────────────────────
 function AspectForm({ aspect, onSave, onCancel }) {
   const [f, setF] = useState({ ...emptyAspect(), ...aspect });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
@@ -892,22 +892,43 @@ function AspectForm({ aspect, onSave, onCancel }) {
   const sig   = calcSig(f);
   return (
     <div style={{ padding:"1.25rem" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
-                    paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
-        <Btn onClick={onCancel} variant="ghost">Back</Btn>
-        <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans, color:T.text }}>
-          {aspect.id ? "Edit aspect" : "New aspect"}
-        </h2>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
+        <Btn onClick={onCancel} variant="ghost">← Back</Btn>
+        <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red }}>
+          {aspect.id ? "Edit risk" : "New risk"}
+        </h3>
         {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
       </div>
-      <Card style={{ marginBottom:"1rem" }}>
+
+      <Card style={{ marginBottom:"1rem" }} accent={T.red}>
         <SectionLabel>Activity details</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px 16px" }}>
-          <Fld label="Phase"><select value={f.phase} onChange={e=>set("phase",e.target.value)} style={iw}><option value="">Select</option>{PHASES.map(p=><option key={p}>{p}</option>)}</select></Fld>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
+          <Fld label="Phase">
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {PHASES.map(p => {
+                const sel = (f.phase||"").split(",").filter(Boolean);
+                const active = sel.includes(p);
+                return (
+                  <button key={p} type="button"
+                    onClick={() => {
+                      const cur = (f.phase||"").split(",").filter(Boolean);
+                      const next = active ? cur.filter(x=>x!==p) : [...cur, p];
+                      set("phase", next.join(","));
+                    }}
+                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+                      cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
+                      background: active ? T.tealBg : "transparent",
+                      color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
+                      fontFamily:"var(--sans,system-ui)" }}>
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+          </Fld>
           <Fld label="Activity area"><input value={f.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-          <Fld label="Specific activity" wide><input value={f.activity} onChange={e=>set("activity",e.target.value)} placeholder="Specific activity giving rise to the aspect" style={iw}/></Fld>
-          <Fld label="Environmental aspect" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust generation (PM10/PM2.5)" style={iw}/></Fld>
-          <Fld label="Condition"><select value={f.condition} onChange={e=>set("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
+          <Fld label="Environmental risk" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
+          <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
           <Fld label="Abnormal condition" wide>
             <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
               <input type="checkbox" checked={!!f.isAbnormal}
@@ -926,33 +947,25 @@ function AspectForm({ aspect, onSave, onCancel }) {
               </div>
             )}
           </Fld>
-          <Fld label="Receptors affected"><input value={f.receptors} onChange={e=>set("receptors",e.target.value)} placeholder="e.g. Air, Human health, Ecology" style={iw}/></Fld>
-          <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
         </div>
       </Card>
+
       <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
         <SectionLabel>Significance scoring</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:12 }}>
-          <Fld label="Receptor sensitivity"><select value={f.recSensitivity} onChange={e=>set("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-          <Fld label="Scale"><select value={f.scale} onChange={e=>set("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-          <Fld label="Duration"><select value={f.duration} onChange={e=>set("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
-        </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
           <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={f.severity} onChange={e=>set("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
-          <Fld label="Probability (1-5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          <Fld label="Probability (P1–P5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
           <Fld label="Legal threshold"><select value={f.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
           <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
         </div>
         {score !== null && (
-          <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid "+T.tealBd,
+          <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
                         display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
             <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
               Risk score:{" "}
-              <strong style={{ fontSize:22,
-                color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
+              <strong style={{ fontSize:22, color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
                 {score}
               </strong>
-
             </span>
             <span style={sigStyle(sig)}>{sig}</span>
             {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
@@ -960,6 +973,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
           </div>
         )}
       </Card>
+
       <Card style={{ marginBottom:"1.5rem" }}>
         <SectionLabel>Controls & management</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
@@ -971,7 +985,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
       </Card>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Add to register"}</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
       </div>
     </div>
   );
@@ -2410,7 +2424,7 @@ This cannot be undone.`)) return;
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
-      else if(aspSort.col==="category"){va=(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
+      else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
     return r;
@@ -2420,7 +2434,7 @@ This cannot be undone.`)) return;
     return [...dashAspects].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
-      else if(aspSort.col==="category"){va=(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
+      else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
   })();
@@ -2476,6 +2490,15 @@ This cannot be undone.`)) return;
       if (found) return found.cat;
     }
     return null;
+  };
+  const CAT_SHORT = {
+    "1. Emission to Air":                            "Emission to Air",
+    "2. Discharge to Water & Marine Environment":    "Water & Marine",
+    "3. Waste, Materials & Chemicals":               "Waste & Chemicals",
+    "4. Land, Soil & Contamination":                 "Land & Soil",
+    "5. Ecology & Biodiversity":                     "Ecology",
+    "6. Community, Heritage and Landscape":          "Community",
+    "7. Abnormal Condition and Emergency Response":  "Abnormal / Emergency",
   };
   // Date display helper
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—";
@@ -2587,7 +2610,7 @@ This cannot be undone.`)) return;
                     const cat = getCategoryLabel(a);
                     const rc2 = rowColor(a);
                     if (!cat) return <span style={{ color:T.faint }}>—</span>;
-                    const shortCat = cat.replace(/^[0-9]+\. */, "");
+                    const shortCat = CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */, "");
                     return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
                       background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
                       border: "1px solid " + (rc2 ? rc2.border : T.border),
@@ -2631,7 +2654,7 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)} title="Delete aspect">🗑</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>x</Btn>
                 </td>
               </tr>
             );
@@ -2724,7 +2747,7 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)} title="Delete opportunity">🗑</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
                 </td>
               </tr>
             );
