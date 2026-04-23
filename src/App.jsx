@@ -2430,6 +2430,7 @@ This cannot be undone.`)) return;
     if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
     if (oppSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(oppSort.col==="score"){va=calcOppScore(a);vb=calcOppScore(b);}
+      else if(oppSort.col==="priority"){const pRank=s=>{const sc=calcOppScore(s);return sc>=75?2:sc>=30?1:0;};va=pRank(a);vb=pRank(b);}
       else if(oppSort.col==="ghgSaving"){va=calcGhgTotal(a)||0;vb=calcGhgTotal(b)||0;}
       else{va=(a[oppSort.col]||"").toLowerCase();vb=(b[oppSort.col]||"").toLowerCase();}
       return oppSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
@@ -2537,8 +2538,8 @@ This cannot be undone.`)) return;
           </th>
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
-          <STH col="aspect" label="Aspect"/>
           <STH col="category" label="Category"/>
+          <STH col="aspect" label="Aspect"/>
           <PlainTH>Abnormal</PlainTH>
           <STH col="score" label="Risk score"/>
           <STH col="sig" label="Significance"/>
@@ -2565,26 +2566,32 @@ This cannot be undone.`)) return;
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
                 </td>
                 <td style={{ padding:"9px 12px" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.phase||"—"}</span>
+                  {(() => {
+                    const ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
+                    const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
+                    if (!phases.length) return <span style={{ color:T.faint }}>—</span>;
+                    return <div style={{ display:"flex", flexWrap:"wrap", gap:2 }}>
+                      {phases.map(p => <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px", borderRadius:3, background:T.slateBg, color:T.slate }}>{ABBR[p]||p.slice(0,3)}</span>)}
+                    </div>;
+                  })()}
                 </td>
-                <td style={{ padding:"9px 12px", maxWidth:180 }}>
-                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
-                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
-                </td>
-                <td style={{ padding:"9px 12px", maxWidth:160 }}>
+                <td style={{ padding:"9px 12px", maxWidth:140 }}>
                   {(() => {
                     const cat = getCategoryLabel(a);
                     const rc2 = rowColor(a);
                     if (!cat) return <span style={{ color:T.faint }}>—</span>;
                     const shortCat = cat.replace(/^\d+\.\s*/, "");
                     return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
-                      background: rc2 ? rc2.bg : T.slateBg,
-                      color: rc2 ? rc2.head : T.slate,
+                      background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
                       border: "1px solid " + (rc2 ? rc2.border : T.border),
-                      display:"inline-block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                      maxWidth:150 }} title={cat}>{shortCat}</span>;
+                      display:"inline-block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:135
+                    }} title={cat}>{shortCat}</span>;
                   })()}
+                </td>
+                <td style={{ padding:"9px 12px", maxWidth:200 }}>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
+                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
                 </td>
                 <td style={{ padding:"9px 12px" }}>
                   {a.isAbnormal && (
@@ -2655,7 +2662,7 @@ This cannot be undone.`)) return;
           <OSTH col="type" label="Type"/>
           <OSTH col="description" label="Description"/>
           <OSTH col="score" label="Score"/>
-          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Priority</th>
+          <OSTH col="priority" label="Priority"/>
           <OSTH col="ghgSaving" label="GHG saving"/>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
           <OSTH col="createdAt" label="Created"/>
@@ -3110,9 +3117,9 @@ This cannot be undone.`)) return;
 
       {tab === "matrix" && (() => {
         // ─── Shared constants ──────────────────────────────────────────────────────
-        const CELL = 66;       // px per grid cell
-        const YLAB = 106;      // total width of Y-axis (rotated label + descriptors)
-        const XLAB = 50;       // height of X-axis header row
+        const CELL = 60;       // px per grid cell
+        const YLAB = 98;       // total width of Y-axis (rotated label + descriptors)
+        const XLAB = 44;       // height of X-axis header row
 
         // ─── Shared sub-components ────────────────────────────────────────────────
         // Axis descriptor column (left side, shared layout)
@@ -3133,8 +3140,8 @@ This cannot be undone.`)) return;
                                        justifyContent:"flex-end", paddingRight:10 }}>
                   <div style={{ textAlign:"right" }}>
                     {(labels[v]||"").split("\n").map((ln,i) => (
-                      <div key={i} style={{ fontSize: i===0?10:8, fontWeight:i===0?700:400,
-                        color:i===0?T.text:T.faint, lineHeight:1.25 }}>{ln.replace("|"," ")}</div>
+                      <div key={i} style={{ fontSize: i===0?9:8, fontWeight:i===0?700:400,
+                        color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln.replace("|"," ")}</div>
                     ))}
                   </div>
                 </div>
@@ -3150,13 +3157,13 @@ This cannot be undone.`)) return;
               {[1,2,3,4,5].map(v => (
                 <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
                   {(labels[v]||"").split("\n").map((ln,i) => (
-                    <div key={i} style={{ fontSize:i===0?10:8, fontWeight:i===0?700:400,
-                      color:i===0?T.text:T.faint, lineHeight:1.25 }}>{ln.replace("|"," ")}</div>
+                    <div key={i} style={{ fontSize:i===0?9:8, fontWeight:i===0?700:400,
+                      color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln.replace("|"," ")}</div>
                   ))}
                 </div>
               ))}
             </div>
-            <div style={{ paddingTop:3, fontSize:9, fontWeight:600, color:T.faint,
+            <div style={{ paddingTop:2, fontSize:8, fontWeight:600, color:T.faint,
                            letterSpacing:"0.07em", textTransform:"uppercase" }}>
               {footerLabel}
             </div>
@@ -3166,20 +3173,18 @@ This cannot be undone.`)) return;
         // Unified legend block — used by both matrices
         // Shared section header
         const MatrixHeader = ({ title, subtitle, isFirst, legend }) => (
-          <div style={{ marginBottom:"0.6rem", paddingTop: isFirst?0:"1.25rem",
-                         borderTop: isFirst?"none":"1px solid "+T.border,
-                         display:"flex", alignItems:"flex-start", justifyContent:"space-between",
-                         gap:12, flexWrap:"wrap" }}>
-            <div>
-              <h3 style={{ margin:"0 0 1px", fontSize:12, fontWeight:700, color:T.text,
-                textTransform:"uppercase", letterSpacing:"0.07em" }}>{title}</h3>
-              <p style={{ margin:0, fontSize:10, color:T.faint }}>{subtitle}</p>
-            </div>
+          <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+                        marginBottom:"0.4rem",
+                        paddingTop: isFirst?0:"0.75rem",
+                        borderTop: isFirst?"none":"1px solid "+T.border }}>
+            <span style={{ fontSize:11, fontWeight:700, color:T.text,
+              textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{title}</span>
+            <span style={{ fontSize:9, color:T.faint }}>{subtitle}</span>
             {legend && (
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginLeft:"auto" }}>
                 {legend.map((item,i) => (
                   <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:4,
-                    fontSize:10, color:T.muted, whiteSpace:"nowrap" }}>
+                    fontSize:9, color:T.muted, whiteSpace:"nowrap" }}>
                     <span style={{ width:item.sw||10, height:item.sh||10,
                       borderRadius:item.br||"50%", background:item.bg,
                       border:item.bd, flexShrink:0, display:"inline-block" }}/>
