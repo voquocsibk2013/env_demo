@@ -884,7 +884,7 @@ function ThemeToggle({ isDark, onToggle }) {
   );
 }
 
-// ── Aspect form — matches screening form UI ───────────────────────────────────
+// ── Aspect form ───────────────────────────────────────────────────────────────
 function AspectForm({ aspect, onSave, onCancel }) {
   const [f, setF] = useState({ ...emptyAspect(), ...aspect });
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
@@ -892,43 +892,22 @@ function AspectForm({ aspect, onSave, onCancel }) {
   const sig   = calcSig(f);
   return (
     <div style={{ padding:"1.25rem" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
-        <Btn onClick={onCancel} variant="ghost">← Back</Btn>
-        <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red }}>
-          {aspect.id ? "Edit risk" : "New risk"}
-        </h3>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1.5rem",
+                    paddingBottom:"1rem", borderBottom:"1px solid "+T.border }}>
+        <Btn onClick={onCancel} variant="ghost">Back</Btn>
+        <h2 style={{ margin:0, fontSize:16, fontWeight:600, fontFamily:T.sans, color:T.text }}>
+          {aspect.id ? "Edit aspect" : "New aspect"}
+        </h2>
         {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
       </div>
-
-      <Card style={{ marginBottom:"1rem" }} accent={T.red}>
+      <Card style={{ marginBottom:"1rem" }}>
         <SectionLabel>Activity details</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-          <Fld label="Phase">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-              {PHASES.map(p => {
-                const sel = (f.phase||"").split(",").filter(Boolean);
-                const active = sel.includes(p);
-                return (
-                  <button key={p} type="button"
-                    onClick={() => {
-                      const cur = (f.phase||"").split(",").filter(Boolean);
-                      const next = active ? cur.filter(x=>x!==p) : [...cur, p];
-                      set("phase", next.join(","));
-                    }}
-                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
-                      cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
-                      background: active ? T.tealBg : "transparent",
-                      color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
-                      fontFamily:"var(--sans,system-ui)" }}>
-                    {p}
-                  </button>
-                );
-              })}
-            </div>
-          </Fld>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px 16px" }}>
+          <Fld label="Phase"><select value={f.phase} onChange={e=>set("phase",e.target.value)} style={iw}><option value="">Select</option>{PHASES.map(p=><option key={p}>{p}</option>)}</select></Fld>
           <Fld label="Activity area"><input value={f.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-          <Fld label="Environmental risk" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
-          <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="Specific activity" wide><input value={f.activity} onChange={e=>set("activity",e.target.value)} placeholder="Specific activity giving rise to the aspect" style={iw}/></Fld>
+          <Fld label="Environmental aspect" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust generation (PM10/PM2.5)" style={iw}/></Fld>
+          <Fld label="Condition"><select value={f.condition} onChange={e=>set("condition",e.target.value)} style={iw}>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></Fld>
           <Fld label="Abnormal condition" wide>
             <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
               <input type="checkbox" checked={!!f.isAbnormal}
@@ -947,25 +926,33 @@ function AspectForm({ aspect, onSave, onCancel }) {
               </div>
             )}
           </Fld>
+          <Fld label="Receptors affected"><input value={f.receptors} onChange={e=>set("receptors",e.target.value)} placeholder="e.g. Air, Human health, Ecology" style={iw}/></Fld>
+          <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
         </div>
       </Card>
-
       <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
         <SectionLabel>Significance scoring</SectionLabel>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:12 }}>
+          <Fld label="Receptor sensitivity"><select value={f.recSensitivity} onChange={e=>set("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Scale"><select value={f.scale} onChange={e=>set("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Duration"><select value={f.duration} onChange={e=>set("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
+        </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
           <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={f.severity} onChange={e=>set("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
-          <Fld label="Probability (P1–P5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          <Fld label="Probability (1-5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
           <Fld label="Legal threshold"><select value={f.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
           <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
         </div>
         {score !== null && (
-          <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
+          <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid "+T.tealBd,
                         display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
             <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
               Risk score:{" "}
-              <strong style={{ fontSize:22, color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
+              <strong style={{ fontSize:22,
+                color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
                 {score}
               </strong>
+
             </span>
             <span style={sigStyle(sig)}>{sig}</span>
             {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
@@ -973,7 +960,6 @@ function AspectForm({ aspect, onSave, onCancel }) {
           </div>
         )}
       </Card>
-
       <Card style={{ marginBottom:"1.5rem" }}>
         <SectionLabel>Controls & management</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
@@ -985,7 +971,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
       </Card>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Add to register"}</Btn>
       </div>
     </div>
   );
@@ -1373,7 +1359,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
       <Card style={{marginBottom:"1rem"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
           <Fld label="Opportunity type">
-            {(f.prefillGhgIds&&f.prefillGhgIds.length>0)||(f.type&&(f.type.startsWith("Scope 1")||f.type.startsWith("Scope 2")||f.type.startsWith("Scope 3"))) ? (
+            {f.prefillGhgIds&&f.prefillGhgIds.length>0 ? (
               <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
                            border:"1px solid "+T.border,fontSize:12,color:T.text,fontWeight:500}}>
                 {f.type||"—"}
@@ -1406,23 +1392,12 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               </select>
             )}
           </Fld>
-          <Fld label="Materiality">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-              {["Inside-out","Outside-in","Both"].map(opt => {
-                const active = (f.materiality||"").startsWith(opt);
-                return (
-                  <button key={opt} type="button"
-                    onClick={() => set("materiality", opt)}
-                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
-                      cursor:"pointer", border:"1px solid "+(active ? T.purpleBd : T.border),
-                      background: active ? T.purpleBg : "transparent",
-                      color: active ? T.purple : T.muted, fontWeight: active ? 600 : 400,
-                      fontFamily:"var(--sans,system-ui)" }}>
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
+          <Fld label="Materiality (CSRD)">
+            <select value={f.materiality} onChange={e=>set("materiality",e.target.value)} style={iw}>
+              <option>Inside-out (positive impact on environment)</option>
+              <option>Outside-in (financial / business benefit)</option>
+              <option>Both</option>
+            </select>
           </Fld>
           <Fld label="Opportunity description" wide>
             <textarea value={f.description} onChange={e=>set("description",e.target.value)} rows={3}
@@ -1831,7 +1806,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                      fontWeight:isRisks?600:400, border:"none",
                      background:isRisks?T.redBg:T.surface, color:isRisks?T.red:T.muted,
                      borderRight:"1px solid "+T.border }}>
-            Risks
+            Risks &amp; aspects
           </button>
           <button onClick={() => { setMode("opps"); setView("guide"); setScreenSearch(""); }}
             style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
@@ -1897,12 +1872,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                   <div style={{ height:4, width:pct+"%", background:T.teal, borderRadius:2, transition:"width 0.3s" }}/>
                 </div>
                 <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} risks addressed</span>
+                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} aspects addressed</span>
                   {skippedAll>0&&<span style={{ fontSize:11, color:T.faint }}>{skippedAll} skipped</span>}
                 </div>
               </div>
 
-              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No risks match your search.</div>}
+              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No aspects match your search.</div>}
 
               {filtered.map(cat=>{
                 const col=COLOR_MAP[cat.color]||COLOR_MAP.gray;
@@ -1952,7 +1927,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
                                                marginRight:8 }}>{item.sub}</span>
-                                <span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>
+                                {!isAdded&&!isSkipped&&<span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>}
                               </div>
                               {/* Reference badge or actions */}
                               {isAdded&&addedItems[item.id]&&(
@@ -2062,7 +2037,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                               textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
                               {btn.label.replace("\n"," ")}
                             </span>
-                            <span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>
+                            {!isAdded&&!isSkipped&&<span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>}
                           </div>
                           {isAdded&&addedOpp2&&(
                             <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
@@ -2225,7 +2200,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.red, color:"#fff",
                          cursor:riskForm.aspect.trim()?"pointer":"not-allowed", fontSize:12,
                          fontFamily:T.sans, fontWeight:500, opacity:riskForm.aspect.trim()?1:0.45 }}>
-                Save to risks register
+                Save to aspects register
               </button>
             </div>
           </div>
@@ -2435,7 +2410,7 @@ This cannot be undone.`)) return;
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
-      else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
+      else if(aspSort.col==="category"){va=getCategoryLabel(a)||"";vb=getCategoryLabel(b)||"";}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
     return r;
@@ -2445,7 +2420,7 @@ This cannot be undone.`)) return;
     return [...dashAspects].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
-      else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
+      else if(aspSort.col==="category"){va=getCategoryLabel(a)||"";vb=getCategoryLabel(b)||"";}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
   })();
@@ -2501,15 +2476,6 @@ This cannot be undone.`)) return;
       if (found) return found.cat;
     }
     return null;
-  };
-  const CAT_SHORT = {
-    "1. Emission to Air":                            "Emission to Air",
-    "2. Discharge to Water & Marine Environment":    "Water & Marine",
-    "3. Waste, Materials & Chemicals":               "Waste & Chemicals",
-    "4. Land, Soil & Contamination":                 "Land & Soil",
-    "5. Ecology & Biodiversity":                     "Ecology",
-    "6. Community, Heritage and Landscape":          "Community",
-    "7. Abnormal Condition and Emergency Response":  "Abnormal / Emergency",
   };
   // Date display helper
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—";
@@ -2573,7 +2539,7 @@ This cannot be undone.`)) return;
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
           <STH col="category" label="Category"/>
-          <STH col="aspect" label="Risk"/>
+          <STH col="aspect" label="Aspect"/>
           <PlainTH>Abnormal</PlainTH>
           <STH col="score" label="Risk score"/>
           <STH col="sig" label="Significance"/>
@@ -2599,42 +2565,33 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
                 </td>
-                <td style={{ padding:"9px 12px", minWidth:60 }}>
+                <td style={{ padding:"9px 12px" }}>
                   {(() => {
                     const ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
                     const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
                     if (!phases.length) return <span style={{ color:T.faint }}>—</span>;
-                    return (
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, auto)", gap:2, width:"fit-content" }}>
-                        {phases.map(p => (
-                          <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px",
-                            borderRadius:3, background:T.slateBg, color:T.slate, textAlign:"center" }}>
-                            {ABBR[p]||p.slice(0,3)}
-                          </span>
-                        ))}
-                      </div>
-                    );
+                    return <div style={{ display:"flex", flexWrap:"wrap", gap:2 }}>
+                      {phases.map(p => <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px", borderRadius:3, background:T.slateBg, color:T.slate }}>{ABBR[p]||p.slice(0,3)}</span>)}
+                    </div>;
                   })()}
                 </td>
-                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:150 }}>
+                <td style={{ padding:"9px 12px", maxWidth:140 }}>
                   {(() => {
                     const cat = getCategoryLabel(a);
                     const rc2 = rowColor(a);
                     if (!cat) return <span style={{ color:T.faint }}>—</span>;
-                    const shortCat = CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */, "");
+                    const shortCat = cat.replace(/^\d+\.\s*/, "");
                     return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
                       background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
                       border: "1px solid " + (rc2 ? rc2.border : T.border),
-                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word"
-                    }}>{shortCat}</span>;
+                      display:"inline-block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:135
+                    }} title={cat}>{shortCat}</span>;
                   })()}
                 </td>
-                <td style={{ padding:"9px 12px", minWidth:140, maxWidth:220 }}>
-                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint,
-                    marginBottom:2 }}>{a.area}</div>}
-                  <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
-                    whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}
-                    title={a.aspect}>{a.aspect||"—"}</div>
+                <td style={{ padding:"9px 12px", maxWidth:200 }}>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                fontWeight:500, color: rc ? rc.head : T.text }} title={a.aspect}>{a.aspect||"—"}</div>
+                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint }}>{a.area}</div>}
                 </td>
                 <td style={{ padding:"9px 12px" }}>
                   {a.isAbnormal && (
@@ -2665,7 +2622,7 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>x</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)} title="Delete aspect">🗑</Btn>
                 </td>
               </tr>
             );
@@ -2728,30 +2685,18 @@ This cannot be undone.`)) return;
                     style={{ cursor:"pointer", width:13, height:13 }}/>
                 </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
-                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:120 }}>
-                  {(() => {
-                    if (!o.type) return <span style={{ color:T.faint }}>—</span>;
-                    const OPP_SHORT = {"Resource Efficiency":"Resource Efficiency","Circular Economy":"Circular Economy","Low-Carbon Technology":"Low-Carbon Tech","Nature-Based Solutions":"Nature-Based","Green Finance & Taxonomy":"Green Finance","New Business / Market":"New Business","Reputational / SLO":"Reputational","Climate Resilience":"Climate Resilience","Regulatory Incentive":"Regulatory","Biodiversity Net Gain":"Biodiversity"};
-                    const display = OPP_SHORT[o.type] || o.type;
-                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
-                      background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
-                      border:"1px solid "+(rc?rc.border:T.purpleBd),
-                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
-                      {display}
-                    </span>;
-                  })()}
+                <td style={{ padding:"9px 12px", maxWidth:130 }}>
+                  {o.type?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple, border:"1px solid "+(rc?rc.border:T.purpleBd), whiteSpace:"nowrap" }}>{o.type}</span>:<span style={{ color:T.faint }}>—</span>}
                 </td>
-                <td style={{ padding:"9px 12px", minWidth:140, maxWidth:260 }}>
-                  <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
-                    whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}>{o.description||"—"}</div>
-                  {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal,
-                    whiteSpace:"normal", wordBreak:"break-word" }}>Env: {o.envBenefit}</div>}
+                <td style={{ padding:"9px 12px", maxWidth:200 }}>
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500, color: rc ? rc.head : T.text }} title={o.description}>{o.description||"—"}</div>
+                  {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Env: {o.envBenefit}</div>}
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
                 <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
-                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.startsWith("Inside")?("Inside-out"):o.materiality.startsWith("Outside")?("Outside-in"):o.materiality}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
@@ -2761,7 +2706,7 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)} title="Delete opportunity">🗑</Btn>
                 </td>
               </tr>
             );
@@ -2771,7 +2716,7 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","risks","opportunities","matrix","footprint","changes","settings"];
+  const TABS = ["dashboard","screening","aspects","opportunities","matrix","footprint","changes","settings"];
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
@@ -3094,7 +3039,7 @@ This cannot be undone.`)) return;
         <ScreeningTab project={project} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
       )}
 
-      {tab === "risks" && (
+      {tab === "aspects" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
@@ -3122,7 +3067,7 @@ This cannot be undone.`)) return;
           {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
           {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
+              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
             <div>
@@ -3145,7 +3090,9 @@ This cannot be undone.`)) return;
             <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
             <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
               placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
-
+            <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>
+              {filteredOpps.length} of {opps.length} opportunit{opps.length!==1?"ies":"y"}
+            </span>
           </div>
           {opps.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
@@ -3315,7 +3262,7 @@ This cannot be undone.`)) return;
               ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
                                borderRadius:8, border:"1px solid "+T.border, color:T.faint,
                                fontSize:12, marginBottom:"2rem" }}>
-                  No risks yet — use the Screening tab to get started.
+                  No aspects yet — use the Screening tab to get started.
                 </div>
               : <>
                   <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
