@@ -2490,6 +2490,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const d=new Date(); d.setDate(d.getDate()+(6-d.getDay())); d.setHours(23,59,59,999);
     return d.toISOString().slice(0,10);
   });
+  const [hoveredAspId, setHoveredAspId] = useState(null);
+  const [hoveredOppId, setHoveredOppId] = useState(null);
 
   const aspects = project.aspects || [];
   const opps    = project.opportunities || project.opps || [];
