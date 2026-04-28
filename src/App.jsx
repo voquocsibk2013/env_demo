@@ -2264,6 +2264,48 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
   const aspects = project.aspects || [];
   const opps    = project.opportunities || project.opps || [];
+
+  // ── Export / Import ──────────────────────────────────────────────────────
+  const exportProject = () => {
+    const payload = {
+      _envToolkitVersion: "1.0",
+      _exportedAt: new Date().toISOString(),
+      project: project,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    const slug = (project.name||"project").replace(/[^a-z0-9]/gi,"_").toLowerCase();
+    a.download = `${slug}_${new Date().toISOString().slice(0,10)}.envproject`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importProjectFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        if (!parsed._envToolkitVersion || !parsed.project) {
+          alert("Invalid file — this does not look like an exported ENV·ASPECTS project file.");
+          return;
+        }
+        const imported = {
+          ...parsed.project,
+          id: project.id,          // keep current slot id
+          _importedAt: new Date().toISOString(),
+        };
+        onChange(imported);
+        alert(`✓ Project "${imported.name || "Untitled"}" imported successfully.`);
+      } catch {
+        alert("Could not read file. Make sure it is a valid .envproject JSON file.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const changelog = project.changelog || [];
   const nextRef = (arr, pfx) => pfx+"-"+String(arr.length+1).padStart(3,"0");
 
@@ -3684,7 +3726,7 @@ This cannot be undone.`)) return;
                     <input type="date" value={sess.date}
                       onChange={e=>updateSession(sess.id,{date:e.target.value})}
                       style={{ ...iw, width:140 }}/>
-                    <input value={sess.label} placeholder="Session label (optional, e.g. HAZID Workshop)"
+                    <input value={sess.label} placeholder="Session label (optional, e.g. Sustainability Screening #1)"
                       onChange={e=>updateSession(sess.id,{label:e.target.value})}
                       style={{ ...iw, flex:1 }}/>
                     <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint, flexShrink:0 }}>
@@ -3755,6 +3797,105 @@ This cannot be undone.`)) return;
               ))}
             </div>
           </div>
+        );
+      })()}
+
+      {tab === "changes" && (()=>{
+        const now = new Date();
+        const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()); weekStart.setHours(0,0,0,0);
+        const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+        const fromMs = new Date(clFrom).getTime();
+        const toMs   = new Date(clTo+"T23:59:59").getTime();
+        const filtered = [...changelog].reverse().filter(e=>{
+          const t = new Date(e.ts).getTime();
+          return t>=fromMs && t<=toMs;
+        });
+        return(
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1rem", flexWrap:"wrap" }}>
+            <div>
+              <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:600, fontFamily:T.sans }}>Change log</h3>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>{filtered.length} change{filtered.length!==1?"s":""} in range · {changelog.length} total</p>
+            </div>
+            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <span style={{ fontSize:11, color:T.muted }}>From</span>
+              <input type="date" value={clFrom} onChange={e=>setClFrom(e.target.value)}
+                style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
+              <span style={{ fontSize:11, color:T.muted }}>to</span>
+              <input type="date" value={clTo} onChange={e=>setClTo(e.target.value)}
+                style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
+              <button onClick={()=>{setClFrom(weekStart.toISOString().slice(0,10));const wd=new Date(now);wd.setDate(now.getDate()+(6-now.getDay()));setClTo(wd.toISOString().slice(0,10));}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.tealBd, background:T.tealBg, color:T.teal, cursor:"pointer", fontFamily:T.sans }}>
+                This week
+              </button>
+              <button onClick={()=>{const m=new Date(now); m.setDate(1); setClFrom(m.toISOString().slice(0,10)); const me=new Date(now.getFullYear(),now.getMonth()+1,0); setClTo(me.toISOString().slice(0,10));}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                This month
+              </button>
+              <button onClick={()=>{const y=now.getFullYear(); setClFrom(y+"-01-01"); setClTo(y+"-12-31");}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                This year
+              </button>
+            </div>
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              No changes in this date range.{changelog.length>0?" Adjust the date range to see older entries.":""}
+            </div>
+          ) : (
+            <div style={{ background:T.surface, borderRadius:8, border:"1px solid "+T.border, overflow:"hidden" }}>
+              {filtered.map((entry, i) => {
+                const isAdd    = entry.action.startsWith("Added");
+                const isEdit   = entry.action.startsWith("Edited");
+                const isDel    = entry.action.startsWith("Deleted");
+                const dot      = isAdd ? T.teal : isEdit ? T.amber : T.red;
+                const ts       = new Date(entry.ts);
+                const dateStr  = ts.toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
+                const timeStr  = ts.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+                return (
+                  <div key={entry.id} style={{ display:"flex", gap:12, padding:"10px 16px",
+                                               borderBottom: i < filtered.length-1 ? "1px solid "+T.rowBd : "none",
+                                               alignItems:"flex-start" }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:dot, marginTop:6, flexShrink:0 }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                        <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500,
+                                       color: isAdd?T.teal:isDel?T.red:T.amber,
+                                       background: isAdd?T.tealBg:isDel?T.redBg:T.amberBg,
+                                       padding:"1px 6px", borderRadius:3, flexShrink:0 }}>
+                          {entry.action}
+                        </span>
+                        <span style={{ fontSize:12, color:T.text, fontWeight:500 }}>
+                          {entry.detail}
+                        </span>
+                      </div>
+                      {(entry.fields||[]).length>0&&(
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                          {(entry.fields||[]).filter(f=>f.v||f.to).map((f,fi)=>(
+                            <span key={fi} style={{ fontSize:11, padding:"2px 8px", borderRadius:10,
+                                                    background:T.surface2, border:"1px solid "+T.border,
+                                                    color:T.muted, display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ color:T.faint, fontSize:10 }}>{f.k}</span>
+                              {f.from!==undefined
+                                ? <><span style={{ color:T.muted, textDecoration:"line-through", fontSize:10 }}>{f.from}</span>
+                                    <span style={{ color:T.faint, fontSize:9 }}>→</span>
+                                    <span style={{ color:T.text }}>{f.to}</span></>
+                                : <span style={{ color:T.text }}>{f.v}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flexShrink:0, textAlign:"right" }}>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{dateStr}</p>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"1px 0 0" }}>{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         );
       })()}
 
