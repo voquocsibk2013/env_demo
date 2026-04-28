@@ -3243,23 +3243,14 @@ This cannot be undone.`)) return;
                               <div style={{ position:"absolute", inset:0, display:"flex", flexWrap:"wrap",
                                 gap:3, alignContent:"center", justifyContent:"center", padding:"18px 4px 4px" }}>
                                 {items.map((a, i) => {
-                                  const sig  = calcSig(a);
-                                  const fill = sig==="SIGNIFICANT"?"#DC2626":sig==="WATCH"?"#D97706":"#16A34A";
-                                  const bd   = a.status==="Closed"?"rgba(0,0,0,0.15)":
-                                               sig==="SIGNIFICANT"?"#7F1D1D":sig==="WATCH"?"#78350F":"#14532D";
+                                  const sig      = calcSig(a);
+                                  const dotColor = a.status==="Closed" ? "#9CA3AF"
+                                    : sig==="SIGNIFICANT"?"#DC2626":sig==="WATCH"?"#D97706":"#16A34A";
                                   return (
                                     <div key={i} onClick={()=>setEditAspect(a)}
                                       title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+sv+" × P"+pb+" = "+sv*pb}
-                                      style={{ width:24, height:24, borderRadius:"50%",
-                                        background:fill, border:"2px solid "+bd,
-                                        opacity:a.status==="Closed"?0.35:1,
-                                        cursor:"pointer", flexShrink:0,
-                                        display:"flex", alignItems:"center", justifyContent:"center",
-                                        fontSize:9, fontWeight:800, color:"#fff",
-                                        boxSizing:"border-box",
-                                        boxShadow:a.status!=="Closed"?"0 1px 4px rgba(0,0,0,0.3)":"none" }}>
-                                      {items.length>1&&i===0 ? items.length : ""}
-                                    </div>
+                                      style={{ width:14, height:14, borderRadius:"50%",
+                                        background:dotColor, cursor:"pointer", flexShrink:0 }}/>
                                   );
                                 })}
                               </div>
@@ -3301,14 +3292,13 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dots</p>
                     {[
-                      {fill:"#DC2626",bd:"#7F1D1D",l:"Significant — Open"},
-                      {fill:"#D97706",bd:"#78350F",l:"Watch — Open"},
-                      {fill:"#16A34A",bd:"#14532D",l:"Low — Open"},
-                      {fill:"#6B7280",bd:"#374151",l:"Any — Closed",op:0.35},
-                    ].map(({fill,bd,l,op=1})=>(
+                      {c:"#DC2626",l:"Significant — Open"},
+                      {c:"#D97706",l:"Watch — Open"},
+                      {c:"#16A34A",l:"Low — Open"},
+                      {c:"#9CA3AF",l:"Any — Closed"},
+                    ].map(({c,l})=>(
                       <div key={l} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
-                        <div style={{ width:16, height:16, borderRadius:"50%", background:fill,
-                          border:"2px solid "+bd, opacity:op, flexShrink:0 }}/>
+                        <div style={{ width:12, height:12, borderRadius:"50%", background:c, flexShrink:0 }}/>
                         <span style={{ fontSize:9, color:T.muted }}>{l}</span>
                       </div>
                     ))}
@@ -3412,14 +3402,19 @@ This cannot be undone.`)) return;
             </div>
           ) : (() => {
             const CELL = 70;
+            const YAXIS_W = 50;   // rotated label (20) + number column (30)
 
+            // Threshold >= 4 for high
             const oppQ = (ev, feas) => {
-              const hE = ev >= 3, hF = feas >= 3;
+              const hE = ev >= 4, hF = feas >= 4;
               if  (hE && hF)  return { bg:T.purpleBg, bd:T.purpleBd, label:"Pursue",       c:T.purple };
               if  (hE && !hF) return { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",          c:T.blue   };
               if  (!hE && hF) return { bg:T.greenBg,  bd:T.greenBd,  label:"Quick win",     c:T.green  };
               return                  { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritize",  c:T.slate  };
             };
+
+            const isQCorner = (ev, feas) =>
+              (ev===5&&feas===5)||(ev===3&&feas===5)||(ev===5&&feas===3)||(ev===3&&feas===3);
 
             const oGrid = {};
             opps.forEach(o => {
@@ -3430,152 +3425,174 @@ This cannot be undone.`)) return;
               oGrid[k].push(o);
             });
 
-            // Show quadrant label only in its "corner" cell when empty
-            const isQCorner = (ev, feas) => {
-              const hE = ev >= 3, hF = feas >= 3;
-              if (hE && hF)  return ev===5 && feas===5;
-              if (hE && !hF) return ev===5 && feas===1;
-              if (!hE && hF) return ev===2 && feas===5;
-              return                ev===2 && feas===1;
-            };
-
-            const FEAS_ROWS = [
-              {v:5,code:"F5",lbl:"Easy"},
-              {v:4,code:"F4",lbl:"Achievable"},
-              {v:3,code:"F3",lbl:"Moderate"},
-              {v:2,code:"F2",lbl:"Difficult"},
-              {v:1,code:"F1",lbl:"V. difficult"},
-            ];
-            const ENV_COLS = [
-              {v:1,code:"E1",lbl:"Negligible"},
-              {v:2,code:"E2",lbl:"Minor"},
-              {v:3,code:"E3",lbl:"Moderate"},
-              {v:4,code:"E4",lbl:"Significant"},
-              {v:5,code:"E5",lbl:"Major"},
-            ];
-
             return (
               <div>
-                {/* How-to-read panel */}
-                <div style={{ padding:"13px 16px", background:T.purpleBg, border:"1px solid "+T.purpleBd,
-                  borderRadius:9, marginBottom:"1rem" }}>
-                  <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.purple,
-                    textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 7px" }}>
-                    How to read this matrix
-                  </p>
-                  <p style={{ fontSize:12, color:T.text, margin:"0 0 10px", lineHeight:1.65 }}>
-                    The matrix plots <strong>Environmental Value</strong> (x-axis, E1–E5) against{" "}
-                    <strong>Implementation Feasibility</strong> (y-axis, F1–F5).
-                    The third criterion — <strong>Business Value</strong> — is shown as{" "}
-                    <em>dot size</em>: a larger dot means higher business value (1–5).
-                    This lets you see at a glance which opportunities are both impactful and achievable.
-                  </p>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
-                    {[
-                      {l:"Pursue",c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"High impact + achievable → act now"},
-                      {l:"Quick win",c:T.green,bd:T.greenBd,bg:T.greenBg,d:"Easy to capture → move fast"},
-                      {l:"Plan",c:T.blue,bd:T.blueBd,bg:T.blueBg,d:"High impact but harder → plan carefully"},
-                      {l:"Deprioritize",c:T.slate,bd:T.slateBd,bg:T.slateBg,d:"Low value + difficult → defer"},
-                    ].map(({l,c,bd,bg,d})=>(
-                      <div key={l} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                        <span style={{ fontSize:10, fontWeight:600, padding:"2px 9px", borderRadius:4,
-                          background:bg, color:c, border:"1px solid "+bd, whiteSpace:"nowrap" }}>{l}</span>
-                        <span style={{ fontSize:10, color:T.muted }}>{d}</span>
+                {/* ── Matrix ── */}
+                <div style={{ overflowX:"auto" }}>
+                  <div style={{ display:"flex", flexDirection:"column", width:"fit-content" }}>
+
+                    {/* ENV VALUE label + numbers — top header */}
+                    <div style={{ display:"flex", flexDirection:"column", marginLeft:YAXIS_W }}>
+                      <div style={{ width:CELL*5, textAlign:"center", paddingBottom:4 }}>
+                        <span style={{ fontSize:9, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                          ENVIRONMENTAL VALUE →
+                        </span>
                       </div>
-                    ))}
+                      <div style={{ display:"flex", marginBottom:2 }}>
+                        {[1,2,3,4,5].map(v => (
+                          <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Y-axis + grid rows */}
+                    <div style={{ display:"flex" }}>
+                      {/* Y-axis: rotated label + numbers */}
+                      <div style={{ width:YAXIS_W, flexShrink:0, display:"flex" }}>
+                        <div style={{ width:20, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          <span style={{ fontSize:9, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                            whiteSpace:"nowrap", textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                            FEASIBILITY →
+                          </span>
+                        </div>
+                        <div style={{ width:30 }}>
+                          {[5,4,3,2,1].map(v => (
+                            <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
+                              justifyContent:"flex-end", paddingRight:6 }}>
+                              <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Grid cells */}
+                      <div>
+                        {[5,4,3,2,1].map(feas => (
+                          <div key={feas} style={{ display:"flex" }}>
+                            {[1,2,3,4,5].map(ev => {
+                              const q     = oppQ(ev, feas);
+                              const items = oGrid[ev+","+feas]||[];
+                              const isC   = isQCorner(ev, feas);
+                              return (
+                                <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
+                                  background:q.bg, border:"1px solid "+q.bd,
+                                  display:"flex", flexWrap:"wrap",
+                                  alignContent:"center", justifyContent:"center",
+                                  gap:4, padding:5, boxSizing:"border-box" }}>
+                                  {items.length===0 && isC && (
+                                    <span style={{ fontSize:9, fontWeight:700, color:q.c,
+                                      opacity:0.5, textAlign:"center", lineHeight:1.3,
+                                      pointerEvents:"none" }}>{q.label}</span>
+                                  )}
+                                  {items.map((o, i) => {
+                                    const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
+                                    const sz = 10 + (bv-1)*3;
+                                    return (
+                                      <div key={i} onClick={()=>setEditOpp(o)}
+                                        title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
+                                        style={{ width:sz, height:sz, borderRadius:"50%",
+                                          background:q.c,
+                                          opacity:o.status==="Closed"?0.25:0.85,
+                                          cursor:"pointer", flexShrink:0 }}/>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                   </div>
-                  <p style={{ fontSize:10, color:T.muted, margin:0 }}>
-                    Dot size = Business Value: small (1–2) · medium (3) · large (4–5). Faded = closed.
-                  </p>
                 </div>
 
-                {/* Matrix grid */}
-                <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
-                  {/* Y-axis */}
-                  <div style={{ display:"flex", flexShrink:0, marginTop:56 }}>
-                    <div style={{ width:18, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <span style={{ fontSize:9, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
-                        whiteSpace:"nowrap", textTransform:"uppercase", letterSpacing:"0.07em" }}>
-                        FEASIBILITY →
-                      </span>
-                    </div>
-                    <div style={{ width:84, flexShrink:0 }}>
-                      {FEAS_ROWS.map(({v,code,lbl}) => (
-                        <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
-                          justifyContent:"flex-end", paddingRight:10 }}>
-                          <div style={{ textAlign:"right" }}>
-                            <div style={{ fontSize:10, fontWeight:700, color:T.text, lineHeight:1.25 }}>{code}</div>
-                            <div style={{ fontSize:9, color:T.muted, lineHeight:1.25 }}>{lbl}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {/* ── Legend panels (below the grid) ── */}
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 1fr", gap:12, marginTop:"1.25rem" }}>
 
-                  {/* Grid body */}
-                  <div style={{ flexShrink:0 }}>
-                    {/* X-axis header */}
-                    <div style={{ display:"flex", height:56, alignItems:"flex-end", paddingBottom:5 }}>
-                      {ENV_COLS.map(({v,code,lbl}) => (
-                        <div key={v} style={{ width:CELL, textAlign:"center", flexShrink:0 }}>
-                          <div style={{ fontSize:11, fontWeight:700, color:T.text, lineHeight:1.3 }}>{code}</div>
-                          <div style={{ fontSize:9,  color:T.muted,  lineHeight:1.3, marginTop:2 }}>{lbl}</div>
+                  {/* Quadrant guide */}
+                  <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px", minWidth:180 }}>
+                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Quadrant guide</p>
+                    {[
+                      {l:"Pursue",      c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"High value + achievable → act now"},
+                      {l:"Quick win",   c:T.green, bd:T.greenBd, bg:T.greenBg, d:"Easy to capture → move fast"},
+                      {l:"Plan",        c:T.blue,  bd:T.blueBd,  bg:T.blueBg,  d:"High value but harder → plan resources"},
+                      {l:"Deprioritize",c:T.slate, bd:T.slateBd, bg:T.slateBg, d:"Low value + difficult → defer"},
+                    ].map(({l,c,bd,bg,d})=>(
+                      <div key={l} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:8 }}>
+                        <div style={{ width:14, height:14, borderRadius:3, background:bg,
+                          border:"2px solid "+bd, flexShrink:0, marginTop:1 }}/>
+                        <div>
+                          <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:c }}>{l}</div>
+                          <div style={{ fontSize:9, color:T.faint, lineHeight:1.4 }}>{d}</div>
                         </div>
-                      ))}
-                    </div>
-
-                    {/* Rows (feas 5→1) */}
-                    {FEAS_ROWS.map(({v:feas}) => (
-                      <div key={feas} style={{ display:"flex" }}>
-                        {ENV_COLS.map(({v:ev}) => {
-                          const q     = oppQ(ev, feas);
-                          const items = oGrid[ev+","+feas]||[];
-                          const isC   = isQCorner(ev, feas);
-                          return (
-                            <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
-                              background:q.bg, border:"1px solid "+q.bd,
-                              display:"flex", flexWrap:"wrap",
-                              alignContent:"center", justifyContent:"center",
-                              gap:4, padding:5, boxSizing:"border-box", position:"relative" }}>
-                              {items.length===0 && isC && (
-                                <span style={{ fontSize:9, fontWeight:700, color:q.c,
-                                  opacity:0.5, textAlign:"center", lineHeight:1.3,
-                                  pointerEvents:"none" }}>{q.label}</span>
-                              )}
-                              {items.map((o, i) => {
-                                const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
-                                const sz = 10 + (bv-1)*3;
-                                return (
-                                  <div key={i} onClick={()=>setEditOpp(o)}
-                                    title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
-                                    style={{ width:sz, height:sz, borderRadius:"50%",
-                                      background:q.c, border:"2px solid "+q.c,
-                                      opacity:o.status==="Closed"?0.25:0.9,
-                                      cursor:"pointer", flexShrink:0,
-                                      boxShadow:o.status!=="Closed"?"0 1px 4px rgba(0,0,0,0.25)":"none" }}/>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
                       </div>
                     ))}
-
-                    <div style={{ textAlign:"center", paddingTop:7 }}>
-                      <span style={{ fontSize:9, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
-                        ENVIRONMENTAL VALUE →
-                      </span>
-                    </div>
+                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dot size = Business Value</p>
+                    {[{bv:1,sz:10,l:"Low (1–2)"},{bv:3,sz:16,l:"Moderate (3)"},{bv:5,sz:22,l:"High (4–5)"}].map(({bv,sz,l})=>(
+                      <div key={bv} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
+                        <div style={{ width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          <div style={{ width:sz, height:sz, borderRadius:"50%", background:T.purple, opacity:0.85 }}/>
+                        </div>
+                        <span style={{ fontSize:9, color:T.muted }}>{l}</span>
+                      </div>
+                    ))}
+                    <p style={{ fontSize:9, color:T.faint, margin:"6px 0 0", lineHeight:1.5 }}>
+                      Faded dots are closed opportunities.
+                    </p>
                   </div>
+
+                  {/* Environmental Value scale */}
+                  <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
+                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Environmental Value (x-axis)</p>
+                    {[
+                      {v:5,l:"Major",      d:"Transformational environmental benefit; measurable improvement at portfolio or regional scale."},
+                      {v:4,l:"Significant",d:"Clear and quantifiable environmental benefit; materially reduces impact or footprint."},
+                      {v:3,l:"Moderate",   d:"Meaningful improvement; reduces environmental impact in a targeted area."},
+                      {v:2,l:"Minor",      d:"Small marginal improvement; limited contribution to overall environmental performance."},
+                      {v:1,l:"Negligible", d:"Negligible direct environmental benefit; primarily internal or administrative gain."},
+                    ].map(({v,l,d})=>(
+                      <div key={v} style={{ marginBottom:9 }}>
+                        <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
+                          <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
+                          <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
+                        </div>
+                        <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Feasibility scale */}
+                  <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
+                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Implementation Feasibility (y-axis)</p>
+                    {[
+                      {v:5,l:"Easy",         d:"Can be implemented with existing resources, no regulatory hurdles, quick payback."},
+                      {v:4,l:"Achievable",   d:"Feasible within normal project constraints; modest investment or process change required."},
+                      {v:3,l:"Moderate",     d:"Requires dedicated effort, some investment, or coordination across teams."},
+                      {v:2,l:"Difficult",    d:"Significant barriers: cost, technology maturity, regulatory complexity, or stakeholder resistance."},
+                      {v:1,l:"Very difficult",d:"Currently not feasible without major breakthroughs in technology, funding, or regulatory change."},
+                    ].map(({v,l,d})=>(
+                      <div key={v} style={{ marginBottom:9 }}>
+                        <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
+                          <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
+                          <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
+                        </div>
+                        <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
+                      </div>
+                    ))}
+                  </div>
+
                 </div>
 
               </div>
             );
           })()}
-        </div>
-
-            </div>
-          )}
         </div>
       )}
 
