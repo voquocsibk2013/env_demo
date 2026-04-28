@@ -2757,7 +2757,19 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","risks","opportunities","matrix","footprint","changes","settings"];
+  const TABS = ["dashboard","screening","risks","opportunities","matrix","footprint","waste","attendees","changes","settings"];
+  const TAB_LABELS = {
+    dashboard:     "Dashboard",
+    screening:     "Screening",
+    risks:         "Registered Risks",
+    opportunities: "Registered Opportunities",
+    matrix:        "Matrix",
+    footprint:     "Environmental Budget",
+    waste:         "Waste Handling",
+    attendees:     "Attendees",
+    changes:       "Changes",
+    settings:      "Settings",
+  };
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
@@ -2770,7 +2782,7 @@ This cannot be undone.`)) return;
                        fontWeight:500, background:"transparent", border:"none",
                        borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
                        marginBottom:"-2px", color: tab===t ? T.teal : T.muted }}>
-              {t.charAt(0).toUpperCase()+t.slice(1)}
+              {TAB_LABELS[t] || t.charAt(0).toUpperCase()+t.slice(1)}
             </button>
           ))}
         </div>
@@ -2782,200 +2794,84 @@ This cannot be undone.`)) return;
 
       {tab === "dashboard" && (
         <div>
+
+          {/* ── KPI strip ── */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
             <StatCard label="All aspects"   value={aspects.length}  filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
             <StatCard label="Significant"   value={sigCount}        filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
             <StatCard label="Watch"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Low"           value={lowCount}        filterId="low"   color={T.green}  border={T.greenBd}  bg={T.greenBg}/>
             <StatCard label="Opportunities" value={opps.length}     filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
             <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
 
-          {/* ── Emission Footprint card ── */}
+          {/* ── Footprint card (if pinned) ── */}
           {project.footprintSummary && (() => {
             const fp   = project.footprintSummary;
             const fmtT = v => Number(v).toFixed(3) + " tCO₂e";
             const d    = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
-            // Scope totals — only what has data
-            const s3c1 = Number(fp.combined || 0);  // only scope we have so far
+            const s3c1 = Number(fp.combined || 0);
             const s1   = Number(fp.scope1   || 0);
             const s2   = Number(fp.scope2   || 0);
             const grandTotal = s1 + s2 + s3c1;
-            // NP / RP
             const np   = Number(fp.npTotal  || 0);
             const rp   = Number(fp.rpTotal  || 0);
             const npPct = s3c1 > 0 ? Math.min(100, (np / s3c1) * 100) : 0;
             const rpPct = s3c1 > 0 ? Math.min(100, (rp / s3c1) * 100) : 0;
-            // Category breakdown
             const cats = fp.catBreakdown || [];
-            const SCOPE_COLORS = {
-              "Scope 1":        { c:T.red,   bg:T.redBg,    bd:T.redBd    },
-              "Scope 2":        { c:T.amber, bg:T.amberBg,  bd:T.amberBd  },
-              "Scope 3 Cat 1":  { c:T.teal,  bg:T.tealBg,   bd:T.tealBd   },
-              "Scope 3 Cat 4":  { c:T.purple,bg:T.purpleBg, bd:T.purpleBd },
-            };
             const CAT_COLORS = [T.teal,T.blue,T.purple,T.amber,T.green,T.slate,T.red,T.tealDark];
             return (
               <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden",
                 border:"1px solid "+T.border, background:T.surface }}>
-
-                {/* ── Card header ── */}
                 <div style={{ padding:"9px 14px", background:T.surface2,
                   borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text,
-                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Emission Footprint</span>
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Environmental Budget</span>
                   {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{d}</span>}
                   <button onClick={()=>setTab("footprint")}
                     style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5,
                       border:"1px solid "+T.tealBd, background:"transparent",
                       color:T.teal, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
-                    Open footprint →
+                    Open budget →
                   </button>
                   <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
                     style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
                       border:"1px solid "+T.border, background:"transparent",
                       color:T.faint, cursor:"pointer" }}>×</button>
                 </div>
-
-                {/* ── Scope rows ── */}
-                <div style={{ padding:"12px 14px", borderBottom:"1px solid "+T.border }}>
-                  <p style={{ fontFamily:T.mono, fontSize:8, fontWeight:600, color:T.faint,
-                    textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>
-                    Scopes with data
-                  </p>
-                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-
-                    {/* Scope 1 — placeholder, shown only if data */}
-                    {s1 > 0 && (
-                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
-                        borderRadius:7, background:T.redBg, border:"1px solid "+T.redBd }}>
-                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.red,
-                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 1</span>
-                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.red }}>
-                          {fmtT(s1)}
-                        </span>
-                        <span style={{ fontSize:10, color:T.red, opacity:0.7, marginLeft:"auto" }}>
-                          Direct emissions
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Scope 2 — placeholder, shown only if data */}
-                    {s2 > 0 && (
-                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
-                        borderRadius:7, background:T.amberBg, border:"1px solid "+T.amberBd }}>
-                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.amber,
-                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 2</span>
-                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.amber }}>
-                          {fmtT(s2)}
-                        </span>
-                        <span style={{ fontSize:10, color:T.amber, opacity:0.7, marginLeft:"auto" }}>
-                          Energy indirect
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Scope 3 Cat 1 — always shown when footprint exists */}
-                    {s3c1 > 0 && (
-                      <div style={{ borderRadius:7, background:T.tealBg, border:"1px solid "+T.tealBd, overflow:"hidden" }}>
-                        {/* Row header */}
-                        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px" }}>
-                          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.teal,
-                            minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>
-                            Scope 3 Cat 1
-                          </span>
-                          <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.teal }}>
-                            {fmtT(s3c1)}
-                          </span>
-                          <span style={{ fontSize:10, color:T.teal, opacity:0.7, marginLeft:"auto" }}>
-                            Purchased goods &amp; services (MTO/MEL)
-                          </span>
+                <div style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                  {s3c1>0 && <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                    <span style={{ fontFamily:T.mono, fontSize:8, color:T.teal, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 3 Cat 1</span>
+                    <span style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:T.teal }}>{fmtT(s3c1)}</span>
+                    {(np>0||rp>0) && <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:T.border, width:140, marginTop:2 }}>
+                      <div style={{ width:npPct+"%", background:T.teal }}/><div style={{ width:rpPct+"%", background:T.blue }}/>
+                    </div>}
+                    {(np>0||rp>0) && <div style={{ display:"flex", gap:8 }}>
+                      {np>0&&<span style={{ fontSize:9, color:T.teal }}>NP {fmtT(np)}</span>}
+                      {rp>0&&<span style={{ fontSize:9, color:T.blue }}>RP {fmtT(rp)}</span>}
+                    </div>}
+                  </div>}
+                  {cats.length>1 && <div style={{ flex:1, minWidth:160 }}>
+                    {cats.slice(0,4).map(({cat,tco2e},ci) => {
+                      const col=[T.teal,T.blue,T.purple,T.amber][ci%4];
+                      const pct=s3c1>0?Math.min(100,(tco2e/s3c1)*100):0;
+                      return (<div key={cat} style={{ marginBottom:4 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:1 }}>
+                          <span style={{ fontSize:9, color:T.muted }}>{cat}</span>
+                          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:col }}>{tco2e.toFixed(2)}t</span>
                         </div>
-                        {/* NP / RP stacked bar */}
-                        {(np > 0 || rp > 0) && (
-                          <div style={{ padding:"0 12px 8px" }}>
-                            <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden",
-                              background:T.border, marginBottom:5 }}>
-                              <div style={{ width:npPct+"%", background:T.teal }} />
-                              <div style={{ width:rpPct+"%", background:T.blue }} />
-                            </div>
-                            <div style={{ display:"flex", gap:12 }}>
-                              {np > 0 && <span style={{ fontSize:10, color:T.teal }}>
-                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(np)}</span> NP
-                              </span>}
-                              {rp > 0 && <span style={{ fontSize:10, color:T.blue }}>
-                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(rp)}</span> RP
-                              </span>}
-                            </div>
-                          </div>
-                        )}
-                        {/* Category breakdown — only if > 1 category */}
-                        {cats.length > 1 && (
-                          <div style={{ padding:"0 12px 10px",
-                            borderTop:"1px solid "+T.tealBd, paddingTop:8, marginTop:2 }}>
-                            <p style={{ fontFamily:T.mono, fontSize:8, color:T.teal, opacity:0.7,
-                              textTransform:"uppercase", letterSpacing:"0.07em", margin:"0 0 6px" }}>
-                              By COR category
-                            </p>
-                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                              {cats.map(({ cat, tco2e }, ci) => {
-                                const col = CAT_COLORS[ci % CAT_COLORS.length];
-                                const pct = s3c1 > 0 ? Math.min(100, (tco2e / s3c1) * 100) : 0;
-                                return (
-                                  <div key={cat}>
-                                    <div style={{ display:"flex", justifyContent:"space-between",
-                                      marginBottom:2, alignItems:"center" }}>
-                                      <span style={{ fontSize:10, color:T.text }}>{cat}</span>
-                                      <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:col }}>
-                                        {tco2e.toFixed(3)} tCO₂e
-                                      </span>
-                                    </div>
-                                    <div style={{ height:4, borderRadius:2, background:T.border, overflow:"hidden" }}>
-                                      <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Placeholder rows for scopes not yet calculated */}
-                    {[
-                      s1 === 0 && { label:"Scope 1", sub:"Direct — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
-                      s2 === 0 && { label:"Scope 2", sub:"Energy indirect — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
-                    ].filter(Boolean).map(row => (
-                      <div key={row.label} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 12px",
-                        borderRadius:7, background:row.bg, border:"1px solid "+row.bd, opacity:0.5 }}>
-                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:row.c,
-                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>{row.label}</span>
-                        <span style={{ fontSize:10, color:row.c, fontStyle:"italic" }}>{row.sub}</span>
-                        <span style={{ fontFamily:T.mono, fontSize:12, color:row.c, marginLeft:"auto" }}>—</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* ── Grand total footer ── */}
-                <div style={{ padding:"9px 14px", background:T.surface2,
-                  display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Total (all scopes)</span>
-                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:T.text }}>
-                    {grandTotal.toFixed(3)} tCO₂e
-                  </span>
-                  {(s1 === 0 || s2 === 0) && (
-                    <span style={{ fontSize:10, color:T.faint, fontStyle:"italic" }}>
-                      · partial (Scope {[s1===0&&"1",s2===0&&"2"].filter(Boolean).join(" & ")} pending)
-                    </span>
-                  )}
+                        <div style={{ height:3, borderRadius:2, background:T.border, overflow:"hidden" }}>
+                          <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
+                        </div>
+                      </div>);
+                    })}
+                  </div>}
                 </div>
               </div>
             );
           })()}
 
-          {/* tCO₂e saving strip with scope breakdown */}
+          {/* ── GHG savings strip ── */}
           {opps.length > 0 && totalGhgSaving > 0 && (() => {
             const sc = calcPortfolioScopeSavings(opps);
             const fmtT = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t":Math.round(kg)+" kg";
@@ -3006,73 +2902,200 @@ This cannot be undone.`)) return;
             );
           })()}
 
-          {/* Status progress bar */}
-          {aspects.length > 0 && (
-            <div style={{ marginBottom:"1.25rem" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                <span style={{ fontSize:11, fontWeight:500, color:T.muted }}>Aspect status</span>
-                <span style={{ fontSize:11, color:T.faint }}>{aspects.length} total</span>
+          {aspects.length === 0 && opps.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
+              <p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects or opportunities yet.</p>
+              <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to get started.</p>
+              <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
+            </div>
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1.25rem", alignItems:"start" }}>
+
+              {/* ── C: Risk Profile by Environmental Category ── */}
+              <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:10, overflow:"hidden" }}>
+                <div style={{ padding:"12px 16px", background:T.surface2, borderBottom:"1px solid "+T.border,
+                  display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div>
+                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                      textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 2px" }}>Risk Profile by Category</p>
+                    <p style={{ fontSize:11, color:T.muted, margin:0 }}>
+                      {aspects.length} aspect{aspects.length!==1?"s":""} across{" "}
+                      {RISK_CATEGORIES.filter(rc=>aspects.some(a=>getCategoryLabel(a)===rc.cat)).length} categories
+                    </p>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:3, alignItems:"flex-end" }}>
+                    {[{l:"Sig",bg:T.redBg,c:T.red,bd:T.redBd},{l:"Watch",bg:T.amberBg,c:T.amber,bd:T.amberBd},{l:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd}].map(({l,bg,c,bd})=>(
+                      <span key={l} style={{ fontSize:9, padding:"1px 7px", borderRadius:3,
+                        background:bg, color:c, border:"1px solid "+bd, whiteSpace:"nowrap" }}>{l}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:7 }}>
+                  {RISK_CATEGORIES.map(rc => {
+                    const col       = COLOR_MAP[rc.color] || COLOR_MAP.gray;
+                    const catAsps   = aspects.filter(a => getCategoryLabel(a) === rc.cat);
+                    if (catAsps.length === 0) return null;
+                    const sig   = catAsps.filter(a => calcSig(a)==="SIGNIFICANT").length;
+                    const watch = catAsps.filter(a => calcSig(a)==="WATCH").length;
+                    const low   = catAsps.filter(a => calcSig(a)==="Low").length;
+                    const unsc  = catAsps.length - sig - watch - low;
+                    const short = CAT_SHORT[rc.cat] || rc.cat.replace(/^\d+\. */,"");
+                    return (
+                      <div key={rc.cat} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <div style={{ width:118, flexShrink:0 }}>
+                          <span style={{ fontSize:10, fontWeight:600, padding:"3px 8px", borderRadius:4,
+                            background:col.bg, color:col.head, border:"1px solid "+col.border,
+                            display:"block", textAlign:"right", whiteSpace:"nowrap",
+                            overflow:"hidden", textOverflow:"ellipsis" }}>
+                            {short}
+                          </span>
+                        </div>
+                        <div style={{ flex:1, height:24, display:"flex", borderRadius:5,
+                          overflow:"hidden", gap:"1px", background:T.border, minWidth:0 }}>
+                          {sig>0   && <div style={{ flex:sig,   background:T.red,   display:"flex", alignItems:"center", justifyContent:"center", minWidth:22 }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:"#fff" }}>{sig}</span></div>}
+                          {watch>0 && <div style={{ flex:watch, background:T.amber, display:"flex", alignItems:"center", justifyContent:"center", minWidth:22 }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:"#fff" }}>{watch}</span></div>}
+                          {low>0   && <div style={{ flex:low,   background:T.green, display:"flex", alignItems:"center", justifyContent:"center", minWidth:22 }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:"#fff" }}>{low}</span></div>}
+                          {unsc>0  && <div style={{ flex:unsc,  background:T.faint, display:"flex", alignItems:"center", justifyContent:"center", minWidth:18 }}>
+                            <span style={{ fontSize:9, color:"#fff" }}>{unsc}</span></div>}
+                        </div>
+                        <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.muted,
+                          width:28, textAlign:"right", flexShrink:0 }}>{catAsps.length}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div style={{ display:"flex", borderRadius:6, overflow:"hidden", height:10, background:T.border, gap:"1px" }}>
-                {STATUSES.map(s => statusCounts[s] > 0 && (
-                  <div key={s} title={s+": "+statusCounts[s]}
-                    style={{ flex:statusCounts[s], background:statusColors[s], transition:"flex 0.3s", minWidth:2 }}/>
-                ))}
-              </div>
-              <div style={{ display:"flex", gap:12, marginTop:7, flexWrap:"wrap" }}>
-                {STATUSES.map(s => statusCounts[s] > 0 && (() => {
-                  const sc = s==="Open"?{bg:T.redBg,c:T.red,bd:T.redBd}:s==="In Progress"?{bg:T.amberBg,c:T.amber,bd:T.amberBd}:{bg:T.greenBg,c:T.green,bd:T.greenBd};
-                  return (
-                    <span key={s} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
-                                           padding:"2px 8px", borderRadius:4, fontWeight:500,
-                                           background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>
-                      {s} <strong style={{ fontWeight:700 }}>{statusCounts[s]}</strong>
-                    </span>
-                  );
-                })())}
-              </div>
+
+              {/* ── F: Top Risks + Top Opportunities (stacked) ── */}
+              <div style={{ display:"flex", flexDirection:"column", gap:"1.25rem" }}>
+
+                {/* Top 5 Risks */}
+                <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:10, overflow:"hidden" }}>
+                  <div style={{ padding:"12px 16px", background:T.surface2, borderBottom:"1px solid "+T.border,
+                    display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <div>
+                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                        textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 2px" }}>Top 5 Open Risks</p>
+                      <p style={{ fontSize:11, color:T.muted, margin:0 }}>Highest-scoring open aspects</p>
+                    </div>
+                    <button onClick={()=>setTab("risks")}
+                      style={{ fontSize:10, padding:"3px 10px", borderRadius:5,
+                        border:"1px solid "+T.redBd, background:T.redBg, color:T.red,
+                        cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>View all →</button>
+                  </div>
+                  {(() => {
+                    const topRisks = aspects
+                      .filter(a => a.status !== "Closed" && calcScore(a))
+                      .sort((a,b) => (calcScore(b)||0) - (calcScore(a)||0))
+                      .slice(0, 5);
+                    if (topRisks.length === 0) return (
+                      <div style={{ padding:"1.5rem", textAlign:"center", color:T.faint, fontSize:12 }}>No open scored aspects yet.</div>
+                    );
+                    return topRisks.map((a, i) => {
+                      const score = calcScore(a); const sig = calcSig(a);
+                      const sigC  = sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green;
+                      return (
+                        <div key={a.id} onClick={()=>setEditAspect(a)}
+                          style={{ padding:"9px 14px 9px 12px",
+                            borderBottom: i < topRisks.length-1 ? "1px solid "+T.rowBd : "none",
+                            cursor:"pointer", display:"flex", alignItems:"center", gap:10,
+                            borderLeft:"3px solid "+sigC, transition:"background 0.1s" }}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <span style={{ fontFamily:T.mono, fontSize:20, fontWeight:700,
+                            color:sigC, width:34, textAlign:"center", flexShrink:0, lineHeight:1 }}>{score}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:"flex", gap:5, alignItems:"center", marginBottom:2 }}>
+                              <span style={{ fontFamily:T.mono, fontSize:9, color:T.teal, fontWeight:600 }}>{a.ref}</span>
+                              <span style={sigStyle(sig)}>{sig}</span>
+                            </div>
+                            <p style={{ fontSize:12, fontWeight:500, color:T.text, margin:0,
+                              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.aspect}>
+                              {a.aspect||"—"}
+                            </p>
+                            {a.area && <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"2px 0 0" }}>{a.area}</p>}
+                          </div>
+                          <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3,
+                            background:a.status==="Open"?T.redBg:T.amberBg,
+                            color:a.status==="Open"?T.red:T.amber,
+                            border:"1px solid "+(a.status==="Open"?T.redBd:T.amberBd), flexShrink:0 }}>{a.status}</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Top 3 Opportunities */}
+                <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:10, overflow:"hidden" }}>
+                  <div style={{ padding:"12px 16px", background:T.surface2, borderBottom:"1px solid "+T.border,
+                    display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <div>
+                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                        textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 2px" }}>Top 3 Opportunities</p>
+                      <p style={{ fontSize:11, color:T.muted, margin:0 }}>Highest-priority open opportunities</p>
+                    </div>
+                    <button onClick={()=>setTab("opportunities")}
+                      style={{ fontSize:10, padding:"3px 10px", borderRadius:5,
+                        border:"1px solid "+T.purpleBd, background:T.purpleBg, color:T.purple,
+                        cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>View all →</button>
+                  </div>
+                  {(() => {
+                    const topOpps = opps
+                      .filter(o => o.status !== "Closed" && calcOppScore(o) > 0)
+                      .sort((a,b) => calcOppScore(b) - calcOppScore(a))
+                      .slice(0, 3);
+                    if (topOpps.length === 0) return (
+                      <div style={{ padding:"1.5rem", textAlign:"center", color:T.faint, fontSize:12 }}>No open opportunities scored yet.</div>
+                    );
+                    return topOpps.map((o, i) => {
+                      const score  = calcOppScore(o);
+                      const pLabel = score>=75?"High":score>=30?"Medium":"Low";
+                      const pC     = score>=75?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}
+                                    :score>=30?{bg:T.tealBg,c:T.teal,bd:T.tealBd}
+                                    :           {bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                      const ghg    = calcGhgTotal(o);
+                      return (
+                        <div key={o.id} onClick={()=>setEditOpp(o)}
+                          style={{ padding:"9px 14px 9px 12px",
+                            borderBottom: i < topOpps.length-1 ? "1px solid "+T.rowBd : "none",
+                            cursor:"pointer", display:"flex", alignItems:"center", gap:10,
+                            borderLeft:"3px solid "+pC.c, transition:"background 0.1s" }}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <div style={{ flexShrink:0, width:34, textAlign:"center" }}>
+                            <div style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:pC.c, lineHeight:1 }}>{score}</div>
+                            <span style={{ fontFamily:T.mono, fontSize:8, padding:"1px 5px", borderRadius:3,
+                              background:pC.bg, color:pC.c, border:"1px solid "+pC.bd, display:"inline-block", marginTop:2 }}>{pLabel}</span>
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:"flex", gap:5, alignItems:"center", marginBottom:2 }}>
+                              <span style={{ fontFamily:T.mono, fontSize:9, color:T.purple, fontWeight:600 }}>{o.ref}</span>
+                              {o.type && <span style={{ fontFamily:T.mono, fontSize:9, color:T.muted,
+                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{o.type}</span>}
+                            </div>
+                            <p style={{ fontSize:12, fontWeight:500, color:T.text, margin:0,
+                              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={o.description}>
+                              {o.description||"—"}
+                            </p>
+                            {ghg && <span style={{ fontFamily:T.mono, fontSize:10, color:T.teal, fontWeight:600, marginTop:2, display:"inline-block" }}>
+                              {ghg>=1000?(ghg/1000).toFixed(1)+"t":Math.round(ghg)+"kg"} CO₂e identified
+                            </span>}
+                          </div>
+                          <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3,
+                            background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, flexShrink:0 }}>{o.status}</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+              </div>{/* end right column */}
             </div>
           )}
 
-          {dashFilter !== "all" && dashFilter !== "opps" && (
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"1rem" }}>
-              <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>
-                Showing: <strong style={{ color:T.text }}>{dashFilter==="sig"?"Significant":dashFilter==="watch"?"Watch":"Low"}</strong> ({dashAspects.length})
-              </span>
-              <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>
-                Clear filter x
-              </button>
-            </div>
-          )}
-
-          {dashFilter === "opps" && (
-            <div style={{ marginBottom:"1rem" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"0.75rem" }}>
-                <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>Showing: <strong style={{ color:T.text }}>Opportunities</strong> ({opps.length})</span>
-                <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>Clear filter x</button>
-              </div>
-              {opps.length===0
-                ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
-                : <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>}
-            </div>
-          )}
-
-          {dashFilter !== "opps" && (
-            dashAspects.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
-                {dashFilter==="all"
-                  ? <><p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects identified yet.</p>
-                      <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to get started.</p>
-                      <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
-                        <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
-                        <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
-                      </div></>
-                  : <p style={{ margin:0, fontSize:13, color:T.muted }}>No {dashFilter==="sig"?"significant":dashFilter==="watch"?"watch":dashFilter} aspects.</p>}
-              </div>
-            ) : (
-              <AspectTable rows={sortedDashAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
-            )
-          )}
         </div>
       )}
 
@@ -3436,6 +3459,42 @@ This cannot be undone.`)) return;
           </div>
         );
       })()}
+      {tab === "waste" && (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", gap:8 }}>
+            <div>
+              <h2 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>Waste Handling Register</h2>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>Track waste streams, handling methods, volumes and disposal routes for this project.</p>
+            </div>
+            <Btn variant="primary" disabled>+ Add waste stream</Btn>
+          </div>
+          <div style={{ padding:"3rem", textAlign:"center", background:T.surface, borderRadius:10,
+            border:"2px dashed "+T.border, color:T.faint }}>
+            <div style={{ fontSize:32, marginBottom:12 }}>🗑</div>
+            <p style={{ fontSize:14, fontWeight:600, color:T.muted, margin:"0 0 6px" }}>Waste Handling table coming soon</p>
+            <p style={{ fontSize:12, margin:0 }}>This register will track waste streams by type, volume, handling code, disposal route and compliance status.</p>
+          </div>
+        </div>
+      )}
+
+      {tab === "attendees" && (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", gap:8 }}>
+            <div>
+              <h2 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>Attendees</h2>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>Record personnel involved in environmental assessments and workshop sessions for this project.</p>
+            </div>
+            <Btn variant="primary" disabled>+ Add attendee</Btn>
+          </div>
+          <div style={{ padding:"3rem", textAlign:"center", background:T.surface, borderRadius:10,
+            border:"2px dashed "+T.border, color:T.faint }}>
+            <div style={{ fontSize:32, marginBottom:12 }}>👥</div>
+            <p style={{ fontSize:14, fontWeight:600, color:T.muted, margin:"0 0 6px" }}>Attendees table coming soon</p>
+            <p style={{ fontSize:12, margin:0 }}>This register will track names, roles, companies, disciplines and participation dates for assessment workshops.</p>
+          </div>
+        </div>
+      )}
+
       {tab === "changes" && (()=>{
         const now = new Date();
         const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()); weekStart.setHours(0,0,0,0);
