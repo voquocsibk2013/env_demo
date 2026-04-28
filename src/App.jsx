@@ -3396,11 +3396,7 @@ This cannot be undone.`)) return;
             <p style={{ margin:0, fontSize:12, color:T.muted }}>Environmental Value × Feasibility — click any dot to open and edit</p>
           </div>
 
-          {opps.length === 0 ? (
-            <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              No opportunities registered yet.
-            </div>
-          ) : (() => {
+          {(() => {
             const CELL = 70;
             const YAXIS_W = 50;   // rotated label (20) + number column (30)
 
@@ -3593,6 +3589,9 @@ This cannot be undone.`)) return;
               </div>
             );
           })()}
+        </div>
+            </div>
+          )}
         </div>
       )}
 
