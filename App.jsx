@@ -1,0 +1,5835 @@
+import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
+
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const PHASES        = ["Engineering","Procurement","Construction","Installation","Commissioning","Operations & Maintenance","Decommissioning"];
+const CONDITIONS    = ["Normal","Abnormal","Emergency"];
+const SENSITIVITIES = ["High","Medium","Low"];
+const SCALES        = ["Global","Regional","Local"];
+const DURATIONS     = ["Permanent (>10yr)","Long-term (1-10yr)","Temporary (<1yr)"];
+const PROJ_TYPES    = ["Offshore O&G","Onshore Infrastructure","Industrial / Process"];
+const STATUSES      = ["Open","In Progress","Closed"];
+const OPP_TYPES     = ["Resource Efficiency","Circular Economy","Low-Carbon Technology","Nature-Based Solutions","Green Finance & Taxonomy","New Business / Market","Reputational / SLO","Climate Resilience","Regulatory Incentive","Biodiversity Net Gain"];
+const OPP_STATUSES  = ["Open","In Progress","Closed"];
+const STORAGE_KEY   = "env-toolkit-v4";
+
+// ── EPCIC stages ──────────────────────────────────────────────────────────────
+const EPCIC_STAGES = [
+  { code:"E",  label:"Engineering",              sub:"FEED & detail design" },
+  { code:"P",  label:"Procurement",              sub:"Materials, chemicals, logistics" },
+  { code:"C",  label:"Construction",             sub:"Civil, structural, mechanical" },
+  { code:"I",  label:"Installation",             sub:"Offshore & marine operations" },
+  { code:"C2", label:"Commissioning",            sub:"Pre-comm, start-up, first fill" },
+  { code:"OM", label:"Operations & Maintenance", sub:"Beyond EPCIC" },
+  { code:"D",  label:"Decommissioning",          sub:"Removal & reinstatement" },
+];
+const PHASE_MAP = { E:"Concept / FEED", P:"Construction", C:"Construction", I:"Operations", C2:"Commissioning", OM:"Operations", D:"Decommissioning" };
+const COND_MAP  = { E:"Normal", P:"Normal", C:"Normal", I:"Normal", C2:"Abnormal", OM:"Normal", D:"Normal" };
+
+// ── Guide words — Risks ───────────────────────────────────────────────────────
+const GW_RISK = {
+  E:[
+    { cat:"Site selection & footprint", color:"teal", items:[
+      { kw:"Habitat sensitivity",          q:"Are there designated areas (Natura 2000, RAMSAR, seabed habitats) within or adjacent to the project footprint?",               aspect:"Land use change / habitat loss",                          area:"Site selection" },
+      { kw:"Drainage & hydrology",         q:"How will the site layout affect natural drainage paths, catchments, or groundwater recharge zones?",                          aspect:"Alteration of surface water drainage",                    area:"Site & drainage design" },
+      { kw:"Floodplain encroachment",      q:"Is any part of the facility sited within a 100-year or 200-year floodplain?",                                                  aspect:"Increased flood risk to third parties",                   area:"Site selection" },
+      { kw:"Cultural heritage",            q:"Has a desk-based heritage assessment been completed? Are there known or probable buried assets within the development zone?", aspect:"Disturbance to buried archaeological remains",            area:"Site selection" },
+      { kw:"Visual impact",                q:"Will the installation be visible from a national park, scenic area, or sensitive receptor?",                                  aspect:"Visual intrusion / landscape character change",           area:"Layout design" },
+    ]},
+    { cat:"Material & process design", color:"purple", items:[
+      { kw:"Hazardous substance inventory",q:"What chemical inventory is required? Are there substitution opportunities for CMR or PBT substances?",                         aspect:"Use of hazardous chemicals - spill / release risk",        area:"Process design" },
+      { kw:"Energy efficiency",            q:"What is the estimated energy intensity (kWh/tonne product)? Have low-energy alternatives been assessed at FEED?",             aspect:"GHG emissions from facility energy use",                  area:"Process design" },
+      { kw:"Fugitive emissions",           q:"Which process streams have the highest fugitive VOC / methane potential? Is LDAR designed in from the start?",                aspect:"Fugitive VOC / methane emissions to atmosphere",          area:"Process design" },
+      { kw:"Produced water design",        q:"What is the estimated produced water volume, composition and treatment route? Is zero liquid discharge achievable?",          aspect:"Produced water discharge to sea / ground",                area:"Process design" },
+      { kw:"Noise at boundaries",          q:"Have boundary noise limits (Forurensningsloven, NORSOK S-002) been mapped at FEED stage?",                                    aspect:"Noise exceeding boundary / community limits",             area:"Engineering design" },
+      { kw:"Waste hierarchy",              q:"Has a waste minimisation assessment been carried out? Are waste streams designed for recyclability (EU WFD)?",                aspect:"Waste generation - construction and operational",         area:"Engineering design" },
+    ]},
+    { cat:"Emissions & discharge design", color:"amber", items:[
+      { kw:"Stack emissions",              q:"What combustion stacks are included? Have dispersion modelling inputs been set against IED / Forurensningsloven limits?",     aspect:"Air emissions - NOx, SO2, PM, CO from combustion",        area:"Engineering design" },
+      { kw:"Thermal discharge",            q:"If cooling water is used, what is the delta-T at discharge? Has a thermal plume model been run?",                             aspect:"Thermal pollution of receiving waterbody",                area:"Process design" },
+      { kw:"Stormwater quality",           q:"What contaminants could be in stormwater runoff from process areas, laydown yards, or access roads?",                        aspect:"Contaminated stormwater runoff to watercourse / sea",     area:"Drainage design" },
+    ]},
+  ],
+  P:[
+    { cat:"Chemical & substance procurement", color:"red", items:[
+      { kw:"REACH compliance",              q:"Are all procured chemicals registered under REACH? Have SVHCs been screened out of the vendor list?",                        aspect:"Introduction of SVHC chemicals to site",                  area:"Procurement" },
+      { kw:"Biocide use",                   q:"Are biocides specified? Are they approved under EU BPR and OSPAR PLONOR lists?",                                             aspect:"Biocide discharge - toxicity to marine organisms",         area:"Chemical procurement" },
+      { kw:"Refrigerants & blowing agents", q:"What refrigerants are in HVAC / process equipment? Are high-GWP F-gases being used?",                                       aspect:"Release of high-GWP refrigerants / F-gases",              area:"Equipment procurement" },
+      { kw:"Asbestos-containing materials", q:"Has a blanket prohibition on ACM been specified in procurement documents? Is the supply chain verified?",                   aspect:"Asbestos introduction to site via procured goods",         area:"Procurement" },
+      { kw:"Invasive species via equipment",q:"Could imported plant, aggregate or equipment introduce invasive species or aquatic organisms?",                             aspect:"Introduction of non-native / invasive species",           area:"Procurement" },
+    ]},
+    { cat:"Transport & logistics", color:"teal", items:[
+      { kw:"Abnormal loads",                q:"What abnormal loads are required? What route restrictions and community notifications are needed?",                          aspect:"Road traffic impacts - noise, dust, community disruption", area:"Logistics" },
+      { kw:"Marine transport emissions",    q:"Are vessels / barges used for procurement? Are IMO Tier III engines / scrubbers specified?",                                aspect:"Vessel exhaust - NOx, SOx, PM (MARPOL Annex VI)",         area:"Marine logistics" },
+      { kw:"Port operations",               q:"What environmental controls are specified at port laydown areas? Spill kits, waste reception, stormwater controls?",        aspect:"Spills and waste from port / marshalling operations",     area:"Logistics" },
+    ]},
+    { cat:"Packaging & material waste", color:"gray", items:[
+      { kw:"Packaging waste volumes",       q:"What is the estimated packaging volume from deliveries? Is a take-back or minimisation requirement in the contract?",        aspect:"Waste - packaging (plastics, timber, metal)",              area:"Procurement" },
+      { kw:"Offcuts & material surplus",    q:"What is the estimated surplus / scrap from fabricated items? Is there a contract requirement for reuse or recycling?",      aspect:"Solid waste - fabrication offcuts and surplus",            area:"Procurement" },
+    ]},
+  ],
+  C:[
+    { cat:"Ground disturbance & earthworks", color:"amber", items:[
+      { kw:"Bulk excavation",               q:"What volumes of cut/fill? Is there contaminated land risk? What is the waste classification route for excavated material?",  aspect:"Excavation of contaminated / hazardous ground material",  area:"Earthworks" },
+      { kw:"Dust generation",               q:"What are the nearest dust-sensitive receptors? What PM10 suppression measures and trigger action levels are proposed?",      aspect:"Fugitive dust (PM10/PM2.5) - nuisance & human health",    area:"Earthworks" },
+      { kw:"Ground vibration",              q:"Are there vibration-sensitive structures or receptors within 100m of piling / blasting operations?",                        aspect:"Ground-borne vibration - structural damage / amenity",    area:"Piling / foundation works" },
+      { kw:"Soil erosion & sediment",       q:"What is the rainfall erosivity and slope risk? Are silt fences, settlement ponds and topsoil bunds designed in?",           aspect:"Sediment runoff to watercourse during earthworks",        area:"Earthworks" },
+      { kw:"Dewatering",                    q:"What groundwater depths are anticipated? Where will dewatering discharge go? What are the SS / contaminant limits?",         aspect:"Contaminated dewatering discharge to surface water",      area:"Earthworks / foundations" },
+    ]},
+    { cat:"Ecology & habitat", color:"green", items:[
+      { kw:"Vegetation clearance",          q:"Pre-clearance habitat survey status? Nesting birds, protected plants, or invertebrate features requiring seasonal constraints?", aspect:"Loss or disturbance of protected / priority habitats", area:"Site preparation" },
+      { kw:"Invasive plant species",        q:"Are Japanese knotweed, Himalayan balsam or other invasive species present? Is a management plan in place?",                 aspect:"Spread of invasive plant species via earthworks",         area:"Site preparation" },
+      { kw:"Ecological connectivity",       q:"Will construction sever wildlife corridors (hedgerows, streams, woodland edges)? Are underpasses specified?",                aspect:"Severance of wildlife corridors",                         area:"Construction layout" },
+    ]},
+    { cat:"Water & drainage", color:"blue", items:[
+      { kw:"Concrete washout",              q:"Where will concrete washout occur? What containment prevents alkaline washout water (pH 11-13) entering watercourses?",      aspect:"Alkaline concrete washwater discharge to watercourse",    area:"Concrete / civil works" },
+      { kw:"Fuel & chemical storage",       q:"Are bunded storage areas designed to 110% capacity? What secondary containment and inspection regime is in place?",         aspect:"Hydrocarbon / chemical spill from storage to ground/water",area:"Construction compound" },
+      { kw:"Welfare facilities",            q:"What is the sewage / grey water treatment route for construction welfare facilities? Is consent required?",                 aspect:"Untreated sewage discharge from construction welfare",    area:"Construction compound" },
+    ]},
+    { cat:"Air, noise & light", color:"gray", items:[
+      { kw:"Construction noise",            q:"Dominant noise sources (piling, generators, pumps)? Hours of operation and community notification protocols?",               aspect:"Construction noise - community amenity impact",           area:"Construction activities" },
+      { kw:"Diesel plant emissions",        q:"Fleet composition (Stage V compliant?), operating hours and total NOx/PM load estimate?",                                   aspect:"Diesel plant exhaust - NOx, PM to air",                   area:"Construction plant" },
+      { kw:"Artificial light at night",     q:"Are there light-sensitive receptors (bat roosts, seabirds, residential)? Is a lighting management plan in place?",          aspect:"Light spill - disturbance to ecology / community",        area:"Construction compound" },
+    ]},
+  ],
+  I:[
+    { cat:"Marine operations", color:"blue", items:[
+      { kw:"Anchor handling & moorings",    q:"Will anchors be set over cable routes, protected seabed, or sensitive benthic habitats? Pre-lay survey status?",            aspect:"Seabed disturbance from anchor handling / moorings",      area:"Marine operations" },
+      { kw:"Heavy lift & crane vessels",    q:"What are the DP / thruster wash footprints? Could propwash disturb sensitive seabed or resuspend contaminants?",           aspect:"Turbidity plume from vessel thruster wash",               area:"Marine operations" },
+      { kw:"Subsea pipeline / cable lay",   q:"Pre-lay surveys completed? UXO risk assessed? How is trench spoil managed?",                                                aspect:"Seabed disturbance / habitat loss from trenching",        area:"Pipeline / cable installation" },
+      { kw:"Jacket / structure install",    q:"Is pile driving required? What are underwater noise levels (SEL, peak SPL) and marine mammal mitigation protocols?",       aspect:"Underwater noise from piling - marine mammal disturbance", area:"Foundation / jacket installation" },
+    ]},
+    { cat:"Marine ecology", color:"teal", items:[
+      { kw:"Marine mammal protection",      q:"Is a Marine Mammal Mitigation Protocol (MMMP) in place? Are PAM operators required?",                                       aspect:"Disturbance / injury to marine mammals",                  area:"All marine operations" },
+      { kw:"Fish spawning & migration",     q:"Are operations scheduled within known spawning or migration windows for cod, herring, or salmon?",                          aspect:"Disturbance to fish spawning / migration routes",         area:"Marine operations scheduling" },
+      { kw:"Coral & reef habitats",         q:"Have cold-water coral or reef habitats been surveyed? Is a 500m exclusion zone in place?",                                  aspect:"Physical damage to cold-water coral / reef habitats",     area:"Seabed operations" },
+      { kw:"Ballast water",                 q:"Are all vessels compliant with IMO BWM Convention (D-2 standard)? Are discharge records maintained?",                      aspect:"Introduction of invasive species via ballast water",      area:"Vessel operations" },
+    ]},
+    { cat:"Vessel operations & discharges", color:"amber", items:[
+      { kw:"Vessel fuel & lubricants",      q:"Total fuel volume on vessels? Spill response plan for worst-case diesel spill in the operational area?",                    aspect:"Hydrocarbon spill from vessel - marine pollution",         area:"Vessel operations" },
+      { kw:"Grey water & sewage at sea",    q:"Are vessels MARPOL Annex IV compliant? What is the 12-nm limit compliance approach for grey water discharge?",             aspect:"Sewage / grey water discharge at sea (MARPOL IV)",        area:"Vessel operations" },
+      { kw:"Garbage & plastics at sea",     q:"Is a Garbage Management Plan in place per MARPOL Annex V? How is plastic waste logged and landed?",                        aspect:"Waste / plastic discharge at sea (MARPOL V)",             area:"Vessel operations" },
+      { kw:"Air emissions at sea",          q:"Combined SOx/NOx profile of fleet? Is the field within a MARPOL Annex VI ECA (0.1% sulphur zone)?",                        aspect:"Vessel air emissions - SOx, NOx, PM (MARPOL VI)",         area:"Vessel operations" },
+    ]},
+    { cat:"Emergency response", color:"red", items:[
+      { kw:"Dropped objects at sea",        q:"Dropped object risk envelope for lifting over seabed? Are subsea assets, pipelines or cables at risk?",                     aspect:"Dropped object - subsea infrastructure / pollution",      area:"Lifting operations" },
+      { kw:"Standby vessel emissions",      q:"On-standby fuel consumption of support vessels? Is slow steaming / hybrid propulsion specified?",                           aspect:"Continuous exhaust from standby vessel operations",       area:"Vessel operations" },
+    ]},
+  ],
+  C2:[
+    { cat:"First fill & chemical loading", color:"red", items:[
+      { kw:"Hydrotest water",               q:"Source of hydrotest water? Additives (corrosion inhibitors, biocides, O2 scavengers) used and disposal route?",             aspect:"Discharge of hydrotest water with chemical additives",    area:"Commissioning - hydrotest" },
+      { kw:"Chemical first fill",           q:"Full inventory for first fill (methanol, MEG, glycol, lube oils)? Volume and containment plan?",                            aspect:"Chemical spill / release during first fill",              area:"Commissioning" },
+      { kw:"Preservation fluids",           q:"Are nitrogen blankets, desiccants or VCI films used? What is the waste disposal route?",                                    aspect:"Waste from preservation materials / packaging",           area:"Pre-commissioning" },
+      { kw:"Catalyst loading",              q:"Are catalysts loaded during commissioning? Are they classified as hazardous waste if recovered?",                           aspect:"Hazardous dust / spill from catalyst loading",            area:"Commissioning" },
+    ]},
+    { cat:"Venting, flaring & purging", color:"amber", items:[
+      { kw:"Vent gas composition",          q:"Composition of vent gas during nitrogen purging / initial pressurisation? Are VOCs, H2S or CO present?",                   aspect:"Fugitive / intentional VOC / H2S release to atmosphere",  area:"Commissioning - purging" },
+      { kw:"Flaring volumes",               q:"Estimated gas volume to be flared during commissioning? Has a flaring consent been obtained?",                              aspect:"GHG emissions from commissioning flaring",                area:"Commissioning - flaring" },
+      { kw:"Noise during testing",          q:"Are PSVs or blow-down systems tested? What are peak noise levels and distances to receptors?",                              aspect:"Impulse noise from PSV testing / blowdown",               area:"Commissioning - functional testing" },
+    ]},
+    { cat:"Drainage & waste streams", color:"blue", items:[
+      { kw:"Flush & drain sequences",       q:"What fluids will be drained during flushing? Are they hazardous waste? What is the tanker / disposal route?",               aspect:"Hazardous waste from flush and drain operations",         area:"Commissioning" },
+      { kw:"Oily water from start-up",      q:"Oily water volume during initial start-up before treatment systems are fully online?",                                      aspect:"Oily water discharge before treatment systems commissioned",area:"Start-up" },
+    ]},
+  ],
+  OM:[
+    { cat:"Routine operations & emissions", color:"teal", items:[
+      { kw:"Produced water",                q:"Continuous produced water rate, OiW concentration and discharge point? OSPAR Decision 2001/1 / Forurensningsloven compliance?", aspect:"Produced water discharge - hydrocarbons, chemicals, NORM", area:"Production operations" },
+      { kw:"Flare & vent management",       q:"Routine flaring rate (OGMP 2.0 Level 4/5)? Is an LDAR programme in place for fugitive methane?",                            aspect:"Routine flaring and fugitive methane emissions",          area:"Production operations" },
+      { kw:"Cooling water discharge",       q:"Cooling water flow rate, delta-T and biocide loading? What is the receiving water body designation?",                       aspect:"Thermal and biocide loading to receiving waterbody",      area:"Utility systems" },
+      { kw:"Atmospheric emissions",         q:"Point source emissions (turbines, generators, heaters)? Are they within consented limits?",                                 aspect:"NOx, SOx, PM from combustion sources",                    area:"Production operations" },
+    ]},
+    { cat:"Maintenance activities", color:"purple", items:[
+      { kw:"Tank cleaning",                 q:"Frequency and method for tank cleaning? Sludge classification and disposal route?",                                          aspect:"Oily sludge waste from tank cleaning",                    area:"Maintenance" },
+      { kw:"Chemical injection",            q:"Full chemical injection matrix (scale inhibitors, corrosion inhibitors, demulsifiers, biocides)? OSPAR PLONOR listed?",    aspect:"Chemical injection - chronic low-level marine discharge",  area:"Chemical injection systems" },
+      { kw:"Painting & surface treatment",  q:"Are VOC-containing paints used in maintenance? Annual solvent emissions vs. consented limits?",                             aspect:"VOC emissions from maintenance painting",                 area:"Maintenance" },
+      { kw:"Radioactive sources",           q:"Radioactive sources in process equipment? Inspection, loss prevention and waste management protocol?",                      aspect:"Radioactive source loss / mismanagement",                 area:"Instrumentation maintenance" },
+    ]},
+    { cat:"Spill & emergency scenarios", color:"red", items:[
+      { kw:"Oil spill response",            q:"Worst-case spill volume? Is an OPEP / OSR plan current and exercised?",                                                     aspect:"Major hydrocarbon spill to sea / ground",                 area:"Emergency response" },
+      { kw:"Process upset",                 q:"Environmental consequence from loss of containment (LWC, blowout, riser leak)? Has QRA covered environmental receptors?",  aspect:"Large-scale pollution from uncontrolled process release",  area:"Process safety" },
+      { kw:"Groundwater protection",        q:"Is there a groundwater monitoring programme (onshore)? What are the trigger levels for spill / leak response?",            aspect:"Hydrocarbon contamination of groundwater",                area:"Facility integrity" },
+    ]},
+  ],
+  D:[
+    { cat:"Waste & hazardous material removal", color:"gray", items:[
+      { kw:"Asbestos & legacy materials",   q:"Has an asbestos register been completed? Is ACM removal scheduled before structural demolition? Licensed disposal route?",  aspect:"Asbestos fibre release during decommissioning",           area:"Decommissioning" },
+      { kw:"NORM",                          q:"NORM inventory in scale, sludge and equipment? Does it exceed the 1 Bq/g threshold requiring regulated disposal?",         aspect:"NORM contamination of waste streams and site",            area:"Decommissioning" },
+      { kw:"Subsea structure removal",      q:"Jacket removal full or partial (OSPAR 98/3)? Seabed footprint of cut piles, mattresses and scour protection?",             aspect:"Seabed disturbance and waste from structure removal",     area:"Offshore decommissioning" },
+      { kw:"Chemical flushing & pigging",   q:"Chemicals remaining in pipelines / vessels? Flushing fluid composition, volume and disposal route?",                       aspect:"Hazardous flush waste from pipeline decommissioning",     area:"Pipeline decommissioning" },
+    ]},
+    { cat:"Site restoration", color:"green", items:[
+      { kw:"Land contamination survey",     q:"Has a Phase II site investigation been completed? What remediation standard is required?",                                   aspect:"Residual land contamination - soil and groundwater",      area:"Site remediation" },
+      { kw:"Habitat reinstatement",         q:"Post-decommissioning land use? Does it require ecological restoration to the pre-disturbance baseline or better?",         aspect:"Failure to restore habitats to pre-disturbance condition",area:"Site reinstatement" },
+      { kw:"Concrete demolition waste",     q:"Volume of concrete from demolition? Can it be processed on-site for aggregate reuse (circular economy)?",                  aspect:"Demolition waste - concrete, steel, mixed waste",         area:"Demolition" },
+    ]},
+    { cat:"Emissions during decommissioning", color:"amber", items:[
+      { kw:"Gas blowdown",                  q:"Gas held in system at cessation? Blowdown volume, composition and GHG equivalent?",                                         aspect:"GHG release from system blowdown at cessation",           area:"Decommissioning" },
+      { kw:"Demolition dust",               q:"Dust-generating demolition activities and nearest receptors? Is wet demolition or misting required?",                       aspect:"Dust from structure demolition - PM10/PM2.5",             area:"Demolition" },
+      { kw:"Torch cutting / hot work",      q:"Fume types from torch-cutting painted steelwork (lead, zinc, cadmium)? PPE and air monitoring required?",                  aspect:"Toxic fumes from hot work on coated structures",          area:"Demolition" },
+    ]},
+  ],
+};
+
+// ── Guide words — Opportunities ───────────────────────────────────────────────
+const GW_OPP = {
+  E:[
+    { cat:"Design for circularity", color:"teal", items:[
+      { kw:"Modular / demountable design",  q:"Can structural elements, modules or equipment be designed for disassembly and reuse at end of project life?",               opp:"Circular economy - design for disassembly and reuse", type:"Circular Economy",           area:"Engineering design" },
+      { kw:"Material efficiency at FEED",   q:"Can material volumes be reduced through optimised structural design, shared infrastructure, or prefabrication?",            opp:"Resource efficiency - material reduction at source", type:"Resource Efficiency",            area:"Engineering design" },
+      { kw:"Renewable energy integration",  q:"Is there scope to integrate solar, wind or waste-heat recovery into the facility design at FEED stage?",                    opp:"Low-carbon technology - on-site renewable energy generation", type:"Low-Carbon Technology",   area:"Process design" },
+      { kw:"Heat recovery / WHR",           q:"Are there process streams with significant waste heat that could be captured for power generation or heating?",             opp:"Resource efficiency - waste heat recovery", type:"Resource Efficiency",                     area:"Process design" },
+    ]},
+    { cat:"Nature & biodiversity by design", color:"green", items:[
+      { kw:"Biodiversity net gain target",  q:"Can the facility deliver measurable BNG - green roofs, habitat corridors, artificial reefs?",                               opp:"Biodiversity net gain - habitat creation or enhancement", type:"Biodiversity Net Gain",       area:"Site design" },
+      { kw:"Nature-based drainage",         q:"Can SuDS, wetlands or bioswales replace hard engineered drainage?",                                                         opp:"Nature-based solutions - SuDS and natural flood management", type:"Nature-Based Solutions",    area:"Drainage design" },
+    ]},
+    { cat:"Green finance & taxonomy", color:"purple", items:[
+      { kw:"EU Taxonomy alignment at FEED", q:"Which activities in the design qualify as substantially contributing to climate mitigation under EU Taxonomy?",             opp:"Green Finance & Taxonomy - EU Taxonomy-aligned project elements", type:"Green Finance & Taxonomy",area:"Engineering design" },
+      { kw:"Green bonds / SLL finance",     q:"Can project finance be structured as green bonds or sustainability-linked loans tied to environmental KPI targets?",        opp:"Green Finance & Taxonomy - green bond or sustainability-linked loan", type:"Green Finance & Taxonomy", area:"Project finance" },
+    ]},
+  ],
+  P:[
+    { cat:"Sustainable procurement", color:"teal", items:[
+      { kw:"Low-carbon materials spec",     q:"Can the procurement spec require EPDs and low-embodied-carbon materials (recycled steel, low-carbon concrete)?",             opp:"Low-carbon technology - low-embodied-carbon materials procurement", type:"Low-Carbon Technology",area:"Procurement" },
+      { kw:"Circular supplier requirements",q:"Can suppliers be required to take back packaging, surplus or end-of-life equipment?",                                       opp:"Circular economy - supplier take-back and packaging reduction", type:"Circular Economy",  area:"Procurement" },
+    ]},
+    { cat:"Supply chain emissions", color:"amber", items:[
+      { kw:"Low-emission logistics",        q:"Can low-emission transport (rail, LNG vessels, electric HGVs) be specified in logistics contracts?",                        opp:"Low-carbon technology - low-emission transport in supply chain", type:"Low-Carbon Technology", area:"Logistics" },
+      { kw:"Local sourcing",                q:"Can materials and services be sourced locally or regionally to reduce transport emissions and support local economy?",      opp:"Resource efficiency - local sourcing reduces transport GHG", type:"Resource Efficiency",     area:"Procurement" },
+    ]},
+  ],
+  C:[
+    { cat:"Waste minimisation & circular economy", color:"teal", items:[
+      { kw:"On-site concrete recycling",    q:"Can demolished or surplus concrete be crushed and reused as recycled aggregate on-site?",                                    opp:"Circular economy - on-site concrete aggregate recycling", type:"Circular Economy",       area:"Demolition / civil works" },
+      { kw:"Construction waste exchange",   q:"Can surplus materials (timber, steel offcuts, cabling) be offered to a materials exchange or social enterprise?",          opp:"Circular economy - materials exchange / reuse of surplus", type:"Circular Economy",      area:"Construction compound" },
+    ]},
+    { cat:"Ecology enhancement", color:"green", items:[
+      { kw:"Habitat creation during construction",q:"Can topsoil be stored and reused, and habitat features be created as part of the construction scope?",               opp:"Biodiversity net gain - habitat creation during construction", type:"Biodiversity Net Gain",  area:"Site preparation" },
+      { kw:"Invasive species eradication",  q:"Can clearance works provide an opportunity to permanently remove invasive plant species from the site?",                    opp:"Biodiversity net gain - invasive species eradication", type:"Biodiversity Net Gain",          area:"Site preparation" },
+    ]},
+    { cat:"Low-carbon construction", color:"amber", items:[
+      { kw:"Stage V / zero-emission plant", q:"Can the construction plant fleet be specified as Stage V diesel or battery / hydrogen electric?",                           opp:"Low-carbon technology - zero-emission construction plant", type:"Low-Carbon Technology",      area:"Construction plant" },
+      { kw:"Renewable site power",          q:"Can solar panels, battery storage or grid connections replace diesel generators for site power?",                           opp:"Low-carbon technology - renewable site power during construction", type:"Low-Carbon Technology",area:"Construction compound" },
+    ]},
+  ],
+  I:[
+    { cat:"Marine ecology enhancement", color:"teal", items:[
+      { kw:"Artificial reef / habitat",     q:"Could jacket legs, scour protection or cable burial create habitat for fish, corals or invertebrates?",                     opp:"Biodiversity net gain - artificial reef / marine habitat creation", type:"Biodiversity Net Gain",area:"Structure installation" },
+      { kw:"Marine protected area benefit", q:"Could exclusion zones create de facto MPAs, benefiting fish stocks and biodiversity?",                                      opp:"Nature-based solutions - de facto MPA / marine reserve benefit", type:"Nature-Based Solutions",area:"Marine operations" },
+    ]},
+    { cat:"Low-carbon vessel operations", color:"green", items:[
+      { kw:"Shore power / hybrid vessels",  q:"Can installation vessels use shore power at port, hybrid propulsion or LNG / methanol fuel?",                               opp:"Low-carbon technology - low-emission installation vessels", type:"Low-Carbon Technology",     area:"Vessel operations" },
+      { kw:"Voyage optimisation",           q:"Can route planning, weather routing and slow steaming minimise fuel consumption across the campaign?",                      opp:"Resource efficiency - fuel savings from voyage optimisation", type:"Resource Efficiency",   area:"Marine logistics" },
+    ]},
+    { cat:"Regulatory incentives", color:"purple", items:[
+      { kw:"Norwegian O&G incentives",      q:"Are there Norwegian government or Enova grant schemes available for low-carbon offshore installation?",                     opp:"Regulatory incentive - Norwegian Enova / state grant for low-carbon ops", type:"Regulatory Incentive",area:"Project finance" },
+    ]},
+  ],
+  C2:[
+    { cat:"Chemical & water efficiency", color:"teal", items:[
+      { kw:"Hydrotest water reuse",         q:"Can hydrotest water be reused across multiple systems or treated and re-injected?",                                          opp:"Resource efficiency - hydrotest water recycling", type:"Resource Efficiency",               area:"Commissioning - hydrotest" },
+      { kw:"Chemical substitution",         q:"Can less hazardous alternatives replace standard commissioning chemicals?",                                                 opp:"Resource efficiency - hazardous chemical substitution", type:"Resource Efficiency",         area:"Chemical management" },
+    ]},
+    { cat:"Flaring minimisation", color:"amber", items:[
+      { kw:"Gas capture during start-up",   q:"Can commissioning gas be captured for on-site power generation rather than flared?",                                        opp:"Low-carbon technology - gas capture instead of flaring", type:"Low-Carbon Technology",        area:"Commissioning - flaring" },
+      { kw:"Cold commissioning priority",   q:"Can the commissioning sequence be optimised to maximise cold commissioning and minimise hot flaring volumes?",              opp:"Resource efficiency - reduced commissioning flare volumes", type:"Resource Efficiency",      area:"Commissioning sequence" },
+    ]},
+  ],
+  OM:[
+    { cat:"Operational efficiency & carbon", color:"teal", items:[
+      { kw:"Electrification of offshore",   q:"Can gas turbines be replaced or supplemented by grid power or renewable energy to reduce operational emissions?",           opp:"Low-carbon technology - offshore electrification / power from shore", type:"Low-Carbon Technology",area:"Power systems" },
+      { kw:"CCUS opportunity",              q:"Is there scope to capture and store CO2 from process operations, contributing to Norwegian CCS targets?",                  opp:"Low-carbon technology - carbon capture, utilisation and storage", type:"Low-Carbon Technology",area:"Process design" },
+      { kw:"Methane monetisation",          q:"Can vented or flared methane be recovered and sold, generating revenue while reducing GHG emissions?",                      opp:"Resource efficiency - methane recovery and monetisation", type:"Resource Efficiency",       area:"Production operations" },
+      { kw:"Produced water as a resource",  q:"Can treated produced water be beneficially reused for injection, dust suppression or other uses?",                         opp:"Circular economy - produced water beneficial reuse", type:"Circular Economy",            area:"Water treatment" },
+    ]},
+    { cat:"Sustainability reporting", color:"purple", items:[
+      { kw:"CSRD / ESRS reporting",         q:"Can environmental KPI data be structured to directly support CSRD ESRS E1-E5 mandatory disclosures?",                        opp:"Reputational / SLO - CSRD / ESRS reporting-ready KPI framework", type:"Reputational / SLO",area:"Sustainability reporting" },
+      { kw:"SBTi / net zero alignment",     q:"Can emission reduction measures be aligned with Science Based Targets (SBTi) to support net-zero commitments?",             opp:"Reputational / SLO - SBTi / net-zero target alignment", type:"Reputational / SLO",         area:"GHG management" },
+    ]},
+    { cat:"Climate resilience", color:"amber", items:[
+      { kw:"Climate risk assessment",       q:"Has a TCFD-aligned physical climate risk assessment been carried out for 2050+ scenarios?",                                  opp:"Climate resilience - physical climate risk adaptation measures", type:"Climate Resilience", area:"Asset integrity" },
+    ]},
+  ],
+  D:[
+    { cat:"Materials recovery & circular economy", color:"teal", items:[
+      { kw:"Steel recycling maximisation",  q:"Can all removed steel be sent to high-grade recycling (EAF steelmaking) rather than lower-grade recovery?",                 opp:"Circular economy - high-grade steel recycling from decommissioning", type:"Circular Economy",area:"Decommissioning" },
+      { kw:"Equipment refurbishment / reuse",q:"Can equipment, instruments, valves or piping be refurbished and resold rather than scrapped?",                            opp:"Circular economy - equipment reuse and refurbishment", type:"Circular Economy",          area:"Decommissioning" },
+      { kw:"Concrete aggregate recovery",   q:"Can demolition concrete be processed for recycled aggregate rather than going to landfill?",                                opp:"Circular economy - recycled aggregate from demolition concrete", type:"Circular Economy", area:"Demolition" },
+    ]},
+    { cat:"Habitat & legacy benefits", color:"green", items:[
+      { kw:"Seabed recovery as positive legacy",q:"Can post-decommissioning seabed surveys document improved benthic communities as a net positive environmental legacy?", opp:"Biodiversity net gain - documented seabed recovery as project legacy", type:"Biodiversity Net Gain",area:"Offshore decommissioning" },
+      { kw:"Land restoration to higher standard",q:"Can land reinstatement go beyond pre-disturbance baseline - creating wetlands, meadows or community green space?",  opp:"Biodiversity net gain - land restored to higher ecological standard", type:"Biodiversity Net Gain",area:"Site reinstatement" },
+    ]},
+    { cat:"Decommissioning finance", color:"purple", items:[
+      { kw:"Green decommissioning certification",q:"Are there emerging certification schemes or green bond frameworks for responsible decommissioning?",                   opp:"Green Finance & Taxonomy - green decommissioning certification / finance", type:"Green Finance & Taxonomy",area:"Project finance" },
+    ]},
+  ],
+};
+
+// ── Opportunity scope categories for screening ────────────────────────────────
+const OPP_SCOPE1_BUTTONS = [
+  { id:"co2",   label:"CO₂",  sub:"Carbon dioxide",          ghgId:"s1_co2",   noxWarn:false },
+  { id:"nox",   label:"NOₓ",  sub:"Nitrogen oxides",         ghgId:"s1_nox",   noxWarn:true  },
+  { id:"ch4",   label:"CH₄",  sub:"Methane",                 ghgId:"s1_ch4",   noxWarn:false },
+  { id:"nmvoc", label:"nmVOC",sub:"Fugitive / process VOCs", ghgId:"s1_nmvoc", noxWarn:false },
+  { id:"refrig",label:"GWP gases", sub:"Refrigerants / SF₆", ghgId:"s1_refr",  noxWarn:false },
+  { id:"other1",label:"Other", sub:"Other direct emission",  ghgId:"s1_other", noxWarn:false },
+];
+const OPP_SCOPE2_BUTTONS = [
+  { id:"s2_sys",    label:"System / component optimisation",
+    sub:"Improve efficiency and reduce energy consumption",
+    desc:"Opportunity to reduce indirect GHG emissions through system or component-level optimisation to improve energy efficiency." },
+  { id:"s2_layout", label:"Layout, design or location optimisation",
+    sub:"Improve operational efficiency and reduce material or maintenance",
+    desc:"Opportunity to reduce indirect emissions through design and layout choices that minimise energy demand over the operational lifecycle." },
+  { id:"s2_alt",    label:"Alternative resources",
+    sub:"Reduce utilities requirements",
+    desc:"Opportunity to substitute conventional energy sources with lower-carbon alternatives, reducing Scope 2 indirect emissions." },
+];
+const OPP_SCOPE3_BUTTONS = [
+  { id:"s3_mat",     label:"Material",              sub:"Weight reductions or alternatives",
+    desc:"Opportunity to reduce Scope 3 Cat 1 emissions through material selection, weight reduction or substitution with lower-embodied-carbon alternatives." },
+  { id:"s3_chem",    label:"Chemicals",             sub:"Substitution or reduction of hazardous / high-impact chemicals",
+    desc:"Opportunity to reduce upstream Scope 3 emissions through chemical substitution, dose optimisation or process chemistry changes." },
+  { id:"s3_lca",     label:"Lifecycle",             sub:"Whole-life impact reduction",
+    desc:"Opportunity to reduce total lifecycle GHG footprint through design decisions that improve end-of-life outcomes." },
+  { id:"s3_reuse",   label:"Re-use",                sub:"Equipment, component or material re-use",
+    desc:"Opportunity to reduce Scope 3 Cat 1 emissions by reusing existing equipment, modules or materials rather than procuring new." },
+  { id:"s3_recycle", label:"Re-cycle",              sub:"Closed-loop material recovery",
+    desc:"Opportunity to reduce Scope 3 Cat 5/12 emissions through recycling of materials at end of project life." },
+  { id:"s3_waste",   label:"Waste evaluation",      sub:"Waste stream characterisation and minimisation",
+    desc:"Opportunity to reduce emissions from waste streams through better characterisation, segregation and diversion from landfill." },
+  { id:"s3_trans",   label:"Transport",             sub:"Logistics and supply chain optimisation",
+    desc:"Opportunity to reduce Scope 3 Cat 4 transport emissions through route, mode or logistics optimisation." },
+  { id:"s3_remote",  label:"Remote technology /\nAutomated solutions", sub:"Reduce physical mobilisation and travel",
+    desc:"Opportunity to reduce Scope 3 Cat 6 / Cat 9 emissions through remote monitoring, digital twins or automated inspection replacing physical presence." },
+];
+
+
+// ── Environmental risk categories (from aspects reference library) ──────────
+const RISK_CATEGORIES = [
+  {
+    cat: '1. Emission to Air',
+    color: 'red',
+    items: [
+      { id:'air_01', sub: 'Plant stack / vent emissions', hint: 'Integrated combustion plant, gas turbines, boilers, heaters', aspect: 'NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits' },
+      { id:'air_02', sub: 'Diesel engine emissions', hint: 'Standalone generators, temporary construction machinery', aspect: 'NOₓ, PM from diesel combustion; contributes to NOₓ tax liability' },
+      { id:'air_03', sub: 'Flaring volumes & composition', hint: 'Commissioning purge, emergency relief, production upsets', aspect: 'Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability' },
+      { id:'air_04', sub: 'Fugitive emissions', hint: 'HCs, VOCs from flanges, valve stems, loading operations, tank venting, HVAC, from loosen seals/bolt caused by vibration', aspect: 'Atmospheric VOC / methane release; contribution to GHG inventory' },
+      { id:'air_05', sub: 'Dust generation', hint: 'Bulk excavation, demolition, dry material handling, demolition', aspect: 'Nuisance dust or PM₁₀ affecting receptors; contaminated dust if hazmat present' },
+      { id:'air_06', sub: 'Marine vessel air emissions', hint: 'Supply vessels, installation vessels, PSVs', aspect: 'SOₓ, NOₓ, PM, black carbon — ECA compliance' },
+      { id:'air_07', sub: 'Energy consumption', hint: 'Process design, utilities, lighting, HVAC, compression systems', aspect: 'Excessive energy consumption; GHG emissions; regulatory or contractual energy targets' },
+      { id:'air_08', sub: 'Paint & surface treatment VOCs', hint: 'Maintenance painting, blasting, coating operations', aspect: 'VOC emissions from solvents; contaminated blast grit; paint waste' },
+      { id:'air_09', sub: 'Air quality baseline monitoring', hint: 'Facilities near sensitive receptors (residential, schools, hospitals); emission permit applications under Forurensningsloven §11; EIA', aspect: 'Permit refused or inappropriate emission limit set without pre-project background data; inability to attribute project contribution' },
+    ],
+  },
+  {
+    cat: '2. Discharge to Water & Marine Environment',
+    color: 'blue',
+    items: [
+      { id:'wat_01', sub: 'Ballast water (vessels)', hint: 'Vessel operations, installation support vessels', aspect: 'Introduction of non-indigenous species via ballast water exchange' },
+      { id:'wat_02', sub: 'Vessel fuel & lubricants', hint: 'Marine support operations, installation vessels', aspect: 'Accidental oil discharge from vessel machinery or fuel transfer' },
+      { id:'wat_03', sub: 'Grey water & sewage (vessels)', hint: 'Crew vessels, installation vessels, FPSOs', aspect: 'Sewage discharge within 12 nm or in special areas' },
+      { id:'wat_04', sub: 'Cooling water thermal discharge', hint: 'Power plant cooling, electrolyser cooling, process cooling', aspect: 'Elevated temperature affecting dissolved oxygen and species behaviour in receiving water' },
+      { id:'wat_05', sub: 'Produced water', hint: 'Oil & gas production operations', aspect: 'Discharge of produced water with hydrocarbons, scale inhibitors, NORM' },
+      { id:'wat_06', sub: 'Process wastewater design', hint: 'Chemical injection, utility systems, drains', aspect: 'Design of wastewater streams — volume, composition, treatment route' },
+      { id:'wat_07', sub: 'Seabed sediment disturbance', hint: 'Dredging, trenching, anchor dragging, jetting, structure installation', aspect: 'Sediment plume; burial of benthic communities; contaminant resuspension' },
+      { id:'wat_08', sub: 'Water quality baseline', hint: 'Onshore watercourse crossings; discharge permitting under Forurensningsloven §11; offshore produced water permitting', aspect: 'Permit refused or inappropriate conditions set without baseline evidence; inability to demonstrate no deterioration under WFD Art. 4' },
+      { id:'wat_09', sub: 'Marine baseline survey (benthic, ROV, seabed characterisation)', hint: 'Offshore installation, pipeline or cable routing, anchor deployment, dredging', aspect: 'Unable to demonstrate pre-installation seabed condition; permit refused; unexpected sensitive habitat (cold-water coral, maerl) triggering stop-work' },
+      { id:'wat_10', sub: 'Geophysical / UXO survey', hint: 'Offshore seabed operations; pipeline or cable route survey; anchor pattern; jack-up preloading; construction in former conflict areas', aspect: 'Unknown seabed obstacles, contamination, UXO, or unstable ground; dropped object risk; unexpected habitat disturbance; jack-up punch-through' },
+    ],
+  },
+  {
+    cat: '3. Waste, Materials & Chemicals',
+    color: 'amber',
+    items: [
+      { id:'wst_01', sub: 'Chemicals & hazardous substance inventory (REACH)', hint: 'Chemical specification, procurement, materials selection', aspect: 'Failure to register or control SVHCs; non-compliant use of restricted substances' },
+      { id:'wst_02', sub: 'Waste hierarchy — materials selection', hint: 'Design decisions, material specification', aspect: 'Generation of excess or non-recyclable waste due to poor design choices' },
+      { id:'wst_03', sub: 'Hazardous waste', hint: 'Excavated contaminated soil, chemical containers, insulation, first-fill residues', aspect: 'Improper storage, transport, or disposal of hazardous waste categories' },
+      { id:'wst_04', sub: 'Packaging waste', hint: 'Procurement of equipment, materials, consumables', aspect: 'Non-recyclable or excessive packaging waste volumes' },
+      { id:'wst_05', sub: 'Refrigerants & blowing agents (F-gas)', hint: 'HVAC design, insulation foam specification, fire suppression systems', aspect: 'Use of high-GWP HFCs; F-gas leakage and loss' },
+      { id:'wst_06', sub: 'Asbestos', hint: 'Legacy equipment, pipe lagging, insulation removal in older facilities', aspect: 'Asbestos fibre release during maintenance or demolition' },
+      { id:'wst_07', sub: 'NORM — naturally occurring radioactive material', hint: 'Produced water scaling, pigging returns, sand production, deposition in vessels', aspect: 'Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste' },
+      { id:'wst_08', sub: 'Radioactive measurement sources', hint: 'Density gauges, level gauges, nuclear logging tools', aspect: 'Loss, damage, or disposal of sealed radioactive sources' },
+      { id:'wst_09', sub: 'Heavy metals in systems', hint: 'Legacy coating systems (lead paint), alloy materials, anti-corrosion anodes', aspect: 'Release of lead, cadmium, mercury, or chromium during maintenance or decommissioning' },
+      { id:'wst_10', sub: 'Chemical flushing & pigging', hint: 'Commissioning clean-up, pipeline maintenance, change of service', aspect: 'Generation of chemically contaminated flush water requiring treatment and disposal' },
+      { id:'wst_11', sub: 'Tank cleaning', hint: 'Tank inspection, change of service, decommissioning', aspect: 'Oily sludge or chemical residue requiring hazardous waste disposal' },
+      { id:'wst_12', sub: 'Subsea structure removal', hint: 'Decommissioning of pipelines, umbilicals, templates, jackets', aspect: 'Contaminated materials, marine litter, seabed disturbance' },
+    ],
+  },
+  {
+    cat: '4. Land, Soil & Contamination',
+    color: 'brown',
+    items: [
+      { id:'land_01', sub: 'Bulk excavation', hint: 'Site preparation, foundation works, cable trenching', aspect: 'Loss of topsoil; disturbance of contaminated ground; peat or organic soil release' },
+      { id:'land_02', sub: 'Topsoil management', hint: 'Stripping, stockpiling, and reinstatement of topsoil', aspect: 'Loss of topsoil quality; failure to reinstate appropriate substrate for habitat recovery' },
+      { id:'land_03', sub: 'Soil erosion & sediment control', hint: 'Graded surfaces, unpaved haul roads, stockpiles, borrow pits', aspect: 'Sediment runoff to watercourse; loss of topsoil from disturbed areas' },
+      { id:'land_04', sub: 'Land contamination survey', hint: 'Previous industrial use, infilled land, leaking USTs', aspect: 'Contamination of soil or groundwater; worker and receptor exposure' },
+      { id:'land_05', sub: 'Floodplain encroachment', hint: 'Facility siting, bund design, drainage routing', aspect: 'Increased flood risk to third parties; loss of flood storage volume' },
+      { id:'land_06', sub: 'Habitat reinstatement', hint: 'Post-construction restoration, decommissioning, site clearance', aspect: 'Failure to reinstate disturbed ground to pre-existing or agreed habitat quality' },
+      { id:'land_07', sub: 'Concrete demolition waste', hint: 'Structure removal, decommissioning of onshore facilities', aspect: 'Alkaline debris; potential contamination; high volume for disposal or recycling' },
+      { id:'land_08', sub: 'Ground disturbance near infrastructure', hint: 'Pipeline crossings, road crossings, utility corridors', aspect: 'Damage to existing buried services; unplanned releases from third-party infrastructure' },
+    ],
+  },
+  {
+    cat: '5. Ecology & Biodiversity',
+    color: 'green',
+    items: [
+      { id:'eco_01', sub: 'Protected habitat & designations', hint: 'Siting, ground clearance, cable/pipeline routing', aspect: 'Loss of or disturbance to Natura 2000, RAMSAR, or nationally protected habitat' },
+      { id:'eco_02', sub: 'Protected species — terrestrial', hint: 'Vegetation removal, excavation in known habitat', aspect: 'Disturbance or harm to red-listed or Annex IV species (bats, reptiles, insects)' },
+      { id:'eco_03', sub: 'Vegetation clearance', hint: 'Land clearing, access track construction, cable trenching', aspect: 'Habitat loss; harm to nesting birds or protected plant species' },
+      { id:'eco_04', sub: 'Invasive species', hint: 'Earthworks, material import, equipment mobilisation', aspect: 'Introduction or spread of invasive plant or animal species' },
+      { id:'eco_05', sub: 'Ecological connectivity', hint: 'Linear construction, fencing, culverting', aspect: 'Severance of wildlife corridors (hedgerows, riparian margins, migration routes)' },
+      { id:'eco_06', sub: 'Marine / freshwater ecosystem', hint: 'Seabed disturbance, anchoring/trenching, piling, dewatering outfall, cofferdam, seismic surveys, vessel operations, sonar', aspect: 'Disruption to protected species migration/spawning, acoustic disturbance, injury, or displacement; physical damage to cold-water coral, maerl beds, biogenic reef, or priority seabed habitat' },
+      { id:'eco_07', sub: 'Bird collision & displacement', hint: 'Wind turbines, flare stacks, tall structures, marine platforms, construction lighting', aspect: 'Collision mortality or displacement of migratory or breeding birds' },
+      { id:'eco_08', sub: 'Light pollution & ecology', hint: 'Floodlighting, flare lighting, platform lighting', aspect: 'Disruption to nocturnal species (bats, insects, seabirds) behaviour and movement' },
+      { id:'eco_09', sub: 'Peat & carbon-rich soil disturbance', hint: 'Onshore trenching, grading, borrow pits in peatland', aspect: 'Release of stored carbon; peat subsidence; loss of protected bog habitat' },
+      { id:'eco_10', sub: 'Habitat / Ecological survey (desk study/walk over)', hint: 'Any onshore project with potential ecological sensitivity; EIA scoping; planning application; consider seasonal survey windows', aspect: 'Failure to identify habitats or designated sites before design — consent delay, stop-work, or inadequate mitigation design' },
+      { id:'eco_11', sub: 'Noise boundary limits', hint: 'Compressors, turbines, processing plant, generators, pressure testing, relief valve lift, venting, flaring, piling or blasting', aspect: 'Noise at community boundary exceeding regulatory or planning limits; high impulse or sustained noise; disturbance to nesting habitats or interference to migratory pathways' },
+      { id:'eco_12', sub: 'Ground vibration', hint: 'Piling, blasting, heavy compaction, road traffic from heavy plant', aspect: 'Structural damage to third-party property; nuisance vibration' },
+      { id:'eco_13', sub: 'Underwater noise — pile driving', hint: 'Offshore monopile installation, jacket installation, subsea piling', aspect: 'Acoustic injury or disturbance to fish and marine mammals' },
+    ],
+  },
+  {
+    cat: '6. Community, Heritage and Landscape',
+    color: 'purple',
+    items: [
+      { id:'com_01', sub: 'Archaeological impact & desk-based assessment', hint: 'Ground breaking, piling, trenching, seabed operations; any ground disturbance onshore or planning application in areas of archaeological sensitivity', aspect: 'Disturbance or destruction of legally protected remains; failure to identify designated sites before works — stop-work, consent refused or conditions applied without adequate baseline' },
+      { id:'com_02', sub: 'Historic buildings & structures', hint: 'Demolition, modification, or visual impact on listed buildings', aspect: 'Harm to protected or listed built heritage' },
+      { id:'com_03', sub: 'Seabed cultural heritage', hint: 'Subsea pipeline, cable, or anchor installation', aspect: 'Disturbance of protected wrecks or seabed archaeological sites' },
+      { id:'com_04', sub: 'Chance find procedure', hint: 'Any ground breaking activity', aspect: 'Unanticipated discovery of artefacts, structures, or human remains' },
+      { id:'com_05', sub: 'Cultural landscape', hint: 'Design of installations in areas with designated cultural landscape value', aspect: 'Change to the character of a culturally significant landscape' },
+      { id:'com_06', sub: 'Visual landscape impact', hint: 'Siting of above-ground structures, masts, flare stacks, wind turbines', aspect: 'Visual intrusion on protected landscape or sensitive scenic views' },
+      { id:'com_07', sub: 'Community stakeholder engagement', hint: 'All phases with potential community impact', aspect: 'Inadequate engagement; community complaints; loss of social licence' },
+      { id:'com_08', sub: 'Traffic & access disruption', hint: 'Heavy haulage routes, port access, offshore logistics, abnormal loads', aspect: 'Road damage, traffic congestion, community access restriction' },
+      { id:'com_09', sub: 'Employment & local economy', hint: 'Project workforce planning, supply chain decisions', aspect: 'Missed opportunity for local content; social licence risk' },
+      { id:'com_10', sub: 'Indigenous peoples — Sámi', hint: 'Projects in Sámi traditional lands (Finnmark/Troms/Nordland)', aspect: 'Impact on Sámi reindeer herding, cultural heritage, and traditional land use' },
+      { id:'com_11', sub: 'Socioeconomic baseline', hint: 'Major projects near communities; EIA requirement; IFC PS1 projects; projects affecting employment, livelihoods, or access', aspect: 'Inadequate characterisation of baseline; EIA non-compliant; social licence risk; inability to detect and attribute project-induced socioeconomic change' },
+    ],
+  },
+  {
+    cat: '7. Abnormal Condition and Emergency Response',
+    color: 'darkred',
+    items: [
+      { id:'emg_01', sub: 'Oil spill response plan', hint: 'All offshore and coastal hydrocarbon operations', aspect: 'Inadequate preparedness for accidental oil release; environmental damage' },
+      { id:'emg_02', sub: 'Chemical spill & containment', hint: 'Chemical storage, dosing systems, loading and offloading, sample points', aspect: 'Release of hazardous chemicals to soil, water, or marine environment' },
+      { id:'emg_03', sub: 'Spill protection — secondary containment', hint: 'Storage tanks, chemical bunds, drip trays, offshore deck drainage', aspect: 'Inadequate bunding or containment allowing release to ground or water' },
+      { id:'emg_04', sub: 'Dropped objects — marine', hint: 'Offshore lifting, crane operations, deck work, personnel transfer', aspect: 'Loss of equipment or materials to seabed; marine debris' },
+      { id:'emg_05', sub: 'Emergency venting & blowdown', hint: 'Process upsets, ESD activation, commissioning activities', aspect: 'Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes' },
+    ],
+  }
+];
+
+const ABNORMAL_CONDITIONS = [
+  'Unexpected findings',
+  'Equipment breakdown or malfunction',
+  'Unplanned modification changes',
+  'Unforeseen changes in scheduling',
+  'Other abnormal conditions',
+];
+
+// ── Color map for guide word categories ──────────────────────────────────────
+const COLOR_MAP = {
+  teal:   { bg:"var(--cat-teal-bg)",   border:"var(--cat-teal-bd)",   text:"var(--cat-teal-tx)",   head:"var(--cat-teal-hd)" },
+  purple: { bg:"var(--cat-purple-bg)", border:"var(--cat-purple-bd)", text:"var(--cat-purple-tx)", head:"var(--cat-purple-hd)" },
+  amber:  { bg:"var(--cat-amber-bg)",  border:"var(--cat-amber-bd)",  text:"var(--cat-amber-tx)",  head:"var(--cat-amber-hd)" },
+  red:    { bg:"var(--cat-red-bg)",    border:"var(--cat-red-bd)",    text:"var(--cat-red-tx)",    head:"var(--cat-red-hd)" },
+  green:  { bg:"var(--cat-green-bg)",  border:"var(--cat-green-bd)",  text:"var(--cat-green-tx)",  head:"var(--cat-green-hd)" },
+  blue:   { bg:"var(--cat-blue-bg)",   border:"var(--cat-blue-bd)",   text:"var(--cat-blue-tx)",   head:"var(--cat-blue-hd)" },
+  gray:    { bg:"var(--cat-gray-bg)",    border:"var(--cat-gray-bd)",    text:"var(--cat-gray-tx)",    head:"var(--cat-gray-hd)"    },
+  brown:   { bg:"var(--cat-brown-bg)",   border:"var(--cat-brown-bd)",   text:"var(--cat-brown-tx)",   head:"var(--cat-brown-hd)"   },
+  darkred: { bg:"var(--cat-darkred-bg)", border:"var(--cat-darkred-bd)", text:"var(--cat-darkred-tx)", head:"var(--cat-darkred-hd)" },
+};
+
+// ── Theme definitions ─────────────────────────────────────────────────────────
+const THEMES = {
+  light: {
+    "--bg":          "#F5F3EE",
+    "--surface":     "#FFFFFF",
+    "--surface2":    "#FAFAF8",
+    "--text":        "#1A1C1E",
+    "--muted":       "#6B7280",
+    "--faint":       "#9CA3AF",
+    "--border":      "#DDD9D0",
+    "--row-bd":      "#F0EDE6",
+    "--teal":        "#0F6E56",
+    "--teal-bg":     "#E1F5EE",
+    "--teal-bd":     "#9FE1CB",
+    "--teal-dk":     "#085041",
+    "--teal-hi":     "#1D9E75",
+    "--red":         "#A32D2D",
+    "--red-bg":      "#FCEBEB",
+    "--red-bd":      "#F09595",
+    "--amber":       "#856404",
+    "--amber-bg":    "#FFFBE6",
+    "--amber-bd":    "#FFD700",
+    "--green":       "#27500A",
+    "--green-bg":    "#EAF3DE",
+    "--green-bd":    "#97C459",
+    "--purple":      "#3C3489",
+    "--purple-bg":   "#EEEDFE",
+    "--purple-bd":   "#AFA9EC",
+    "--blue":        "#0C447C",
+    "--blue-bg":     "#E6F1FB",
+    "--blue-bd":     "#85B7EB",
+    "--slate":       "#455A64",
+    "--slate-bg":    "#ECEFF1",
+    "--slate-bd":    "#B0BEC5",
+    "--sb-bg":       "#EAE7DF",
+    "--sb-bg2":      "#DEDBD3",
+    "--sb-bd":       "#CBC7BF",
+    "--sb-text":     "#1A1C1E",
+    "--sb-muted":    "#4B5563",
+    "--sb-faint":    "#9CA3AF",
+    "--sb-sig":      "#FCEBEB",
+    "--sb-sig-text": "#A32D2D",
+    "--cat-teal-bg": "#E0F2F1", "--cat-teal-bd": "#80CBC4", "--cat-teal-tx": "#004D40", "--cat-teal-hd": "#00695C",
+    "--cat-purple-bg":"#EDE7F6","--cat-purple-bd":"#CE93D8","--cat-purple-tx":"#4527A0","--cat-purple-hd":"#6A1B9A",
+    "--cat-amber-bg": "#FFF8E1","--cat-amber-bd": "#FFE082","--cat-amber-tx": "#E65100","--cat-amber-hd": "#F57F17",
+    "--cat-red-bg":   "#FFEBEE","--cat-red-bd":   "#EF9A9A","--cat-red-tx":   "#B71C1C","--cat-red-hd":   "#C62828",
+    "--cat-green-bg": "#E8F5E9","--cat-green-bd": "#A5D6A7","--cat-green-tx": "#1B5E20","--cat-green-hd": "#2E7D52",
+    "--cat-blue-bg":  "#E3F2FD","--cat-blue-bd":  "#90CAF9","--cat-blue-tx":  "#0D47A1","--cat-blue-hd":  "#1565C0",
+    "--cat-gray-bg":  "#ECEFF1","--cat-gray-bd":  "#CFD8DC","--cat-gray-tx":  "#37474F","--cat-gray-hd":  "#455A64",
+    "--cat-brown-bg":"#EFEBE9","--cat-brown-bd":"#BCAAA4","--cat-brown-tx":"#3E2723","--cat-brown-hd":"#5D4037",
+    "--cat-darkred-bg":"#FCE4EC","--cat-darkred-bd":"#F48FB1","--cat-darkred-tx":"#880E4F","--cat-darkred-hd":"#AD1457",
+  },
+  dark: {
+    "--bg":          "#0F1117",
+    "--surface":     "#1A1D26",
+    "--surface2":    "#151821",
+    "--text":        "#E2DFD8",
+    "--muted":       "#7C8190",
+    "--faint":       "#4A4E5A",
+    "--border":      "#252830",
+    "--row-bd":      "#1E2028",
+    "--teal":        "#1D9E75",
+    "--teal-bg":     "#081E16",
+    "--teal-bd":     "#0F6E56",
+    "--teal-dk":     "#5DCAA5",
+    "--teal-hi":     "#5DCAA5",
+    "--red":         "#E24B4A",
+    "--red-bg":      "#1A0808",
+    "--red-bd":      "#7B2020",
+    "--amber":       "#FFD700",
+    "--amber-bg":    "#1A1800",
+    "--amber-bd":    "#A08000",
+    "--green":       "#97C459",
+    "--green-bg":    "#0A1505",
+    "--green-bd":    "#3B6D11",
+    "--purple":      "#AFA9EC",
+    "--purple-bg":   "#10101F",
+    "--purple-bd":   "#534AB7",
+    "--blue":        "#85B7EB",
+    "--blue-bg":     "#070F1A",
+    "--blue-bd":     "#1565C0",
+    "--slate":       "#8B8F9A",
+    "--slate-bg":    "#1A1D26",
+    "--slate-bd":    "#252830",
+    "--sb-bg":       "#0D1117",
+    "--sb-bg2":      "#141820",
+    "--sb-bd":       "#1E222C",
+    "--sb-text":     "#F8F8F8",
+    "--sb-muted":    "#B0BAC8",
+    "--sb-faint":    "#6B7A8D",
+    "--sb-sig":      "#3D0808",
+    "--sb-sig-text": "#E24B4A",
+    "--cat-teal-bg": "#081E16", "--cat-teal-bd": "#0F6E56", "--cat-teal-tx": "#5DCAA5", "--cat-teal-hd": "#1D9E75",
+    "--cat-purple-bg":"#10101F","--cat-purple-bd":"#534AB7","--cat-purple-tx":"#AFA9EC","--cat-purple-hd":"#7F77DD",
+    "--cat-amber-bg": "#1A1006","--cat-amber-bd": "#7A4F0A","--cat-amber-tx": "#FAC775","--cat-amber-hd": "#EF9F27",
+    "--cat-red-bg":   "#1A0808","--cat-red-bd":   "#7B2020","--cat-red-tx":   "#F09595","--cat-red-hd":   "#E24B4A",
+    "--cat-green-bg": "#0A1505","--cat-green-bd": "#3B6D11","--cat-green-tx": "#C0DD97","--cat-green-hd": "#639922",
+    "--cat-blue-bg":  "#070F1A","--cat-blue-bd":  "#1565C0","--cat-blue-tx":  "#85B7EB","--cat-blue-hd":  "#378ADD",
+    "--cat-gray-bg":  "#1A1D26","--cat-gray-bd":  "#252830","--cat-gray-tx":  "#8B8F9A","--cat-gray-hd":  "#5F5E5A",
+    "--cat-brown-bg":"#1A1108","--cat-brown-bd":"#6D4025","--cat-brown-tx":"#DDB07A","--cat-brown-hd":"#A0622E",
+    "--cat-darkred-bg":"#1A0612","--cat-darkred-bd":"#7B1248","--cat-darkred-tx":"#F4A0C8","--cat-darkred-hd":"#C2185B",
+  },
+};
+
+function applyTheme(name) {
+  const vars = THEMES[name] || THEMES.light;
+  const root = document.documentElement;
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+}
+
+// ── Design tokens (CSS var references) ───────────────────────────────────────
+const T = {
+  bg:       "var(--bg)",
+  surface:  "var(--surface)",
+  surface2: "var(--surface2)",
+  text:     "var(--text)",
+  muted:    "var(--muted)",
+  faint:    "var(--faint)",
+  border:   "var(--border)",
+  rowBd:    "var(--row-bd)",
+  teal:     "var(--teal)",
+  tealBg:   "var(--teal-bg)",
+  tealBd:   "var(--teal-bd)",
+  tealDark: "var(--teal-dk)",
+  tealHi:   "var(--teal-hi)",
+  red:      "var(--red)",
+  redBg:    "var(--red-bg)",
+  redBd:    "var(--red-bd)",
+  amber:    "var(--amber)",
+  amberBg:  "var(--amber-bg)",
+  amberBd:  "var(--amber-bd)",
+  green:    "var(--green)",
+  greenBg:  "var(--green-bg)",
+  greenBd:  "var(--green-bd)",
+  purple:   "var(--purple)",
+  purpleBg: "var(--purple-bg)",
+  purpleBd: "var(--purple-bd)",
+  blue:     "var(--blue)",
+  blueBg:   "var(--blue-bg)",
+  blueBd:   "var(--blue-bd)",
+  slate:    "var(--slate)",
+  slateBg:  "var(--slate-bg)",
+  slateBd:  "var(--slate-bd)",
+  sbBg:     "var(--sb-bg)",
+  sbBg2:    "var(--sb-bg2)",
+  sbBd:     "var(--sb-bd)",
+  sbText:   "var(--sb-text)",
+  sbMuted:  "var(--sb-muted)",
+  sbFaint:  "var(--sb-faint)",
+  sbSig:    "var(--sb-sig)",
+  sbSigTx:  "var(--sb-sig-text)",
+  mono:     "'Inter', system-ui, sans-serif",
+  sans:     "'Inter', system-ui, sans-serif",
+};
+
+
+// ── Scoring ───────────────────────────────────────────────────────────────────
+function calcScore({ severity, probability }) {
+  // Risk score = Consequence × Probability (pure matrix — no modifiers)
+  if (!severity || !probability) return null;
+  return severity * probability;
+}
+// Exact cell-by-cell colour from matrix image (user confirmed):
+//   Red:    C5×any | C4×P4 | C4×P5 | C3×P5
+//   Green:  C1×any | C2×P1 | C2×P2 | C3×P1
+//   Yellow: everything else
+function matrixZone(c, p) {
+  if (c === 5) return "SIGNIFICANT";
+  if (c === 4 && p >= 4) return "SIGNIFICANT";
+  if (c === 3 && p === 5) return "SIGNIFICANT";
+  if (c === 1) return "Low";
+  if (c === 2 && p <= 2) return "Low";
+  if (c === 3 && p === 1) return "Low";
+  return "WATCH";
+}
+function calcSig(a) {
+  const score = calcScore(a);
+  if (score === null) return null;
+  if (a.legalThreshold === "Y" || a.stakeholderConcern === "Y") return "SIGNIFICANT";
+  const c = Math.min(5, Math.max(1, parseInt(a.severity)   || 0));
+  const p = Math.min(5, Math.max(1, parseInt(a.probability) || 0));
+  if (!c || !p) return null;
+  return matrixZone(c, p);
+}
+function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
+function snapKg(phase) {
+  // Works for both GhgPhase and legacy GhgSnapshot
+  if (!phase) return {identified:0, actual:0};
+  const lines = phase.lines||[];
+  const reduction = l => parseFloat(l.reduction||l.qty||0);
+  return {
+    identified: lines.filter(l=>l.savingType!=="actual").reduce((s,l)=>s+reduction(l)*(parseFloat(l.cf)||0),0),
+    actual:     lines.filter(l=>l.savingType==="actual" ).reduce((s,l)=>s+reduction(l)*(parseFloat(l.cf)||0),0),
+  };
+}
+function calcGhgTotal(o) {
+  // Biggest identified saving across all ghgPhases = canonical reportable value
+  const phases = o.ghgPhases||o.ghgSnapshots||[]; // support both formats
+  if (phases.length===0) return null;
+  const maxId = Math.max(...phases.map(p=>snapKg(p).identified));
+  return maxId>0 ? maxId : null;
+}
+
+// ── Scope savings breakdown ───────────────────────────────────────────────────
+function calcScopeSavings(o) {
+  const phases = o.ghgPhases||o.ghgSnapshots||[];
+  if (!phases.length) return {s1:0, s2:0, s3:0};
+  // sum across ALL phases (max-identified already done by calcGhgTotal; here we want per-scope total)
+  const allLines = phases.flatMap(ph=>ph.lines||[]);
+  const red = l => parseFloat(l.reduction||l.qty||0);
+  const s1 = allLines.filter(l=>(l.scope||l.id||"").includes("Scope 1")||(l.id||"").startsWith("s1"))
+    .reduce((s,l)=>s+red(l)*(parseFloat(l.cf)||0),0);
+  const s2 = allLines.filter(l=>(l.scope||l.id||"").includes("Scope 2")||(l.id||"").startsWith("s2"))
+    .reduce((s,l)=>s+red(l)*(parseFloat(l.cf)||0),0);
+  const s3 = allLines.filter(l=>(l.scope||l.id||"").includes("Scope 3")||(l.id||"").startsWith("s3"))
+    .reduce((s,l)=>s+red(l)*(parseFloat(l.cf)||0),0);
+  return {s1, s2, s3};
+}
+function calcPortfolioScopeSavings(opps) {
+  return (opps||[]).reduce((acc,o)=>{
+    const {s1,s2,s3} = calcScopeSavings(o);
+    return {s1:acc.s1+s1, s2:acc.s2+s2, s3:acc.s3+s3};
+  }, {s1:0,s2:0,s3:0});
+}
+
+function inferOppType(oppText) {
+  if (!oppText) return "";
+  const lower = oppText.toLowerCase();
+  return OPP_TYPES.find(t => lower.startsWith(t.toLowerCase())) || "";
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+const emptyAspect = () => ({
+  phase:"", area:"", activity:"", aspect:"", condition:"Normal",
+  isAbnormal:false, abnormalType:"", abnormalDesc:"",
+  impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
+  severity:3, probability:3, duration:"Temporary (<1yr)",
+  legalThreshold:"N", stakeholderConcern:"N",
+  control:"", legalRef:"", owner:"", status:"Open", _color:"",
+  createdAt:"", updatedAt:""
+});
+// ── GHG saving calculation lines (based on Norwegian EPCIC calculation framework) ─
+const GHG_LINES = [
+  // Scope 1 — Direct emissions to air
+  { id:"s1_co2",   scope:"Scope 1", group:"Direct emission to air",   type:"CO2",                           unit:"kg",  cfDefault:1,    cfFixed:true  },
+  { id:"s1_nox",   scope:"Scope 1", group:"Direct emission to air",   type:"NOx",                           unit:"kg",  cfDefault:296,  cfFixed:true  },
+  { id:"s1_ch4",   scope:"Scope 1", group:"Direct emission to air",   type:"CH4",                           unit:"kg",  cfDefault:28,   cfFixed:true  },
+  { id:"s1_nmvoc", scope:"Scope 1", group:"Direct emission to air",   type:"nmVOC",                         unit:"kg",  cfDefault:"",   cfFixed:false },
+  { id:"s1_chem",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. chemicals)",        unit:"kg",  cfDefault:"",   cfFixed:false },
+  { id:"s1_refr",  scope:"Scope 1", group:"Direct emission to air",   type:"Other (e.g. refrigerants / GWP gases)", unit:"kg",  cfDefault:"",   cfFixed:false },
+  { id:"s1_other", scope:"Scope 1", group:"Direct emission to air",   type:"Other",                         unit:"kg",  cfDefault:"",   cfFixed:false },
+  // Scope 2 — Energy
+  { id:"s2_elec",  scope:"Scope 2", group:"Reduction energy consumption", type:"Reduction in energy consumption", unit:"kWh", cfDefault:0.57, cfFixed:true },
+  // Scope 3 Cat 1 — Material
+  { id:"s3_steel_reuse",   scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Reuse of material (Steel)",                 unit:"kg", cfDefault:2,   cfFixed:true  },
+  { id:"s3_other_simp",    scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Simplified design (other material)",         unit:"kg", cfDefault:1.5, cfFixed:true  },
+  { id:"s3_other_reuse",   scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Reuse of material (other material)",         unit:"kg", cfDefault:1.5, cfFixed:true  },
+  { id:"s3_steel_simp",    scope:"Scope 3 Cat 1", group:"Reduction in material", type:"Simplified design (Steel)",                  unit:"kg", cfDefault:2,   cfFixed:true  },
+  // Scope 3 Cat 4 — Transport
+  { id:"s3t_mat",   scope:"Scope 3 Cat 4", group:"Transportation", type:"Material",                         unit:"kg",  cfDefault:"",  cfFixed:false },
+  { id:"s3t_add",   scope:"Scope 3 Cat 4", group:"Transportation", type:"Added / modified systems needed",  unit:"",    cfDefault:"",  cfFixed:false },
+];
+
+const emptyOpp = () => ({
+  type:"", materiality:"Both",
+  description:"", envBenefit:"", bizBenefit:"", techBenefit:"",
+  envValue:3, bizValue:3, feasibility:3,
+  owner:"", status:"Open", _color:"",
+  createdAt:"", updatedAt:"",
+  // Savings — two separate tracks with independent phases
+  qualPhases: [],   // [{id, label, date, note}]
+  ghgPhases:  [],   // [{id, label, date, note, lines:[]}]
+  // lines shape: {id, custom, scope, type, unit, reduction, baseline, cf, ref, savingType}
+  // custom:false = standard GHG_LINES row; custom:true = user-added row
+});
+
+// ── GhgPhase factory ──────────────────────────────────────────────────────────
+const emptyGhgPhase = (label, fromPhase) => ({
+  id: "ghgp_"+Date.now(),
+  label: label||"Phase 1",
+  date: new Date().toISOString(),
+  note: "",
+  lines: fromPhase
+    ? JSON.parse(JSON.stringify(fromPhase.lines))
+    : GHG_LINES.map(l=>({
+        id:l.id, custom:false, scope:l.scope, type:l.type, unit:l.unit,
+        reduction:"", baseline:"", cf:l.cfDefault, ref:"", savingType:"identified"
+      }))
+});
+
+// ── Migration: any saved format → current format ──────────────────────────────
+const migrateOpp = (base) => {
+  // Already migrated
+  if ((base.ghgPhases||[]).length > 0 || (base.qualPhases||[]).length > 0)
+    return { ghgPhases: base.ghgPhases||[], qualPhases: base.qualPhases||[] };
+
+  // From ghgSnapshots[] format (v2→v3)
+  if ((base.ghgSnapshots||[]).length > 0) {
+    const ghgPhases = base.ghgSnapshots.map(snap => ({
+      id: snap.id||("ghgp_"+Date.now()),
+      label: snap.label||"Phase",
+      date: snap.date||new Date().toISOString(),
+      note: snap.note||"",
+      lines: [
+        // standard lines: rename qty→reduction, drop custom:false implied
+        ...(snap.lines||[]).map(l=>({
+          id:l.id, custom:false, scope:l.scope||"", type:l.type||"",
+          unit:l.unit||"", reduction:l.qty||l.reduction||"",
+          baseline:l.baseline||"", cf:l.cf||"", ref:l.ref||"",
+          savingType:l.savingType||"identified"
+        })),
+        // custom rows: merge in with custom:true
+        ...(snap.customRows||[]).map(r=>({
+          id:r.uid||("c_"+Date.now()), custom:true,
+          scope:r.scope||"", type:r.type||"", unit:r.unit||"kg",
+          reduction:r.qty||r.reduction||"", baseline:r.baseline||"",
+          cf:r.cf||"", ref:r.ref||"", savingType:r.savingType||"identified"
+        }))
+      ]
+    }));
+    return { ghgPhases, qualPhases: base.qualPhases||[] };
+  }
+
+  // From raw ghgLines[] format (v1)
+  const oldLines = base.ghgLines||[];
+  const oldCustom = base.customGhgRows||[];
+  const hasData = oldLines.some(l=>parseFloat(l.qty||l.reduction)>0) || oldCustom.length>0;
+  const hasNote = !!(base.ghgNote||"").trim();
+  if (!hasData && !hasNote) return { ghgPhases:[], qualPhases:[] };
+  return {
+    ghgPhases: [{
+      id:"ghgp_migrated", label:"Initial data",
+      date: base.createdAt||new Date().toISOString(),
+      note: base.ghgNote||"",
+      lines: [
+        ...GHG_LINES.map(l=>{
+          const s = oldLines.find(x=>x.id===l.id);
+          return { id:l.id, custom:false, scope:l.scope, type:l.type, unit:l.unit,
+                   reduction:s?s.qty||s.reduction||"":"", baseline:s?s.baseline||"":"",
+                   cf:(s&&s.cf!=="")?s.cf:l.cfDefault, ref:s?s.ref||"":"",
+                   savingType:s&&s.savingType!=="superseded"?s.savingType:"identified" };
+        }),
+        ...oldCustom.map(r=>({
+          id:r.uid||("c_"+Date.now()), custom:true,
+          scope:r.scope||"", type:r.type||"", unit:r.unit||"kg",
+          reduction:r.qty||r.reduction||"", baseline:r.baseline||"",
+          cf:r.cf||"", ref:r.ref||"",
+          savingType:(r.savingType||"").replace("superseded","identified")||"identified"
+        }))
+      ]
+    }],
+    qualPhases: []
+  };
+};
+
+const newProject = () => {
+  const ts = Date.now();
+  return {
+    id: ts.toString(),
+    projectId: "PRJ-"+ts.toString().slice(-5),
+    name:"", company:"", contract:"", type:"", phase:"",
+    createdAt: new Date().toISOString(),
+    aspects:[], opportunities:[], changelog:[]
+  };
+};
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
+const iw = { width:"100%", boxSizing:"border-box" };
+
+function sigStyle(sig) {
+  const c = sig==="SIGNIFICANT" ? {bg:T.redBg,   c:T.red,   bd:T.redBd}
+           : sig==="WATCH"      ? {bg:T.amberBg, c:T.amber, bd:T.amberBd}
+           :                      {bg:T.greenBg, c:T.green, bd:T.greenBd};
+  return { fontFamily:T.mono, fontSize:10, fontWeight:500, padding:"2px 7px", borderRadius:3,
+           display:"inline-block", background:c.bg, color:c.c, border:"1px solid "+c.bd, letterSpacing:"0.03em" };
+}
+function condStyle(cd) {
+  const c = cd==="Emergency" ? {bg:T.redBg,   c:T.red}
+           : cd==="Abnormal" ? {bg:T.amberBg, c:T.amber}
+           :                    {bg:T.greenBg, c:T.green};
+  return { fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"2px 6px", borderRadius:3,
+           display:"inline-block", background:c.bg, color:c.c, letterSpacing:"0.05em", textTransform:"uppercase" };
+}
+
+function Fld({ label, children, wide }) {
+  return (
+    <div style={wide ? {gridColumn:"span 2"} : {}}>
+      <label style={{ fontFamily:T.mono, fontSize:10, color:T.muted, display:"block", marginBottom:5,
+                      letterSpacing:"0.05em", textTransform:"uppercase" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+function Card({ children, style, accent }) {
+  return (
+    <div style={{ background:T.surface, borderRadius:8, border:"1px solid "+T.border,
+                  borderLeft: accent ? "3px solid "+accent : undefined, padding:"1.25rem", ...style }}>
+      {children}
+    </div>
+  );
+}
+function SectionLabel({ children }) {
+  return <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.faint,
+                     letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 0 12px" }}>{children}</p>;
+}
+function Btn({ children, onClick, variant="default", size="md", disabled }) {
+  const v = {
+    default:{ background:T.surface,  color:T.text,   border:"1px solid "+T.border },
+    primary:{ background:T.teal,     color:"#fff",   border:"none" },
+    purple: { background:T.purple,   color:"#fff",   border:"none" },
+    danger: { background:"transparent", color:T.red, border:"1px solid "+T.redBd },
+    ghost:  { background:"transparent", color:T.muted, border:"none" },
+  }[variant] || {};
+  const s = { sm:{padding:"4px 10px",fontSize:11}, md:{padding:"7px 14px",fontSize:12}, lg:{padding:"9px 18px",fontSize:13} }[size];
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{ borderRadius:6, cursor:disabled?"not-allowed":"pointer", fontFamily:T.sans,
+               fontWeight:500, opacity:disabled?0.45:1, ...v, ...s }}>
+      {children}
+    </button>
+  );
+}
+
+// ── Theme toggle button ───────────────────────────────────────────────────────
+function ThemeToggle({ isDark, onToggle }) {
+  return (
+    <button onClick={onToggle} title={isDark?"Switch to light theme":"Switch to dark theme"}
+      style={{ background:"transparent", border:"1px solid var(--sb-bd)", borderRadius:5,
+               cursor:"pointer", padding:"5px 8px", display:"flex", alignItems:"center", gap:6,
+               color:"var(--sb-muted)", fontFamily:T.mono, fontSize:9 }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        {isDark
+          ? <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>
+          : <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></>}
+      </svg>
+      {isDark?"Light":"Dark"}
+    </button>
+  );
+}
+
+// ── Aspect form — matches screening form UI ───────────────────────────────────
+function AspectForm({ aspect, onSave, onCancel }) {
+  const [f, setF] = useState({ ...emptyAspect(), ...aspect });
+  const set = (k, v) => setF(p => ({ ...p, [k]:v }));
+  const score = calcScore(f);
+  const sig   = calcSig(f);
+  return (
+    <div style={{ padding:"1.25rem" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
+        <Btn onClick={onCancel} variant="ghost">← Back</Btn>
+        <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red }}>
+          {aspect.id ? "Edit risk" : "New risk"}
+        </h3>
+        {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
+      </div>
+
+      <Card style={{ marginBottom:"1rem" }} accent={T.red}>
+        <SectionLabel>Activity details</SectionLabel>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
+          <Fld label="Phase">
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {PHASES.map(p => {
+                const sel = (f.phase||"").split(",").filter(Boolean);
+                const active = sel.includes(p);
+                return (
+                  <button key={p} type="button"
+                    onClick={() => {
+                      const cur = (f.phase||"").split(",").filter(Boolean);
+                      const next = active ? cur.filter(x=>x!==p) : [...cur, p];
+                      set("phase", next.join(","));
+                    }}
+                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+                      cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
+                      background: active ? T.tealBg : "transparent",
+                      color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
+                      fontFamily:"var(--sans,system-ui)" }}>
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+          </Fld>
+          <Fld label="Activity area"><input value={f.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
+          <Fld label="Environmental risk" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
+          <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="Abnormal condition" wide>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+              <input type="checkbox" checked={!!f.isAbnormal}
+                onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) { set("abnormalType",""); set("abnormalDesc",""); } }}
+                style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
+              <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
+            </label>
+            {f.isAbnormal && (
+              <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:5 }}>
+                <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)} style={iw}>
+                  <option value="">— select type —</option>
+                  {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
+                </select>
+                <textarea value={f.abnormalDesc||""} onChange={e=>set("abnormalDesc",e.target.value)}
+                  rows={2} placeholder="Describe the abnormal condition…" style={{ ...iw, resize:"vertical" }}/>
+              </div>
+            )}
+          </Fld>
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
+        <SectionLabel>Significance scoring</SectionLabel>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
+          <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={f.severity} onChange={e=>set("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          <Fld label="Probability (P1–P5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          <Fld label="Legal threshold"><select value={f.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+          <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+        </div>
+        {score !== null && (
+          <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
+                        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
+              Risk score:{" "}
+              <strong style={{ fontSize:22, color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
+                {score}
+              </strong>
+            </span>
+            <span style={sigStyle(sig)}>{sig}</span>
+            {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
+            {f.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ marginBottom:"1.5rem" }}>
+        <SectionLabel>Controls & management</SectionLabel>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
+          <Fld label="Key control measure" wide><textarea value={f.control} onChange={e=>set("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="Legal / regulatory reference" wide><input value={f.legalRef} onChange={e=>set("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7, OSPAR" style={iw}/></Fld>
+          <Fld label="Owner"><input value={f.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
+          <Fld label="Status"><select value={f.status} onChange={e=>set("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+        </div>
+      </Card>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+        <Btn onClick={onCancel}>Cancel</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared opp helpers ───────────────────────────────────────────────────────
+
+// Determine which GHG lines are relevant based on type / prefillGhgIds
+function relevantLines(type, prefillIds) {
+  if (prefillIds && prefillIds.length > 0) {
+    return GHG_LINES.filter(l => prefillIds.includes(l.id));
+  }
+  if ((type||"").startsWith("Scope 1")) return GHG_LINES.filter(l=>l.scope==="Scope 1");
+  if ((type||"").startsWith("Scope 2")) return GHG_LINES.filter(l=>l.scope==="Scope 2");
+  if ((type||"").startsWith("Scope 3")) return GHG_LINES.filter(l=>l.scope==="Scope 3 Cat 1"||l.scope==="Scope 3 Cat 4");
+  return GHG_LINES; // all
+}
+
+// ── GHG snapshot table (hoisted to module level to prevent input focus loss) ──
+function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGroups,
+                        customForScope, SCOPE_COLORS, thS, tdS, fmt, snapKgFn,
+                        onSetLine, onSetCustomRow, onAddCustomRow, onDelCustomRow }) {
+  const t = snapKgFn(snap);  // {identified, actual}
+  return (
+    <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:T.sans}}>
+        <thead>
+          <tr style={{background:T.surface2}}>
+            {visibleScopes.length>1&&<th style={thS}>Scope</th>}
+            {["Emission / reduction type","Unit","Baseline qty","Reduction qty","CF","Saving (kg CO₂e)","Type","Reference"].map(h=>(
+              <th key={h} style={{...thS,textAlign:["Baseline qty","Reduction qty","CF","Saving (kg CO₂e)"].includes(h)?"right":"left"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleScopes.flatMap(scope=>{
+            const sc2=SCOPE_COLORS[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+            const slines=scopeGroups[scope]||[];
+            const crows=(customForScope||[]).filter(r=>r.scope===scope);
+            const totalRows=slines.length+crows.length+1;
+            return [
+              ...slines.map((l,li)=>{
+                const qty=parseFloat(l.reduction||l.qty)||0,cf=parseFloat(l.cf)||0;
+                const sav=qty&&cf?qty*cf:null;
+                return(
+                  <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,background:qty>0?sc2.bg+"44":undefined}}>
+                    {visibleScopes.length>1&&li===0&&<td rowSpan={totalRows}
+                      style={{padding:"5px 7px",verticalAlign:"top",paddingTop:8,borderBottom:"1px solid "+T.rowBd,
+                              borderRight:"1px solid "+T.border,width:82}}>
+                      <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,
+                        background:sc2.bg,color:sc2.c,border:"1px solid "+sc2.bd,display:"inline-block",whiteSpace:"nowrap"}}>{scope}</span>
+                    </td>}
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,color:T.text,fontWeight:500}}>{l.type}</td>
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontSize:10,color:T.faint}}>{l.unit}</td>
+                    <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={l.baseline} onChange={e=>onSetLine(si,l.id,"baseline",e.target.value)}
+                        placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
+                          border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.baseline||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={l.reduction||l.qty||""} onChange={e=>onSetLine(si,l.id,"reduction",e.target.value)}
+                        placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
+                          border:"1px solid "+(qty>0?sc2.bd:T.border),borderRadius:4,
+                          background:qty>0?sc2.bg:T.surface,color:qty>0?sc2.c:T.text}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:12,fontWeight:qty>0?600:400,color:qty>0?sc2.c:T.faint}}>{l.reduction||l.qty||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {l.cfFixed?<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{l.cfDefault}</span>
+                        :editable?<input type="number" min={0} value={l.cf} onChange={e=>onSetLine(si,l.id,"cf",e.target.value)}
+                          placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
+                            border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
+                          :<span style={{fontFamily:T.mono,fontSize:11,color:l.cf?T.muted:T.faint}}>{l.cf||"—"}</span>}
+                    </td>
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontWeight:sav?700:400,color:sav?T.teal:T.faint}}>
+                      {sav!=null?sav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
+                    </td>
+                    <td style={{padding:"2px 5px",fontSize:12,borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<select value={l.savingType} onChange={e=>onSetLine(si,l.id,"savingType",e.target.value)}
+                        style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
+                          border:"1px solid "+(l.savingType==="actual"?T.tealBd:T.blueBd),
+                          background:l.savingType==="actual"?T.tealBg:T.blueBg,
+                          color:l.savingType==="actual"?T.teal:T.blue}}>
+                        <option value="identified">Identified</option>
+                        <option value="actual">Actual</option>
+                      </select>:<span style={{fontSize:10,padding:"2px 6px",borderRadius:3,fontWeight:500,
+                        background:l.savingType==="actual"?T.tealBg:T.blueBg,
+                        color:l.savingType==="actual"?T.teal:T.blue}}>{l.savingType}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",fontSize:12,borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<input value={l.ref} onChange={e=>onSetLine(si,l.id,"ref",e.target.value)}
+                        placeholder="Source" style={{width:"100%",minWidth:80,padding:"2px 5px",fontSize:10,
+                          border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
+                        :<span style={{fontSize:10,color:T.faint}}>{l.ref||"—"}</span>}
+                    </td>
+                  </tr>
+                );
+              }),
+              ...crows.map(cr=>{
+                const cqty=parseFloat(cr.reduction||cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
+                const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                return(
+                  <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg+"22"}}>
+                    {visibleScopes.length>1&&<td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd}}/>}
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"type",e.target.value)}
+                        placeholder="Custom type" style={{width:"100%",padding:"2px 5px",fontSize:11,
+                          border:"1px solid "+T.amberBd,borderRadius:3,background:T.amberBg,color:T.amber}}/>
+                        :<span style={{fontSize:11,color:T.amber}}>{cr.type||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input value={cr.unit} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"unit",e.target.value)}
+                        placeholder="kg" style={{width:40,textAlign:"right",padding:"2px 4px",fontSize:10,
+                          border:"1px solid "+T.border,borderRadius:3,background:T.surface,color:T.muted}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>{cr.unit||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={cr.baseline||""} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"baseline",e.target.value)}
+                        placeholder="—" style={{width:70,textAlign:"right",padding:"3px 6px",fontFamily:T.mono,fontSize:11,
+                          border:"1px solid "+T.border,borderRadius:4,background:T.surface,color:T.muted}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>{cr.baseline||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={cr.reduction||cr.qty||""} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"reduction",e.target.value)}
+                        placeholder="0" style={{width:80,textAlign:"right",padding:"3px 7px",fontFamily:T.mono,fontSize:12,
+                          border:"1px solid "+(cqty>0?sc2c.bd:T.border),borderRadius:4,
+                          background:cqty>0?sc2c.bg:T.surface,color:cqty>0?sc2c.c:T.text}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:12,color:cqty>0?sc2c.c:T.faint}}>{cr.reduction||cr.qty||"—"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
+                      {editable?<input type="number" min={0} value={cr.cf} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"cf",e.target.value)}
+                        placeholder="CF" style={{width:52,textAlign:"right",padding:"3px 5px",fontFamily:T.mono,fontSize:11,
+                          border:"1px solid "+T.amberBd,borderRadius:4,background:T.amberBg,color:T.amber}}/>
+                        :<span style={{fontFamily:T.mono,fontSize:11,color:T.amber}}>{cr.cf||"—"}</span>}
+                    </td>
+                    <td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontWeight:csav?700:400,color:csav?T.teal:T.faint}}>
+                      {csav!=null?csav.toLocaleString("nb-NO",{maximumFractionDigits:1}):"—"}
+                    </td>
+                    <td style={{padding:"2px 5px",borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<select value={cr.savingType||"identified"} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"savingType",e.target.value)}
+                        style={{fontSize:10,padding:"2px 5px",borderRadius:3,cursor:"pointer",width:"100%",fontWeight:500,
+                          border:"1px solid "+((cr.savingType||"identified")==="actual"?T.tealBd:T.blueBd),
+                          background:(cr.savingType||"identified")==="actual"?T.tealBg:T.blueBg,
+                          color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>
+                        <option value="identified">Identified</option>
+                        <option value="actual">Actual</option>
+                      </select>:<span style={{fontSize:10,color:(cr.savingType||"identified")==="actual"?T.teal:T.blue}}>{cr.savingType||"identified"}</span>}
+                    </td>
+                    <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
+                      {editable?<div style={{display:"flex",gap:3,alignItems:"center"}}>
+                        <input value={cr.ref||""} onChange={e=>onSetCustomRow(si,cr.uid,"ref",e.target.value)}
+                          placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
+                            border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
+                        <button onClick={()=>onDelCustomRow(si,cr.uid)}
+                          style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>✕</button>
+                      </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
+                    </td>
+                  </tr>
+                );
+              }),
+              <tr key={"add_"+scope+"_"+si}>
+                <td colSpan={9} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
+                  {editable&&<button onClick={()=>onAddCustomRow(si,scope)}  /* adds to lines with custom:true */
+                    style={{fontSize:11,color:(SCOPE_COLORS[scope]||{c:T.slate}).c,background:"transparent",
+                      border:"none",cursor:"pointer",padding:"2px 4px",fontFamily:T.sans,fontWeight:500}}>
+                    + Add custom row
+                  </button>}
+                </td>
+              </tr>
+            ];
+          })}
+        </tbody>
+        <tfoot>
+          {t.actual>0&&<tr style={{background:T.tealBg,borderTop:"2px solid "+T.tealBd}}>
+            <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.teal}}>Actual saving</td>
+            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.teal}}>{fmt(t.actual)}</td>
+            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>{t.actual>=1000?"= "+t.actual.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg":""}</td>
+          </tr>}
+          {t.identified>0&&<tr style={{background:T.blueBg,borderTop:t.actual>0?"none":"2px solid "+T.blueBd}}>
+            <td colSpan={visibleScopes.length>1?7:6} style={{padding:"7px 9px",fontWeight:600,fontSize:12,color:T.blue}}>Identified saving</td>
+            <td style={{padding:"7px 9px",textAlign:"right",fontFamily:T.mono,fontSize:13,fontWeight:700,color:T.blue}}>{fmt(t.identified)}</td>
+            <td colSpan={2} style={{padding:"7px 9px",fontSize:10,color:T.muted}}>{t.identified>=1000?"= "+t.identified.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg":""}</td>
+          </tr>}
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ── Qualitative phases section (top-level so useState is valid) ───────────────
+function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases, onSetNote }) {
+  const qp = qualPhases||[];
+  const [activeQIdx, setActiveQIdx] = useState(()=>Math.max(0,qp.length-1));
+  const safeQIdx = Math.min(activeQIdx, Math.max(0,qp.length-1));
+  const isQLatest = (qi) => qi === qp.length-1;
+
+  const addQualPhase = () => {
+    const n = qp.length+1;
+    const next = [...qp, {id:"qp_"+Date.now(), label:"Phase "+n, date:new Date().toISOString(), note:""}];
+    onSetPhases(next);
+    setActiveQIdx(n-1);
+  };
+  // Allow deleting any phase — even Phase 1 (clears back to empty list)
+  const delQualPhase = () => {
+    const phase = qp[qp.length-1];
+    if (!window.confirm("Delete phase \"" + (phase?.label||"this phase") + "\"? This cannot be undone.")) return;
+    const next = qp.slice(0,-1);
+    onSetPhases(next);
+    setActiveQIdx(Math.max(0, next.length-1));
+  };
+  const setQualPhase = (qi,k,v) => onSetPhases(qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
+  const activeQP = qp.length>0 ? (qp[safeQIdx]||null) : null;
+
+  return (
+    <div style={{marginBottom:showQuantitative?"1rem":0}}>
+      {/* Phase pill row — matches quantitative */}
+      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
+        {qp.map((qph,qi)=>{
+          const active=qi===safeQIdx;
+          const latest=isQLatest(qi);
+          return(
+            <div key={qph.id} style={{display:"flex",alignItems:"center",
+              borderRadius:20,border:"1px solid "+(active?T.slate:T.border),
+              overflow:"hidden",background:active?T.slate:"transparent"}}>
+              <button onClick={()=>setActiveQIdx(qi)}
+                style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
+                       fontFamily:T.sans,background:"transparent",border:"none",
+                       color:active?"#fff":T.muted}}>
+                {qph.label}
+                {qph.note&&<span style={{marginLeft:4,fontSize:9,opacity:0.6}}>●</span>}
+              </button>
+              {latest&&(
+                <button onClick={delQualPhase} title="Delete this phase"
+                  style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
+                         fontFamily:T.sans,background:"transparent",border:"none",
+                         color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
+                  onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
+                  onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button onClick={addQualPhase}
+          style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                 fontFamily:T.sans,background:"transparent",color:T.slate,
+                 border:"1px solid "+T.slateBd}}>
+          + Add phase
+        </button>
+      </div>
+
+      {/* Active phase — same layout as quantitative: header bar + note body */}
+      {activeQP ? (
+        <div style={{borderRadius:7,border:"1px solid "+(isQLatest(safeQIdx)?T.slateBd:T.border),overflow:"hidden"}}>
+          {/* Header bar: editable label (latest only) + date */}
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",
+            background:isQLatest(safeQIdx)?T.slateBg:T.surface2}}>
+            {isQLatest(safeQIdx)
+              ?<input value={activeQP.label} onChange={e=>setQualPhase(safeQIdx,"label",e.target.value)}
+                  style={{flex:1,padding:"3px 8px",fontSize:13,fontWeight:700,color:T.slate,
+                    border:"1px solid "+T.slateBd,borderRadius:5,background:"transparent"}}/>
+              :<span style={{fontSize:13,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
+            <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+              {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+            </span>
+            {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
+          </div>
+          {/* Note body */}
+          <div style={{padding:"10px 12px",background:T.surface}}>
+            {isQLatest(safeQIdx)
+              ?<textarea value={activeQP.note||""} onChange={e=>setQualPhase(safeQIdx,"note",e.target.value)} rows={3}
+                  placeholder="Describe expected savings for this phase — approach, methodology, estimated reduction range"
+                  style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
+              :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
+                 {activeQP.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note recorded</span>}
+               </p>}
+          </div>
+        </div>
+      ) : (
+        <p style={{fontSize:11,color:T.faint,margin:0,fontStyle:"italic"}}>
+          No phases — click "+ Add phase" to start.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Shared OppFormBody — used identically from OppForm and ScreeningTab ───────
+function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const [activeSnapIdx, setActiveSnapIdx] = useState(
+    () => Math.max(0,(f.ghgPhases||[]).length-1)
+  );
+
+  const score = calcOppScore(f);
+  const prioLabel = score>=75?"High priority":score>=30?"Medium priority":"Low priority";
+  const sc = score>=75?{bg:T.tealBg,c:T.tealDark}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+
+  // Keep activeSnapIdx in bounds
+  const snaps = f.ghgPhases||[];
+  const safeIdx = Math.min(activeSnapIdx, snaps.length-1);
+  const activeSnap = snaps[safeIdx]||null;
+  // Only the latest (last) phase is editable and deletable.
+  // Deleting the latest makes the previous one the new latest.
+  const isLatest = (si) => si === snaps.length-1;
+  const isActive = isLatest; // alias — only latest is editable
+
+  // Snapshot updater targeting a specific index
+  const updateSnap = (si, updater) => setF(p=>{
+    const s=[...(p.ghgPhases||[])];
+    s[si]=updater(s[si]); return {...p,ghgPhases:s};
+  });
+  const setSnapField = (si,k,v) => updateSnap(si,s=>({...s,[k]:v}));
+  const setLine      = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
+  const addCustomRow = (si,scope) => updateSnap(si,s=>({...s,lines:[...(s.lines||[]),
+    {id:"c_"+Date.now(),custom:true,scope,type:"",unit:"kg",reduction:"",baseline:"",cf:"",ref:"",savingType:"identified"}]}));
+  const delCustomRow = (si,id) => updateSnap(si,s=>({...s,lines:(s.lines||[]).filter(l=>l.id!==id)}));
+  const setCustomRow = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
+
+  const addPhaseSnapshot = () => {
+    const prev = snaps[snaps.length-1]||null;
+    const n = snaps.length+1;
+    setF(p=>({...p,ghgPhases:[...p.ghgPhases,emptyGhgPhase("Phase "+n,prev)]}));
+    setActiveSnapIdx(n-1); // jump to new latest
+  };
+  const deleteLatestPhase = () => {
+    if (snaps.length === 0) return;
+    const phase = snaps[snaps.length-1];
+    if (!window.confirm("Delete phase \"" + (phase?.label||"this phase") + "\"? This cannot be undone.")) return;
+    setF(p=>({...p,ghgPhases:p.ghgPhases.slice(0,-1)}));
+    setActiveSnapIdx(Math.max(0, snaps.length-2));
+  };
+
+  // showQuantitative derived from ghgPhases.length > 0
+  const hasQuantitative = snaps.length > 0;
+  const toggleQuantitative = () => {
+    if (hasQuantitative) {
+      // collapse = just switch view; data preserved
+      setF(p=>({...p,ghgPhases:p.ghgPhases})); // noop — toggle handled by UI
+    } else {
+      setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]}));
+      setActiveSnapIdx(0);
+    }
+  };
+
+  const snapTotal = snapKg; // delegate to module-level snapKg
+  const fmt = v => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e":v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
+
+  const SCOPE_COLORS = {
+    "Scope 1":{bg:T.redBg,c:T.red,bd:T.redBd},
+    "Scope 2":{bg:T.blueBg,c:T.blue,bd:T.blueBd},
+    "Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},
+    "Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd},
+  };
+  const thS={padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,
+             borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
+  const tdS=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
+
+  // GhgSnapTable is a top-level component to prevent remounting on keystroke
+  // All callbacks passed as props to maintain stable identity
+
+
+  // SnapDiff: only show actual change; identified is never shown as negative
+  // If actual increased, show +; if actual is new (was 0), show as first value
+  // Biggest identified across all phases is the canonical figure — never show minus
+  const SnapDiff = ({prev,curr}) => {
+    const pT=snapKg(prev),cT=snapKg(curr);
+    const dI=cT.identified-pT.identified;
+    const dA=cT.actual-pT.actual;
+    if(dI===0&&dA===0) return <span style={{fontSize:11,color:T.faint}}>Values carried forward.</span>;
+    const fmtD = v => {
+      const kg=Math.abs(v); const sign=v>=0?"+":"−";
+      return sign+(kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t CO₂e":Math.round(kg)+" kg CO₂e");
+    };
+    return(<span style={{fontSize:11,display:"flex",gap:10,flexWrap:"wrap"}}>
+      {dI!==0&&<span style={{color:dI>0?T.teal:T.amber,fontWeight:500}}>Identified {fmtD(dI)}</span>}
+      {dA!==0&&<span style={{color:dA>0?T.teal:T.amber,fontWeight:500}}>Actual {fmtD(dA)}</span>}
+    </span>);
+  };
+
+  return (
+    <div>
+      {/* ── Description ── */}
+      <Card style={{marginBottom:"1rem"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
+          <Fld label="Opportunity type">
+            {(f.prefillGhgIds&&f.prefillGhgIds.length>0)||(f.type&&(f.type.startsWith("Scope 1")||f.type.startsWith("Scope 2")||f.type.startsWith("Scope 3"))) ? (
+              <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
+                           border:"1px solid "+T.border,fontSize:12,color:T.text,fontWeight:500}}>
+                {f.type||"—"}
+              </div>
+            ) : (
+              <select value={f.type} onChange={e=>set("type",e.target.value)} style={iw}>
+                <option value="">Select type</option>
+                <optgroup label="Scope 1 — Direct Emissions">
+                  <option value="Scope 1 — CO₂">CO₂ reduction</option>
+                  <option value="Scope 1 — NOₓ">NOₓ reduction</option>
+                  <option value="Scope 1 — CH₄">CH₄ / methane reduction</option>
+                  <option value="Scope 1 — GWP gases">GWP gases / refrigerants reduction</option>
+                  <option value="Scope 1 — Other">Other direct emission reduction</option>
+                </optgroup>
+                <optgroup label="Scope 2 — Indirect Emissions">
+                  <option value="Scope 2 — System optimisation">System / component optimisation</option>
+                  <option value="Scope 2 — Design optimisation">Layout, design or location optimisation</option>
+                  <option value="Scope 2 — Alternative resources">Alternative resources</option>
+                </optgroup>
+                <optgroup label="Scope 3 — Value Chain">
+                  <option value="Scope 3 — Material">Material</option>
+                  <option value="Scope 3 — Chemicals">Chemicals</option>
+                  <option value="Scope 3 — Lifecycle">Lifecycle</option>
+                  <option value="Scope 3 — Re-use">Re-use</option>
+                  <option value="Scope 3 — Re-cycle">Re-cycle</option>
+                  <option value="Scope 3 — Waste">Waste evaluation</option>
+                  <option value="Scope 3 — Transport">Transport</option>
+                  <option value="Scope 3 — Remote technology">Remote technology / Automated solutions</option>
+                </optgroup>
+              </select>
+            )}
+          </Fld>
+          <Fld label="Materiality">
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {["Inside-out","Outside-in","Both"].map(opt => {
+                const active = (f.materiality||"").startsWith(opt);
+                return (
+                  <button key={opt} type="button"
+                    onClick={() => set("materiality", opt)}
+                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+                      cursor:"pointer", border:"1px solid "+(active ? T.purpleBd : T.border),
+                      background: active ? T.purpleBg : "transparent",
+                      color: active ? T.purple : T.muted, fontWeight: active ? 600 : 400,
+                      fontFamily:"var(--sans,system-ui)" }}>
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          </Fld>
+          <Fld label="Opportunity description" wide>
+            <textarea value={f.description} onChange={e=>set("description",e.target.value)} rows={3}
+              style={{...iw,resize:"vertical"}}/>
+          </Fld>
+        </div>
+      </Card>
+
+      {/* ── NOx warning — shown when type is NOx ── */}
+      {(f.type||"").includes("NOₓ") && (
+        <div style={{marginBottom:"1rem",background:T.amberBg,border:"1px solid "+T.amberBd,borderRadius:8,padding:"12px 16px"}}>
+          <p style={{margin:"0 0 8px",fontSize:12,fontWeight:700,color:T.amber,display:"flex",alignItems:"center",gap:8}}>
+            <span>⚠</span> NOₓ is a regulated air pollutant — handle separately from GHG accounting
+          </p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
+            <div>
+              <p style={{margin:"0 0 3px",fontSize:11,fontWeight:600,color:T.text}}>NOₓ tax (Norway)</p>
+              <p style={{margin:0,fontSize:11,color:T.muted,lineHeight:1.55}}>
+                NOₓ emissions are subject to the Norwegian NOₓ tax (NOₓ-avgift) under the NOₓ Fund agreement.
+                Reductions represent a direct cost saving and should be quantified separately from CO₂e reductions.
+              </p>
+            </div>
+            <div>
+              <p style={{margin:"0 0 3px",fontSize:11,fontWeight:600,color:T.text}}>CO₂e conversion</p>
+              <p style={{margin:0,fontSize:11,color:T.muted,lineHeight:1.55}}>
+                A CO₂e factor (typically 296 kg CO₂e / kg NOₓ via GWP) can be applied for internal GHG accounting,
+                but NOₓ reductions must not be aggregated with Scope 1 CO₂e in external or regulatory disclosure
+                without an explicit methodology note.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Priority scoring — 3 dimensions ── */}
+      <Card style={{marginBottom:"1rem",background:T.tealBg}} accent={T.teal}>
+        <SectionLabel>Priority score = env value × business value × technical feasibility (max 125)</SectionLabel>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"12px 14px"}}>
+          {[{k:"envValue",l:"Environmental value (1–5)",bk:"envBenefit",bl:"Environmental benefit"},
+            {k:"bizValue",l:"Business value (1–5)",bk:"bizBenefit",bl:"Business / strategic benefit"},
+            {k:"feasibility",l:"Technical feasibility (1–5)",bk:"techBenefit",bl:"Technical feasibility notes"}
+          ].map(({k,l,bk,bl})=>(
+            <div key={k}>
+              <Fld label={l}>
+                <input type="number" min={1} max={5} value={f[k]}
+                  onChange={e=>set(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/>
+              </Fld>
+              <div style={{marginTop:6}}>
+                <p style={{margin:"0 0 3px",fontSize:10,fontWeight:600,color:T.faint,
+                           letterSpacing:"0.07em",textTransform:"uppercase"}}>{bl}</p>
+                <textarea value={f[bk]||""} onChange={e=>set(bk,e.target.value)} rows={2}
+                  style={{...iw,resize:"vertical",fontSize:12}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid "+T.tealBd,
+                     display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>Score:</span>
+          <span style={{fontFamily:T.mono,fontSize:20,fontWeight:500,padding:"2px 12px",
+                        borderRadius:5,background:sc.bg,color:sc.c}}>{score}</span>
+          <span style={{fontSize:12,fontWeight:600,color:sc.c}}>{prioLabel}</span>
+        </div>
+      </Card>
+
+      {/* ── Savings estimate — two independent toggles ── */}
+      <Card style={{marginBottom:"1rem"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem"}}>
+          <SectionLabel style={{margin:0}}>Savings estimate</SectionLabel>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>{
+                const qp=f.qualPhases||[];
+                if(qp.length===0){
+                  setF(p=>({...p,qualPhases:[{id:"qp_"+Date.now(),label:"Phase 1",date:new Date().toISOString(),note:""}]}));
+                } else {
+                  setF(p=>({...p,qualPhases:[]})); // hide = clear phases (confirmed by user)
+                }
+              }}
+              style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
+                     fontFamily:T.sans,borderRadius:6,
+                     background:(f.qualPhases||[]).length>0?T.slate:"transparent",
+                     color:(f.qualPhases||[]).length>0?"#fff":T.muted,
+                     border:"1px solid "+((f.qualPhases||[]).length>0?T.slate:T.border)}}>
+              Qualitative {(f.qualPhases||[]).length>0?"▾":"▸"}
+            </button>
+            <button onClick={()=>{
+                if(hasQuantitative){
+                  if(window.confirm("Remove all quantitative phases? Data will be lost."))
+                    setF(p=>({...p,ghgPhases:[]}));
+                } else {
+                  setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]}));
+                  setActiveSnapIdx(0);
+                }
+              }}
+              style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
+                     fontFamily:T.sans,borderRadius:6,
+                     background:hasQuantitative?T.teal:"transparent",
+                     color:hasQuantitative?"#fff":T.muted,
+                     border:"1px solid "+(hasQuantitative?T.teal:T.border)}}>
+              Quantitative {hasQuantitative?"▾":"▸"}
+            </button>
+          </div>
+        </div>
+
+        {/* Qualitative — own phase list, rendered via top-level component (hooks rule) */}
+        {(f.qualPhases||[]).length > 0 && (
+          <QualPhasesSection
+            qualPhases={f.qualPhases||[]}
+            qualNote={f.qualNote||""}
+            showQuantitative={hasQuantitative}
+            onSetPhases={v=>set("qualPhases",v)}
+            onSetNote={v=>set("qualNote",v)}
+          />
+        )}
+
+        {/* Quantitative — phase tabs + table */}
+        {hasQuantitative && snaps.length > 0 && (
+          <div>
+            {/* Phase pill tabs */}
+            <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
+              {snaps.map((snap,si)=>{
+                const t=snapTotal(snap);
+                const hasData=t.identified>0||t.actual>0;
+                const active=si===safeIdx;
+                const latest=isLatest(si);
+                return(
+                  <div key={snap.id} style={{display:"flex",alignItems:"center",gap:0,
+                    borderRadius:20,border:"1px solid "+(active?T.teal:T.border),
+                    overflow:"hidden",background:active?T.teal:"transparent"}}>
+                    <button onClick={()=>setActiveSnapIdx(si)}
+                      style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
+                             fontFamily:T.sans,background:"transparent",border:"none",
+                             color:active?"#fff":T.muted}}>
+                      {snap.label}
+                      {hasData&&<span style={{marginLeft:5,fontSize:10,opacity:0.75}}>
+                        {t.identified>0?fmt(t.identified):fmt(t.actual)}
+                      </span>}
+                    </button>
+                    {latest&&(
+                      <button onClick={deleteLatestPhase}
+                        title="Delete this phase"
+                        style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
+                               fontFamily:T.sans,background:"transparent",border:"none",
+                               color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
+                        onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
+                        onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button onClick={addPhaseSnapshot}
+                style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
+                       fontFamily:T.sans,background:"transparent",color:T.teal,
+                       border:"1px solid "+T.tealBd}}>
+                + Add phase
+              </button>
+            </div>
+            {/* Show diff if not first phase */}
+            {safeIdx > 0 && activeSnap && (
+              <div style={{padding:"5px 10px",borderRadius:5,background:T.slateBg,
+                           border:"1px solid "+T.border,marginBottom:"0.5rem",fontSize:11}}>
+                <span style={{color:T.faint,marginRight:6}}>vs {snaps[safeIdx-1].label}:</span>
+                <SnapDiff prev={snaps[safeIdx-1]} curr={activeSnap}/>
+              </div>
+            )}
+            {/* Table header: snapshot label + date, editable if active */}
+            {activeSnap && (
+              <div style={{marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
+                {isLatest(safeIdx)
+                  ? <input value={activeSnap.label} onChange={e=>setSnapField(safeIdx,"label",e.target.value)}
+                      style={{padding:"3px 8px",fontSize:13,fontWeight:700,color:T.teal,
+                        border:"1px solid "+T.tealBd,borderRadius:5,background:"transparent"}}/>
+                  : <span style={{fontSize:13,fontWeight:600,color:T.muted}}>{activeSnap.label}</span>}
+                <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+                  {new Date(activeSnap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                </span>
+                {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
+              </div>
+            )}
+            {activeSnap && (() => {
+              const prefillIds=f.prefillGhgIds||[];
+              const visibleLines=relevantLines(f.type,prefillIds);
+              const visibleScopes=[...new Set(visibleLines.map(l=>l.scope))];
+              const stdLines=(activeSnap.lines||[]).filter(l=>!l.custom);
+              const mergedLines=visibleLines.map(l=>{
+                const s=stdLines.find(x=>x.id===l.id);
+                return{...l,
+                  reduction:s?s.reduction||s.qty||"":"",
+                  baseline:s?s.baseline||"":"",
+                  cf:(s&&s.cf!=="")?s.cf:l.cfDefault,
+                  ref:s?s.ref||"":"",
+                  savingType:s?s.savingType:"identified"};
+              });
+              const scopeGroups=visibleScopes.reduce((acc,sc)=>{acc[sc]=mergedLines.filter(l=>l.scope===sc);return acc;},{});
+              const SCOPE_COLORS={"Scope 1":{bg:T.redBg,c:T.red,bd:T.redBd},"Scope 2":{bg:T.blueBg,c:T.blue,bd:T.blueBd},"Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},"Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}};
+              const thS2={padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
+              const tdS2=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
+              return <GhgSnapTable
+                snap={activeSnap} si={safeIdx} editable={isActive(safeIdx)}
+                visibleScopes={visibleScopes} mergedLines={mergedLines}
+                scopeGroups={scopeGroups}
+                customForScope={(activeSnap.lines||[]).filter(l=>l.custom && visibleScopes.some(sc=>l.scope===sc||!l.scope))}
+                SCOPE_COLORS={SCOPE_COLORS} thS={thS2} tdS={tdS2} fmt={fmt}
+                snapKgFn={snapKg}
+                onSetLine={setLine} onSetCustomRow={setCustomRow}
+                onAddCustomRow={addCustomRow} onDelCustomRow={delCustomRow}/>;
+            })()}
+            <p style={{fontSize:11,color:T.faint,margin:"0.5rem 0 0"}}>
+              Phase snapshots preserve all historical data. Identified savings are never deleted when actual values are added.
+              Fixed CFs: CO₂=1, NOₓ=296, CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2, material=1.5 kg CO₂e/kg.
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Actions ── */}
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <Btn onClick={onCancel}>Cancel</Btn>
+        <Btn variant="primary" onClick={()=>onSave(f)} disabled={!f.description.trim()}>
+          {saveLabel||"Save"}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── Opp form ──────────────────────────────────────────────────────────────────
+function OppForm({ opp, onSave, onCancel }) {
+  const base = { ...emptyOpp(), ...opp };
+  const migrated = migrateOpp(base);
+  const [f, setF] = useState({
+    ...base,
+    ghgPhases:   migrated.ghgPhases,
+    qualPhases:  migrated.qualPhases,
+    // showQualitative / showQuantitative derived from phase arrays — not persisted
+  });
+  // Transient screening hint — not stored on opp record
+  const [prefillGhgIds] = useState(base.prefillGhgIds||[]);
+  return (
+    <div style={{padding:"1.25rem"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:"1.5rem",
+                   paddingBottom:"1rem",borderBottom:"1px solid "+T.border}}>
+        <Btn onClick={onCancel} variant="ghost">Back</Btn>
+        <h2 style={{margin:0,fontSize:16,fontWeight:600}}>{opp.id?"Edit opportunity":"New opportunity"}</h2>
+        {opp.ref&&<span style={{fontFamily:T.mono,fontSize:11,color:T.purple,fontWeight:500}}>{opp.ref}</span>}
+      </div>
+      <OppFormBody f={f} setF={setF} onSave={onSave} onCancel={onCancel}
+        saveLabel={opp.id?"Save changes":"Add opportunity"}/>
+    </div>
+  );
+}
+
+// ── AI Suggest ────────────────────────────────────────────────────────────────
+function AIPanel({ project, onAdd }) {
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState([]);
+  const [error, setError] = useState("");
+  const run = async () => {
+    if (!query.trim()) return;
+    setLoading(true); setError(""); setResults([]);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1200,
+          system:`You are an expert environmental consultant for Norwegian engineering projects. Return ONLY a valid JSON array. Each object: phase (one of: ${PHASES.join(", ")}), area (max 60 chars), activity (max 80 chars), aspect (max 80 chars), condition (Normal|Abnormal|Emergency), impact (max 120 chars), receptors (max 80 chars), recSensitivity (High|Medium|Low), scale (Global|Regional|Local), severity (int 1-5), probability (int 1-5), duration (one of: ${DURATIONS.join(", ")}), legalThreshold (Y|N), control (max 120 chars), legalRef (max 80 chars). Return 4-6 aspects.`,
+          messages:[{ role:"user", content:`Project type: ${project.type||"not specified"}. Phase: ${project.phase||"not specified"}. Scenario: ${query}` }]
+        })
+      });
+      const d = await res.json();
+      const parsed = JSON.parse((d.content?.[0]?.text || "").trim());
+      setResults(Array.isArray(parsed) ? parsed : []);
+    } catch { setError("Could not fetch suggestions - check your connection."); }
+    setLoading(false);
+  };
+  return (
+    <div style={{ background:T.purpleBg, border:"1px solid "+T.purpleBd, borderRadius:8, padding:"1rem", marginBottom:"1rem" }}>
+      <p style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:T.purple, margin:"0 0 4px", letterSpacing:"0.03em" }}>AI aspect suggestion</p>
+      <p style={{ fontSize:12, color:T.muted, margin:"0 0 10px" }}>Describe a project activity or scenario, e.g. "diesel pile driving near a coral reef during spring spawning season"</p>
+      <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+        <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&run()} placeholder="Describe the activity or scenario..." style={{ flex:1 }}/>
+        <Btn variant="purple" onClick={run} disabled={loading||!query.trim()}>{loading?"Thinking...":"Suggest"}</Btn>
+      </div>
+      {error && <p style={{ color:T.red, fontSize:12, margin:"0 0 8px" }}>{error}</p>}
+      {results.map((s, i) => {
+        const sig = calcSig(s);
+        return (
+          <div key={i} style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:6, padding:"10px 12px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:4, alignItems:"center" }}>
+                <span style={{ fontWeight:500, fontSize:13, fontFamily:T.sans }}>{s.aspect}</span>
+                <span style={condStyle(s.condition)}>{s.condition}</span>
+                {sig && <span style={sigStyle(sig)}>{sig}</span>}
+              </div>
+              <p style={{ fontFamily:T.mono, fontSize:10, color:T.muted, margin:"0 0 2px" }}>{s.phase}{s.area?" / "+s.area:""}</p>
+              <p style={{ fontSize:12, color:T.muted, margin:0 }}>{s.impact}</p>
+            </div>
+            <Btn size="sm" variant="primary" onClick={()=>{ onAdd(s); setResults(p=>p.filter(x=>x!==s)); }}>Add</Btn>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Shared table ─────────────────────────────────────────────────────────────
+const TH = ({ children }) => (
+  <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:"'IBM Plex Mono',monospace",
+               fontWeight:500, fontSize:9, color:"var(--muted)", borderBottom:"1px solid var(--border)",
+               whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase",
+               background:"var(--surface2)" }}>
+    {children}
+  </th>
+);
+
+// ── Screening tab ─────────────────────────────────────────────────────────────
+function ScreeningTab({ project, onAddAspect, onAddOpp }) {
+  const [mode, setMode]               = useState("risks");
+  const [expanded, setExpanded]       = useState({});
+  const [view, setView]               = useState("guide");
+  const [riskForm, setRiskForm]       = useState(emptyAspect());
+  const [oppForm, setOppForm]         = useState(emptyOpp());
+  const [toast, setToast]             = useState("");
+  const [screenSearch, setScreenSearch] = useState("");
+  const [noxWarn, setNoxWarn]         = useState(false);
+  // Session-only skip state — tracks which items were consciously passed over
+  const [skipped, setSkipped]         = useState({});
+  const toggleSkip = id => setSkipped(p=>({...p,[id]:!p[id]}));
+  // Track which items have been added this session (by item id → aspect ref)
+  const addedItems = {};
+  (project.aspects||[]).forEach(a=>{ if(a._screeningId) addedItems[a._screeningId]=a.ref; });
+
+  const isRisks = mode === "risks";
+  const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
+  const setRF = (k, v) => setRiskForm(p => ({ ...p, [k]:v }));
+  const setOF = (k, v) => setOppForm(p => ({ ...p, [k]:v }));
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+
+  // prefillRisk now inlined in button onClick — kept for legacy compatibility
+  const prefillRisk = (code, item, sectionColor) => {
+    setRiskForm({ ...emptyAspect(), area:item.area||item.sub||"",
+                  aspect:item.aspect||"", _color:sectionColor||"" });
+    setView("form");
+  };
+
+  // Prefill for risk guide words (unchanged)
+  const riskScore = calcScore(riskForm);
+  const riskSig   = calcSig(riskForm);
+  const saveRisk  = () => {
+    if (!riskForm.aspect.trim()) return;
+    onAddAspect(riskForm); setRiskForm(emptyAspect()); setView("guide");
+    showToast("Aspect saved to register");
+  };
+
+  // New prefill for scope-based opp buttons
+  const prefillOppScope = (type, ghgIds, description, color, warn, btnId) => {
+    const newOpp = {
+      ...emptyOpp(),
+      type, description, _color:color||"",
+      ghgPhases: ghgIds&&ghgIds.length>0 ? [emptyGhgPhase("Phase 1", null)] : [],
+    };
+    newOpp.prefillGhgIds = ghgIds||[];
+    newOpp._screeningId = btnId||null;  // use the button id directly — no mismatch
+    setOppForm(newOpp);
+    setNoxWarn(!!warn);
+    setView("form");
+  };
+
+  const saveOpp = () => {
+    if (!oppForm.description.trim()) return;
+    onAddOpp(oppForm); setOppForm(emptyOpp()); setView("guide"); setNoxWarn(false);
+    showToast("Opportunity saved to register");
+  };
+
+  const oppScore = calcOppScore(oppForm);
+  const prioLabel = oppScore>=75?"High priority":oppScore>=30?"Medium priority":"Low priority";
+  const oppSc = oppScore>=75?{bg:T.tealBg,c:T.tealDark}:oppScore>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+
+  // Risk guide data now uses RISK_CATEGORIES constant — filteredRiskGuide removed
+
+  // Scope button style
+  const ScopeBtn = ({ label, sub, color, onClick }) => (
+    <button onClick={onClick}
+      style={{ textAlign:"left", padding:"9px 12px", borderRadius:6,
+               border:"1.5px solid "+(color.border||T.border), background:color.bg,
+               cursor:"pointer", fontFamily:T.sans, display:"flex", flexDirection:"column", gap:3,
+               transition:"filter 0.1s", width:"100%" }}
+      onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
+      onMouseLeave={e=>e.currentTarget.style.filter="none"}>
+      <span style={{ fontSize:12, fontWeight:700, color:color.head, lineHeight:1.3 }}>{label}</span>
+      {sub && <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{sub}</span>}
+    </button>
+  );
+
+  return (
+    <div style={{ height:"calc(100vh - 110px)", minHeight:500, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
+      {/* ── Top bar ── */}
+      <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
+                    display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+        <div style={{ display:"inline-flex", borderRadius:6, overflow:"hidden", border:"1px solid "+T.border }}>
+          <button onClick={() => { setMode("risks"); setView("guide"); setScreenSearch(""); }}
+            style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+                     fontWeight:isRisks?600:400, border:"none",
+                     background:isRisks?T.redBg:T.surface, color:isRisks?T.red:T.muted,
+                     borderRight:"1px solid "+T.border }}>
+            Risks
+          </button>
+          <button onClick={() => { setMode("opps"); setView("guide"); setScreenSearch(""); }}
+            style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+                     fontWeight:!isRisks?600:400, border:"none",
+                     background:!isRisks?T.purpleBg:T.surface, color:!isRisks?T.purple:T.muted }}>
+            Opportunities
+          </button>
+        </div>
+        {view === "guide" && (
+          <input value={screenSearch} onChange={e=>setScreenSearch(e.target.value)}
+            placeholder={isRisks?"Search guide words...":"Search opportunity categories..."}
+            style={{ width:200, padding:"5px 10px", fontSize:12, border:"1px solid "+T.border,
+                     borderRadius:6, background:T.surface, color:T.text, outline:"none" }}/>
+        )}
+        {toast && (
+          <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, background:T.tealBg,
+                         border:"1px solid "+T.tealBd, padding:"4px 10px", borderRadius:4 }}>
+            {toast}
+          </span>
+        )}
+        {view === "guide" && (
+          <button onClick={() => setView("form")}
+            style={{ marginLeft:"auto", padding:"6px 14px", fontSize:12, borderRadius:6, border:"none",
+                     background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer",
+                     fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap" }}>
+            + Blank form
+          </button>
+        )}
+        {view === "form" && (
+          <button onClick={() => { setView("guide"); setNoxWarn(false); }}
+            style={{ marginLeft:"auto", padding:"5px 12px", fontSize:12, borderRadius:6,
+                     border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer" }}>
+            ← Back to guide
+          </button>
+        )}
+      </div>
+
+      {/* ── Content ── */}
+      <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
+
+        {/* ══ RISKS GUIDE — checklist layout ═══════════════════════════════════ */}
+        {view === "guide" && isRisks && (() => {
+          const q = screenSearch.trim().toLowerCase();
+          const filtered = RISK_CATEGORIES.map(cat=>({
+            ...cat,
+            items: q ? cat.items.filter(it=>
+              it.sub.toLowerCase().includes(q)||
+              it.hint.toLowerCase().includes(q)||
+              it.aspect.toLowerCase().includes(q)
+            ) : cat.items
+          })).filter(cat=>cat.items.length>0);
+
+          const totalAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.length,0);
+          const addedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>addedItems[it.id]).length,0);
+          const skippedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>skipped[it.id]).length,0);
+          const pct = totalAll>0?Math.round((addedAll+skippedAll)/totalAll*100):0;
+
+          return (
+            <div>
+              {/* Overall progress */}
+              <div style={{ marginBottom:"1rem" }}>
+                <div style={{ height:4, background:T.border, borderRadius:2, overflow:"hidden", marginBottom:5 }}>
+                  <div style={{ height:4, width:pct+"%", background:T.teal, borderRadius:2, transition:"width 0.3s" }}/>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} risks addressed</span>
+                  {skippedAll>0&&<span style={{ fontSize:11, color:T.faint }}>{skippedAll} skipped</span>}
+                </div>
+              </div>
+
+              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No risks match your search.</div>}
+
+              {filtered.map(cat=>{
+                const col=COLOR_MAP[cat.color]||COLOR_MAP.gray;
+                const key="risk_cat_"+cat.cat;
+                const open=q?true:expanded[key]!==false;
+                const addedCt=cat.items.filter(it=>addedItems[it.id]).length;
+                const skippedCt=cat.items.filter(it=>skipped[it.id]).length;
+                const addressed=addedCt+skippedCt;
+                return(
+                  <div key={cat.cat} style={{ marginBottom:6 }}>
+                    {/* Category header */}
+                    <div onClick={()=>toggleCat(key)}
+                      style={{ display:"flex", alignItems:"center", gap:10,
+                               padding:"8px 14px", background:col.bg,
+                               border:"1px solid "+col.border,
+                               borderLeft:"3px solid "+col.head,
+                               borderRadius:6, cursor:"pointer", userSelect:"none",
+                               marginBottom:open?2:0 }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:col.head, flex:1 }}>{cat.cat}</span>
+                      <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10,
+                                     background:addressed===cat.items.length?T.greenBg:addressed>0?T.tealBg:T.slateBg,
+                                     color:addressed===cat.items.length?T.green:addressed>0?T.teal:T.faint,
+                                     border:"1px solid "+(addressed===cat.items.length?T.greenBd:addressed>0?T.tealBd:T.border) }}>
+                        {addressed}/{cat.items.length}
+                      </span>
+                      <span style={{ fontSize:11, color:T.faint }}>{open?"▾":"▸"}</span>
+                    </div>
+
+                    {/* Item list */}
+                    {open&&(
+                      <div style={{ borderLeft:"3px solid "+col.border, marginLeft:6, paddingLeft:4 }}>
+                        {cat.items.map((item,i)=>{
+                          const isAdded=!!addedItems[item.id];
+                          const isSkipped=!!skipped[item.id];
+                          return(
+                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                                                   padding:"6px 10px", borderRadius:5,
+                                                   background:isAdded||isSkipped?"transparent":undefined,
+                                                   opacity:isAdded?0.6:1,
+                                                   borderBottom:"1px solid "+T.rowBd }}>
+                              {/* Status dot */}
+                              <div style={{ width:12, height:12, borderRadius:"50%", flexShrink:0,
+                                             background:isAdded?T.green:isSkipped?T.border:T.surface,
+                                             border:"1.5px solid "+(isAdded?T.greenBd:isSkipped?T.muted:T.muted) }}/>
+                              {/* Text */}
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <span style={{ fontSize:12, fontWeight:500, color:T.text,
+                                               textDecoration:isSkipped?"line-through":undefined,
+                                               marginRight:8 }}>{item.sub}</span>
+                                <span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>
+                              </div>
+                              {/* Reference badge or actions */}
+                              {isAdded&&addedItems[item.id]&&(
+                                <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 6px",
+                                               borderRadius:3, background:T.tealBg, color:T.teal,
+                                               border:"1px solid "+T.tealBd, flexShrink:0 }}>
+                                  {addedItems[item.id]}
+                                </span>
+                              )}
+                              {!isAdded&&(
+                                <>
+                                  <button onClick={()=>toggleSkip(item.id)}
+                                    style={{ fontSize:11, padding:"2px 8px", borderRadius:12,
+                                             border:"1px solid "+T.border, background:"transparent",
+                                             color:isSkipped?T.muted:T.faint, cursor:"pointer",
+                                             flexShrink:0, fontFamily:T.sans }}>
+                                    {isSkipped?"undo":"skip"}
+                                  </button>
+                                  {!isSkipped&&<button
+                                    onClick={()=>{
+                                      setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub,
+                                                   _color:cat.color, _screeningId:item.id});
+                                      setView("form");
+                                    }}
+                                    style={{ fontSize:11, padding:"3px 10px", borderRadius:12,
+                                             border:"1px solid "+col.head, background:col.bg,
+                                             color:col.head, cursor:"pointer", flexShrink:0,
+                                             fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap" }}>
+                                    + Add
+                                  </button>}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+                {/* ══ OPPORTUNITIES GUIDE — Scope-based with search ══════════════════════ */}
+        {view === "guide" && !isRisks && (() => {
+          const q = screenSearch.trim().toLowerCase();
+          const matchBtn = b => !q ||
+            (b.label||"").toLowerCase().includes(q) ||
+            (b.sub||"").toLowerCase().includes(q) ||
+            (b.desc||"").toLowerCase().includes(q);
+
+          const ALL_OPP_BTNS = [
+            ...OPP_SCOPE1_BUTTONS.map(b=>({...b,scopeKey:"opp_scope1",scopeColor:"red"})),
+            ...OPP_SCOPE2_BUTTONS.map(b=>({...b,scopeKey:"opp_scope2",scopeColor:"blue"})),
+            ...OPP_SCOPE3_BUTTONS.map(b=>({...b,scopeKey:"opp_scope3",scopeColor:"teal"})),
+          ];
+          const totalOpp=ALL_OPP_BTNS.length;
+          const addedOpp=ALL_OPP_BTNS.filter(b=>(project.opportunities||project.opps||[]).some(o=>o._screeningId===b.id)).length;
+          const skippedOpp=ALL_OPP_BTNS.filter(b=>skipped["opp_"+b.id]).length;
+          const pctOpp=totalOpp>0?Math.round((addedOpp+skippedOpp)/totalOpp*100):0;
+
+          const renderScopeChecklist = (skey, col, title, scopeSub, btns, mkOnClick) => {
+            const filtered2=btns.filter(matchBtn);
+            if(q&&filtered2.length===0) return null;
+            const open=(q&&filtered2.length>0)?true:expanded[skey]!==false;
+            const addedCt=filtered2.filter(b=>(project.opportunities||project.opps||[]).some(o=>o._screeningId===b.id)).length;
+            const skippedCt=filtered2.filter(b=>skipped["opp_"+b.id]).length;
+            const addr=addedCt+skippedCt;
+            return(
+              <div key={skey} style={{marginBottom:6}}>
+                <div onClick={()=>toggleCat(skey)}
+                  style={{display:"flex",alignItems:"center",gap:10,
+                    padding:"8px 14px",background:col.bg,
+                    border:"1px solid "+col.border,
+                    borderLeft:"3px solid "+col.head,
+                    borderRadius:6,cursor:"pointer",userSelect:"none",
+                    marginBottom:open?2:0}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:13,fontWeight:600,color:col.head}}>{title}</span>
+                    <span style={{fontSize:11,color:T.faint,marginLeft:10}}>{scopeSub}</span>
+                  </div>
+                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,flexShrink:0,
+                    background:addr===filtered2.length&&filtered2.length>0?T.greenBg:addr>0?T.tealBg:T.slateBg,
+                    color:addr===filtered2.length&&filtered2.length>0?T.green:addr>0?T.teal:T.faint,
+                    border:"1px solid "+(addr===filtered2.length&&filtered2.length>0?T.greenBd:addr>0?T.tealBd:T.border)}}>
+                    {addr}/{filtered2.length}
+                  </span>
+                  <span style={{fontSize:11,color:T.faint}}>{open?"▾":"▸"}</span>
+                </div>
+                {open&&(
+                  <div style={{borderLeft:"3px solid "+col.border,marginLeft:6,paddingLeft:4}}>
+                    {filtered2.map((btn,i)=>{
+                      const isAdded=(project.opportunities||project.opps||[]).some(o=>o._screeningId===btn.id);
+                      const isSkipped=!!skipped["opp_"+btn.id];
+                      const addedOpp2=(project.opportunities||project.opps||[]).find(o=>o._screeningId===btn.id);
+                      return(
+                        <div key={btn.id} style={{display:"flex",alignItems:"center",gap:8,
+                          padding:"6px 10px",borderRadius:5,
+                          opacity:isAdded?0.6:1,
+                          borderBottom:"1px solid "+T.rowBd}}>
+                          <div style={{width:12,height:12,borderRadius:"50%",flexShrink:0,
+                            background:isAdded?T.green:isSkipped?T.border:T.surface,
+                            border:"1.5px solid "+(isAdded?T.greenBd:isSkipped?T.muted:T.muted)}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <span style={{fontSize:12,fontWeight:500,color:T.text,
+                              textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
+                              {btn.label.replace("\n"," ")}
+                            </span>
+                            <span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>
+                          </div>
+                          {isAdded&&addedOpp2&&(
+                            <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
+                              borderRadius:3,background:T.purpleBg,color:T.purple,
+                              border:"1px solid "+T.purpleBd,flexShrink:0}}>
+                              {addedOpp2.ref}
+                            </span>
+                          )}
+                          {!isAdded&&(
+                            <>
+                              <button onClick={()=>setSkipped(p=>({...p,["opp_"+btn.id]:!p["opp_"+btn.id]}))}
+                                style={{fontSize:11,padding:"2px 8px",borderRadius:12,
+                                  border:"1px solid "+T.border,background:"transparent",
+                                  color:isSkipped?T.muted:T.faint,cursor:"pointer",
+                                  flexShrink:0,fontFamily:T.sans}}>
+                                {isSkipped?"undo":"skip"}
+                              </button>
+                              {!isSkipped&&<button onClick={mkOnClick(btn)}
+                                style={{fontSize:11,padding:"3px 10px",borderRadius:12,
+                                  border:"1px solid "+col.head,background:col.bg,
+                                  color:col.head,cursor:"pointer",flexShrink:0,
+                                  fontFamily:T.sans,fontWeight:500,whiteSpace:"nowrap"}}>
+                                + Add
+                              </button>}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          };
+
+          if(q&&!OPP_SCOPE1_BUTTONS.some(matchBtn)&&!OPP_SCOPE2_BUTTONS.some(matchBtn)&&!OPP_SCOPE3_BUTTONS.some(matchBtn))
+            return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.faint,fontSize:12}}>No opportunities match your search.</div>;
+
+          return(
+            <div>
+              {/* Overall progress */}
+              <div style={{marginBottom:"1rem"}}>
+                <div style={{height:4,background:T.border,borderRadius:2,overflow:"hidden",marginBottom:5}}>
+                  <div style={{height:4,width:pctOpp+"%",background:T.purple,borderRadius:2,transition:"width 0.3s"}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,color:T.faint}}>{addedOpp+skippedOpp} of {totalOpp} opportunities addressed</span>
+                  {skippedOpp>0&&<span style={{fontSize:11,color:T.faint}}>{skippedOpp} skipped</span>}
+                </div>
+              </div>
+              {renderScopeChecklist("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",OPP_SCOPE1_BUTTONS,
+                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn,btn.id))}
+              {renderScopeChecklist("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",OPP_SCOPE2_BUTTONS,
+                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false,btn.id))}
+              {renderScopeChecklist("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",OPP_SCOPE3_BUTTONS,
+                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false,btn.id))}
+            </div>
+          );
+        })()}
+
+        {/* ══ RISK FORM ════════════════════════════════════════════════════════════ */}
+        {view === "form" && isRisks && (
+          <div>
+            <h3 style={{ margin:"0 0 1rem", fontSize:14, fontWeight:600, color:T.red }}>
+              Risk screening
+            </h3>
+            <Card style={{ marginBottom:"1rem" }} accent={T.red}>
+              <SectionLabel>Activity details</SectionLabel>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
+                {/* Phase — toggle pill buttons, left column */}
+                <Fld label="Phase">
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                    {PHASES.map(p => {
+                      const sel = (riskForm.phase||"").split(",").filter(Boolean);
+                      const active = sel.includes(p);
+                      return (
+                        <button key={p} type="button"
+                          onClick={() => {
+                            const cur = (riskForm.phase||"").split(",").filter(Boolean);
+                            const next = active ? cur.filter(x=>x!==p) : [...cur, p];
+                            setRF("phase", next.join(","));
+                          }}
+                          style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+                            cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
+                            background: active ? T.tealBg : "transparent",
+                            color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
+                            fontFamily:"var(--sans,system-ui)" }}>
+                          {p}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Fld>
+                <Fld label="Activity area"><input value={riskForm.area} onChange={e=>setRF("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
+                <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
+                <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
+                {/* Abnormal condition — plain, no colour coding */}
+                <Fld label="Abnormal condition" wide>
+                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!riskForm.isAbnormal}
+                      onChange={e => { setRF("isAbnormal", e.target.checked); if (!e.target.checked) { setRF("abnormalType",""); setRF("abnormalDesc",""); } }}
+                      style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
+                    <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
+                  </label>
+                  {riskForm.isAbnormal && (
+                    <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:5 }}>
+                      <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)} style={iw}>
+                        <option value="">— select type —</option>
+                        {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                      <textarea value={riskForm.abnormalDesc||""} onChange={e=>setRF("abnormalDesc",e.target.value)}
+                        rows={2} placeholder="Describe the abnormal condition…" style={{ ...iw, resize:"vertical" }}/>
+                    </div>
+                  )}
+                </Fld>
+              </div>
+            </Card>
+            <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
+              <SectionLabel>Significance scoring</SectionLabel>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:10 }}>
+                <Fld label="Receptor sensitivity"><select value={riskForm.recSensitivity} onChange={e=>setRF("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+                <Fld label="Scale"><select value={riskForm.scale} onChange={e=>setRF("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+                <Fld label="Duration"><select value={riskForm.duration} onChange={e=>setRF("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
+                <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={riskForm.severity} onChange={e=>setRF("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+                <Fld label="Probability (1-5)"><input type="number" min={1} max={5} value={riskForm.probability} onChange={e=>setRF("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+                <Fld label="Legal threshold"><select value={riskForm.legalThreshold} onChange={e=>setRF("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+                <Fld label="Stakeholder concern"><select value={riskForm.stakeholderConcern} onChange={e=>setRF("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+              </div>
+              {riskScore !== null && (
+                <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
+                              display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
+                    Risk score:{" "}
+                    <strong style={{ fontSize:22,
+                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="WATCH" ? T.amber : T.green }}>
+                      {riskScore}
+                    </strong>
+
+                  </span>
+                  <span style={sigStyle(riskSig)}>{riskSig}</span>
+                  {riskForm.legalThreshold==="Y"&&<span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
+                  {riskForm.stakeholderConcern==="Y"&&<span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
+                </div>
+              )}
+            </Card>
+            <Card style={{ marginBottom:"1rem" }}>
+              <SectionLabel>Controls &amp; management</SectionLabel>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
+                <Fld label="Key control measure" wide><textarea value={riskForm.control} onChange={e=>setRF("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
+                <Fld label="Legal / regulatory reference" wide><input value={riskForm.legalRef} onChange={e=>setRF("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7" style={iw}/></Fld>
+                <Fld label="Owner"><input value={riskForm.owner} onChange={e=>setRF("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
+                <Fld label="Status"><select value={riskForm.status} onChange={e=>setRF("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+              </div>
+            </Card>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+              <Btn onClick={() => setRiskForm(emptyAspect())}>Clear</Btn>
+              <button onClick={saveRisk} disabled={!riskForm.aspect.trim()}
+                style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.red, color:"#fff",
+                         cursor:riskForm.aspect.trim()?"pointer":"not-allowed", fontSize:12,
+                         fontFamily:T.sans, fontWeight:500, opacity:riskForm.aspect.trim()?1:0.45 }}>
+                Save to risks register
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══ OPPORTUNITY FORM ═════════════════════════════════════════════════════ */}
+        {view === "form" && !isRisks && (
+          <div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
+              <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple }}>Opportunity screening</h3>
+  
+            </div>
+            <OppFormBody f={oppForm} setF={setOppForm} onSave={saveOpp}
+              onCancel={()=>{setView("guide");setNoxWarn(false);}}
+              saveLabel="Save to opportunities register"/>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+// ── Project view ──────────────────────────────────────────────────────────────
+function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
+  const [tab, setTab]                     = useState(initialTab||"dashboard");
+  const [editAspect, setEditAspect]       = useState(null);
+  const [editOpp, setEditOpp]             = useState(null);
+  const [aiOpen, setAiOpen]               = useState(false);
+  const [dashFilter, setDashFilter]       = useState("all");
+  const [aspFilter, setAspFilter]         = useState("All");
+  const [aspSort,   setAspSort]           = useState({ col:null, dir:"asc" });
+  const [aspSearch, setAspSearch]         = useState("");
+  const [oppSort,   setOppSort]           = useState({ col:null, dir:"asc" });
+  const [oppSearch, setOppSearch]         = useState("");
+  const [selectedAsp, setSelectedAsp]     = useState(new Set());
+  const [selectedOpp, setSelectedOpp]     = useState(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [clFrom, setClFrom] = useState(() => {
+    const d=new Date(); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0);
+    return d.toISOString().slice(0,10);
+  });
+  const [clTo, setClTo] = useState(() => {
+    const d=new Date(); d.setDate(d.getDate()+(6-d.getDay())); d.setHours(23,59,59,999);
+    return d.toISOString().slice(0,10);
+  });
+
+  const aspects = project.aspects || [];
+  const opps    = project.opportunities || project.opps || [];
+  const changelog = project.changelog || [];
+  const nextRef = (arr, pfx) => pfx+"-"+String(arr.length+1).padStart(3,"0");
+
+  const logChange = (action, detail, fields) => {
+    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail, fields:fields||[] };
+    return [...(project.changelog||[]), entry];
+  };
+
+  const saveAspect = a => {
+    const isEdit = !!a.id;
+    const now = new Date().toISOString();
+    const withTs = isEdit ? {...a, updatedAt:now}
+                          : {...a, createdAt:now, updatedAt:now};
+    const updated = isEdit ? aspects.map(x=>x.id===a.id?withTs:x)
+                           : [...aspects,{...withTs,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
+    const ref = isEdit ? a.ref : nextRef(aspects,"ASP");
+    const aspFields = isEdit ? (() => {
+      const prev = aspects.find(x=>x.id===a.id)||{};
+      const f = [];
+      const d = (k,pv,nv,fmt) => { if(pv!==nv) f.push({k,from:(fmt?fmt(pv):pv)||"—",to:(fmt?fmt(nv):nv)||"—"}); };
+      d("Aspect",    prev.aspect,    withTs.aspect,    v=>v&&v.slice(0,60));
+      d("Phase",     prev.phase,     withTs.phase);
+      d("Area",      prev.area,      withTs.area,      v=>v&&v.slice(0,40));
+      d("Activity",  prev.activity,  withTs.activity,  v=>v&&v.slice(0,40));
+      d("Impact",    prev.impact,    withTs.impact,    v=>v&&v.slice(0,60));
+      d("Condition", prev.condition, withTs.condition);
+      if(prev.severity!==withTs.severity||prev.probability!==withTs.probability)
+        f.push({k:"Risk score",from:`C${prev.severity||"?"}×P${prev.probability||"?"}`,to:`C${withTs.severity}×P${withTs.probability}`});
+      d("Status",          prev.status,         withTs.status);
+      d("Legal threshold", prev.legalThreshold, withTs.legalThreshold);
+      d("Control",  prev.control,  withTs.control,  v=>v&&v.slice(0,50));
+      d("Owner",    prev.owner,    withTs.owner);
+      return f;
+    })() : [
+      {k:"Aspect",    v:(withTs.aspect||"").slice(0,80)},
+      {k:"Phase",     v:withTs.phase},
+      {k:"Area",      v:withTs.area},
+      {k:"Condition", v:withTs.condition},
+      {k:"Risk score", v:`C${withTs.severity}×P${withTs.probability}`},
+    ];
+    onChange({ ...project, aspects:updated,
+               changelog:logChange(isEdit?"Edited aspect":"Added aspect",
+                 `${ref} — ${(withTs.aspect||"").slice(0,60)}`, aspFields) });
+    setEditAspect(null);
+  };
+  const saveOpp = o => {
+    const isEdit = !!o.id;
+    const now = new Date().toISOString();
+    const withTs = isEdit ? {...o, updatedAt:now}
+                          : {...o, createdAt:now, updatedAt:now};
+    const updated = isEdit ? opps.map(x=>x.id===o.id?withTs:x)
+                           : [...opps,{...withTs,id:Date.now().toString(),ref:nextRef(opps,"OPP")}];
+    const ref = isEdit ? o.ref : nextRef(opps,"OPP");
+    const oppFields = isEdit ? (() => {
+      const prev = opps.find(x=>x.id===o.id)||{};
+      const f = [];
+      const d = (k,pv,nv,fmt) => { if(pv!==nv) f.push({k,from:(fmt?fmt(pv):pv)||"—",to:(fmt?fmt(nv):nv)||"—"}); };
+      d("Type",        prev.type,        withTs.type,        v=>v&&v.slice(0,50));
+      d("Description", prev.description, withTs.description, v=>v&&v.slice(0,60));
+      d("Materiality", prev.materiality, withTs.materiality);
+      if(prev.envValue!==withTs.envValue||prev.bizValue!==withTs.bizValue||prev.feasibility!==withTs.feasibility)
+        f.push({k:"Score",from:`${calcOppScore(prev)}`,to:`${calcOppScore(withTs)}`});
+      d("Status", prev.status, withTs.status);
+      d("Owner",  prev.owner,  withTs.owner);
+      const pGhg=(prev.ghgPhases||[]).length, nGhg=(withTs.ghgPhases||[]).length;
+      if(pGhg!==nGhg) f.push({k:"GHG phases",from:String(pGhg),to:String(nGhg)});
+      const pQual=(prev.qualPhases||[]).length, nQual=(withTs.qualPhases||[]).length;
+      if(pQual!==nQual) f.push({k:"Qual phases",from:String(pQual),to:String(nQual)});
+      // GHG saving change
+      const pSav=calcGhgTotal(prev), nSav=calcGhgTotal(withTs);
+      if(pSav!==nSav) f.push({k:"GHG saving",
+        from:pSav?(pSav>=1000?(pSav/1000).toFixed(1)+"t":pSav.toFixed(0)+"kg")+" CO₂e":"—",
+        to:  nSav?(nSav>=1000?(nSav/1000).toFixed(1)+"t":nSav.toFixed(0)+"kg")+" CO₂e":"—"});
+      return f;
+    })() : [
+      {k:"Type",        v:(withTs.type||"").slice(0,60)},
+      {k:"Description", v:(withTs.description||"").slice(0,80)},
+      {k:"Score",       v:`Env${withTs.envValue}×Biz${withTs.bizValue}×Feas${withTs.feasibility}=${calcOppScore(withTs)}`},
+    ];
+    onChange({ ...project, opportunities:updated,
+               changelog:logChange(isEdit?"Edited opportunity":"Added opportunity",
+                 `${ref} — ${(withTs.type||withTs.description||"").slice(0,60)}`, oppFields) });
+    setEditOpp(null);
+  };
+  const deleteAspect = (a) => {
+    if (!window.confirm(`Delete aspect ${a.ref||""}${a.aspect ? " — \""+a.aspect.slice(0,50)+"\"" : ""}?
+
+This cannot be undone.`)) return;
+    onChange({ ...project, aspects:aspects.filter(x=>x.id!==a.id),
+               changelog:logChange("Deleted aspect", `${a.ref} — ${(a.aspect||"").slice(0,60)}`,[{k:"Phase",v:a.phase},{k:"Area",v:a.area},{k:"Significance",v:calcSig(a)||"—"}]) });
+  };
+  const deleteOpp = (o) => {
+    if (!window.confirm(`Delete opportunity ${o.ref||""}${(o.type||o.description) ? " — \""+((o.type||o.description)||"").slice(0,50)+"\"" : ""}?
+
+This cannot be undone.`)) return;
+    onChange({ ...project, opportunities:opps.filter(x=>x.id!==o.id),
+               changelog:logChange("Deleted opportunity", `${o.ref} — ${(o.type||o.description||"").slice(0,60)}`,[{k:"Score",v:String(calcOppScore(o))}]) });
+  };
+
+  const bulkDeleteAspects = () => {
+    if (!window.confirm(`Delete ${selectedAsp.size} selected aspect${selectedAsp.size!==1?"s":""}?
+
+This cannot be undone.`)) return;
+    const kept = aspects.filter(a=>!selectedAsp.has(a.id));
+    const log  = logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed",[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
+    onChange({ ...project, aspects:kept, changelog:[...(project.changelog||[]), log] });
+    setSelectedAsp(new Set());
+  };
+  const bulkSetAspStatus = (status) => {
+    const updated = aspects.map(a => selectedAsp.has(a.id) ? { ...a, status } : a);
+    const log  = logChange("Bulk updated status", `${selectedAsp.size} aspect(s) → ${status}`,[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
+    onChange({ ...project, aspects:updated, changelog:[...(project.changelog||[]), log] });
+    setSelectedAsp(new Set());
+  };
+  const bulkDeleteOpps = () => {
+    if (!window.confirm(`Delete ${selectedOpp.size} selected opportunit${selectedOpp.size!==1?"ies":"y"}?
+
+This cannot be undone.`)) return;
+    const kept = opps.filter(o=>!selectedOpp.has(o.id));
+    const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed",[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
+    onChange({ ...project, opps:kept, changelog:[...(project.changelog||[]), log] });
+    setSelectedOpp(new Set());
+  };
+  const bulkSetOppStatus = (status) => {
+    const updated = opps.map(o => selectedOpp.has(o.id) ? { ...o, status } : o);
+    const log  = logChange("Bulk updated opp status", `${selectedOpp.size} opportunity(s) → ${status}`,[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
+    onChange({ ...project, opps:updated, changelog:[...(project.changelog||[]), log] });
+    setSelectedOpp(new Set());
+  };
+  const toggleSelAsp = (id) => setSelectedAsp(prev => { const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const toggleSelOpp = (id) => setSelectedOpp(prev => { const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const toggleAllAsp = (rows) => setSelectedAsp(prev => prev.size===rows.length ? new Set() : new Set(rows.map(a=>a.id)));
+  const toggleAllOpp = (rows) => setSelectedOpp(prev => prev.size===rows.length ? new Set() : new Set(rows.map(o=>o.id)));
+
+  const sigCount   = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+  const watchCount = aspects.filter(a=>calcSig(a)==="WATCH").length;
+  const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
+  const highOpps   = opps.filter(o=>calcOppScore(o)>=75).length;
+  const totalGhgSaving = opps.reduce((s,o)=>{ const g=calcGhgTotal(o); return s+(g||0); }, 0);
+  const fmtGhg = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t CO₂e":kg>0?kg.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg CO₂e":"—";
+  const statusCounts = STATUSES.reduce((acc,s) => {
+    acc[s] = aspects.filter(a=>a.status===s).length; return acc;
+  }, {});
+  const statusColors = { "Open":T.redBd, "In Progress":T.amberBd, "Closed":T.greenBd };
+  const statusBg    = { "Open":T.redBg, "In Progress":T.amberBg, "Closed":T.greenBg };
+
+  // Dashboard filter drives which aspects show
+  const dashAspects = dashFilter==="all"     ? aspects
+                    : dashFilter==="sig"     ? aspects.filter(a=>calcSig(a)==="SIGNIFICANT")
+                    : dashFilter==="watch"   ? aspects.filter(a=>calcSig(a)==="WATCH")
+                    : dashFilter==="low"     ? aspects.filter(a=>calcSig(a)==="Low")
+                    : dashFilter==="opps"    ? aspects
+                    : aspects;
+
+  const filteredAspects = (() => {
+    let r = aspFilter==="All" ? aspects : aspects.filter(a=>calcSig(a)===aspFilter);
+    if (aspSearch) { const q=aspSearch.toLowerCase(); r=r.filter(a=>(a.aspect||"").toLowerCase().includes(q)||(a.area||"").toLowerCase().includes(q)||(a.phase||"").toLowerCase().includes(q)); }
+    if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
+      if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
+      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
+      else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
+      return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
+    return r;
+  })();
+  const sortedDashAspects = (() => {
+    if (!aspSort.col) return dashAspects;
+    return [...dashAspects].sort((a,b)=>{ let va,vb;
+      if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
+      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
+      else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
+      return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
+  })();
+
+  const filteredOpps = (() => {
+    let r = opps;
+    if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
+    if (oppSort.col) r=[...r].sort((a,b)=>{ let va,vb;
+      if(oppSort.col==="score"){va=calcOppScore(a);vb=calcOppScore(b);}
+      else if(oppSort.col==="priority"){const pRank=s=>{const sc=calcOppScore(s);return sc>=75?2:sc>=30?1:0;};va=pRank(a);vb=pRank(b);}
+      else if(oppSort.col==="ghgSaving"){va=calcGhgTotal(a)||0;vb=calcGhgTotal(b)||0;}
+      else{va=(a[oppSort.col]||"").toLowerCase();vb=(b[oppSort.col]||"").toLowerCase();}
+      return oppSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
+    return r;
+  })();
+
+  if (editAspect !== null) return (
+    <div style={{ background:T.bg, minHeight:"100%" }}>
+      <AspectForm aspect={editAspect} onSave={saveAspect} onCancel={()=>setEditAspect(null)}/>
+    </div>
+  );
+  if (editOpp !== null) return (
+    <div style={{ background:T.bg, minHeight:"100%" }}>
+      <OppForm opp={editOpp} onSave={saveOpp} onCancel={()=>setEditOpp(null)}/>
+    </div>
+  );
+
+  const StatCard = ({ label, value, bg, color, border, filterId }) => {
+    const active = dashFilter === filterId;
+    return (
+      <div onClick={() => { setDashFilter(dashFilter===filterId?"all":filterId); if(filterId!=="opps") setTab("dashboard"); }}
+        style={{ background:bg||T.surface, borderRadius:7, padding:"12px 14px",
+                 border: active ? "2px solid "+color : "1px solid "+(border||T.border),
+                 cursor:"pointer", transition:"all 0.15s",
+                 boxShadow: active ? "0 0 0 1px "+(color||T.teal) : "none" }}>
+        <p style={{ fontFamily:T.mono, fontSize:9, color:color||T.muted, margin:"0 0 6px",
+                    letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
+        <p style={{ fontFamily:T.mono, fontSize:22, fontWeight:500, margin:0,
+                    color:color||T.text, lineHeight:1 }}>{value}</p>
+      </div>
+    );
+  };
+
+  // Colour helper for rows
+  const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
+  const getCategoryLabel = (a) => {
+    if (a._screeningId) {
+      const found = RISK_CATEGORIES.find(c => c.items.some(i => i.id === a._screeningId));
+      if (found) return found.cat;
+    }
+    if (a._color) {
+      const found = RISK_CATEGORIES.find(c => c.color === a._color);
+      if (found) return found.cat;
+    }
+    return null;
+  };
+  const CAT_SHORT = {
+    "1. Emission to Air":                            "Emission to Air",
+    "2. Discharge to Water & Marine Environment":    "Water & Marine",
+    "3. Waste, Materials & Chemicals":               "Waste & Chemicals",
+    "4. Land, Soil & Contamination":                 "Land & Soil",
+    "5. Ecology & Biodiversity":                     "Ecology",
+    "6. Community, Heritage and Landscape":          "Community",
+    "7. Abnormal Condition and Emergency Response":  "Abnormal / Emergency",
+  };
+  // Date display helper
+  const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—";
+
+  // Shared aspect table renderer
+  const BulkBar = ({ count, onDelete, onStatusChange, statusOptions, accentColor, accentBg, accentBd }) => (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px",
+                  background:accentBg, border:"1px solid "+accentBd,
+                  borderRadius:"8px 8px 0 0", borderBottom:"none" }}>
+      <span style={{ fontSize:12, fontWeight:500, color:accentColor }}>{count} selected</span>
+      <select onChange={e=>{ if(e.target.value){ onStatusChange(e.target.value); e.target.value=""; }}}
+        style={{ fontSize:11, padding:"3px 8px", borderRadius:4, border:"1px solid "+accentBd,
+                 background:"transparent", color:accentColor, cursor:"pointer" }}
+        defaultValue="">
+        <option value="" disabled>Set status...</option>
+        {statusOptions.map(s=><option key={s} value={s}>{s}</option>)}
+      </select>
+      <button onClick={onDelete}
+        style={{ fontSize:11, padding:"4px 10px", borderRadius:4, border:"1px solid "+T.redBd,
+                 background:T.redBg, color:T.red, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+        Delete selected
+      </button>
+      <button onClick={()=> onStatusChange(null)}
+        style={{ fontSize:11, padding:"4px 8px", borderRadius:4, border:"none",
+                 background:"transparent", color:accentColor, cursor:"pointer", marginLeft:"auto" }}>
+        Clear ✕
+      </button>
+    </div>
+  );
+
+  const STH = ({ col, label }) => {
+    const active = aspSort.col === col;
+    return (
+      <th onClick={()=>setAspSort(p=>({col, dir:p.col===col&&p.dir==="asc"?"desc":"asc"}))}
+        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+                 color:active?T.teal:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
+                 letterSpacing:"0.07em", textTransform:"uppercase", cursor:"pointer", userSelect:"none",
+                 background:active?T.tealBg:undefined }}>
+        <span style={{ display:"flex", alignItems:"center", gap:3 }}>
+          {label}
+          <span style={{ fontSize:10, opacity:active?1:0.35 }}>{active?(aspSort.dir==="asc"?"↑":"↓"):"↕"}</span>
+        </span>
+      </th>
+    );
+  };
+  const PlainTH = ({ children }) => (
+    <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+                 color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
+                 letterSpacing:"0.07em", textTransform:"uppercase" }}>{children}</th>
+  );
+  const AspectTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll }) => (
+    <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
+        <thead><tr>
+          <th style={{ padding:"8px 8px 8px 12px", borderBottom:"1px solid "+T.border, width:32 }}>
+            <input type="checkbox"
+              checked={rows.length>0 && rows.every(a=>selection&&selection.has(a.id))}
+              onChange={()=>onToggleAll&&onToggleAll(rows)}
+              style={{ cursor:"pointer", width:13, height:13 }}/>
+          </th>
+          <PlainTH>Ref</PlainTH>
+          <STH col="phase" label="Phase"/>
+          <STH col="category" label="Category"/>
+          <STH col="aspect" label="Risk"/>
+          <PlainTH>Abnormal</PlainTH>
+          <STH col="score" label="Risk score"/>
+          <STH col="sig" label="Significance"/>
+          <STH col="status" label="Status"/>
+          <STH col="createdAt" label="Created"/>
+          <STH col="updatedAt" label="Modified"/>
+          <PlainTH></PlainTH>
+        </tr></thead>
+        <tbody>
+          {rows.map((a) => {
+            const score  = calcScore(a);
+            const sig    = calcSig(a);
+            const rc     = rowColor(a);
+            const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
+            return (
+              <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd,
+                                 background: selection&&selection.has(a.id) ? T.tealBg : undefined }}>
+                <td style={{ padding:"9px 8px 9px 12px" }}>
+                  <input type="checkbox" checked={!!(selection&&selection.has(a.id))}
+                    onChange={()=>onToggle&&onToggle(a.id)}
+                    style={{ cursor:"pointer", width:13, height:13 }}/>
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
+                </td>
+                <td style={{ padding:"9px 12px", minWidth:60 }}>
+                  {(() => {
+                    const ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
+                    const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
+                    if (!phases.length) return <span style={{ color:T.faint }}>—</span>;
+                    return (
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, auto)", gap:2, width:"fit-content" }}>
+                        {phases.map(p => (
+                          <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px",
+                            borderRadius:3, background:T.slateBg, color:T.slate, textAlign:"center" }}>
+                            {ABBR[p]||p.slice(0,3)}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </td>
+                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:150 }}>
+                  {(() => {
+                    const cat = getCategoryLabel(a);
+                    const rc2 = rowColor(a);
+                    if (!cat) return <span style={{ color:T.faint }}>—</span>;
+                    const shortCat = CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */, "");
+                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                      background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
+                      border: "1px solid " + (rc2 ? rc2.border : T.border),
+                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word"
+                    }}>{shortCat}</span>;
+                  })()}
+                </td>
+                <td style={{ padding:"9px 12px", minWidth:140, maxWidth:220 }}>
+                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint,
+                    marginBottom:2 }}>{a.area}</div>}
+                  <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
+                    whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}
+                    title={a.aspect}>{a.aspect||"—"}</div>
+                </td>
+                <td style={{ padding:"9px 12px" }}>
+                  {a.isAbnormal && (
+                    <div>
+                      <span style={{ fontFamily:"var(--mono,monospace)", fontSize:9, padding:"2px 6px", borderRadius:3,
+                        background:"var(--amber-bg)", color:"var(--amber)", border:"1px solid var(--amber-bd)",
+                        display:"inline-block", marginBottom:2 }}>Abnormal</span>
+                      {a.abnormalType && <div style={{ fontFamily:"var(--mono,monospace)", fontSize:9, color:"var(--muted)", marginTop:2 }}>{a.abnormalType}</div>}
+                      {a.abnormalDesc && <div style={{ fontSize:9, color:"var(--faint)", marginTop:1, maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.abnormalDesc}>{a.abnormalDesc}</div>}
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding:"9px 12px", textAlign:"center" }}>
+                  {score !== null
+                    ? <span style={{ fontFamily:T.mono, fontWeight:700, fontSize:13,
+                        color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>{score}</span>
+                    : <span style={{ color:T.faint }}>—</span>}
+                </td>
+                <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(a.createdAt)}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(a.updatedAt||a.createdAt)}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>x</Btn>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // Shared opp table renderer
+  const OSTH = ({ col, label }) => {
+    const active = oppSort.col === col;
+    return (
+      <th onClick={()=>setOppSort(p=>({col, dir:p.col===col&&p.dir==="asc"?"desc":"asc"}))}
+        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+                 color:active?T.purple:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
+                 letterSpacing:"0.07em", textTransform:"uppercase", cursor:"pointer", userSelect:"none",
+                 background:active?T.purpleBg:undefined }}>
+        <span style={{ display:"flex", alignItems:"center", gap:3 }}>
+          {label}
+          <span style={{ fontSize:10, opacity:active?1:0.35 }}>{active?(oppSort.dir==="asc"?"↑":"↓"):"↕"}</span>
+        </span>
+      </th>
+    );
+  };
+  const OppTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll }) => (
+    <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
+        <thead><tr>
+          <th style={{ padding:"8px 8px 8px 12px", borderBottom:"1px solid "+T.border, width:32 }}>
+            <input type="checkbox"
+              checked={rows.length>0 && rows.every(o=>selection&&selection.has(o.id))}
+              onChange={()=>onToggleAll&&onToggleAll(rows)}
+              style={{ cursor:"pointer", width:13, height:13 }}/>
+          </th>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
+          <OSTH col="type" label="Type"/>
+          <OSTH col="description" label="Description"/>
+          <OSTH col="score" label="Score"/>
+          <OSTH col="priority" label="Priority"/>
+          <OSTH col="ghgSaving" label="GHG saving"/>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
+          <OSTH col="createdAt" label="Created"/>
+          <OSTH col="updatedAt" label="Modified"/>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}></th>
+        </tr></thead>
+        <tbody>
+          {rows.map((o) => {
+            const score  = calcOppScore(o);
+            const sc     = score>=75?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}:score>=30?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
+            const matC   = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
+            const rc     = rowColor(o);
+            const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
+            return (
+              <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd,
+                                 background: selection&&selection.has(o.id) ? T.purpleBg : undefined }}>
+                <td style={{ padding:"9px 8px 9px 12px" }}>
+                  <input type="checkbox" checked={!!(selection&&selection.has(o.id))}
+                    onChange={()=>onToggle&&onToggle(o.id)}
+                    style={{ cursor:"pointer", width:13, height:13 }}/>
+                </td>
+                <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
+                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:120 }}>
+                  {(() => {
+                    if (!o.type) return <span style={{ color:T.faint }}>—</span>;
+                    const OPP_SHORT = {"Resource Efficiency":"Resource Efficiency","Circular Economy":"Circular Economy","Low-Carbon Technology":"Low-Carbon Tech","Nature-Based Solutions":"Nature-Based","Green Finance & Taxonomy":"Green Finance","New Business / Market":"New Business","Reputational / SLO":"Reputational","Climate Resilience":"Climate Resilience","Regulatory Incentive":"Regulatory","Biodiversity Net Gain":"Biodiversity"};
+                    const display = OPP_SHORT[o.type] || o.type;
+                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                      background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
+                      border:"1px solid "+(rc?rc.border:T.purpleBd),
+                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
+                      {display}
+                    </span>;
+                  })()}
+                </td>
+                <td style={{ padding:"9px 12px", minWidth:140, maxWidth:260 }}>
+                  <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
+                    whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}>{o.description||"—"}</div>
+                  {o.envBenefit && <div style={{ fontSize:11, color: rc ? rc.text : T.teal,
+                    whiteSpace:"normal", wordBreak:"break-word" }}>Env: {o.envBenefit}</div>}
+                </td>
+
+                <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
+                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
+                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.startsWith("Inside")?("Inside-out"):o.materiality.startsWith("Outside")?("Outside-in"):o.materiality}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.updatedAt||o.createdAt)}</span>
+                </td>
+                <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
+                  <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const TABS = ["dashboard","screening","risks","opportunities","matrix","footprint","changes","settings"];
+
+  return (
+    <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                    marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
+        <div style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border }}>
+          {TABS.map(t => (
+            <button key={t} onClick={()=>setTab(t)}
+              style={{ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:500, background:"transparent", border:"none",
+                       borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
+                       marginBottom:"-2px", color: tab===t ? T.teal : T.muted }}>
+              {t.charAt(0).toUpperCase()+t.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          {project.type  && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, letterSpacing:"0.05em" }}>{project.type}</span>}
+          {project.phase && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.blueBg,  color:T.blue,  border:"1px solid "+T.blueBd,  letterSpacing:"0.05em" }}>{project.phase}</span>}
+        </div>
+      </div>
+
+      {tab === "dashboard" && (
+        <div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
+            <StatCard label="All aspects"   value={aspects.length}  filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
+            <StatCard label="Significant"   value={sigCount}        filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
+            <StatCard label="Watch"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Opportunities" value={opps.length}     filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
+            <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
+          </div>
+
+          {/* ── Emission Footprint card ── */}
+          {project.footprintSummary && (() => {
+            const fp   = project.footprintSummary;
+            const fmtT = v => Number(v).toFixed(3) + " tCO₂e";
+            const d    = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
+            // Scope totals — only what has data
+            const s3c1 = Number(fp.combined || 0);  // only scope we have so far
+            const s1   = Number(fp.scope1   || 0);
+            const s2   = Number(fp.scope2   || 0);
+            const grandTotal = s1 + s2 + s3c1;
+            // NP / RP
+            const np   = Number(fp.npTotal  || 0);
+            const rp   = Number(fp.rpTotal  || 0);
+            const npPct = s3c1 > 0 ? Math.min(100, (np / s3c1) * 100) : 0;
+            const rpPct = s3c1 > 0 ? Math.min(100, (rp / s3c1) * 100) : 0;
+            // Category breakdown
+            const cats = fp.catBreakdown || [];
+            const SCOPE_COLORS = {
+              "Scope 1":        { c:T.red,   bg:T.redBg,    bd:T.redBd    },
+              "Scope 2":        { c:T.amber, bg:T.amberBg,  bd:T.amberBd  },
+              "Scope 3 Cat 1":  { c:T.teal,  bg:T.tealBg,   bd:T.tealBd   },
+              "Scope 3 Cat 4":  { c:T.purple,bg:T.purpleBg, bd:T.purpleBd },
+            };
+            const CAT_COLORS = [T.teal,T.blue,T.purple,T.amber,T.green,T.slate,T.red,T.tealDark];
+            return (
+              <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden",
+                border:"1px solid "+T.border, background:T.surface }}>
+
+                {/* ── Card header ── */}
+                <div style={{ padding:"9px 14px", background:T.surface2,
+                  borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text,
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Emission Footprint</span>
+                  {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{d}</span>}
+                  <button onClick={()=>setTab("footprint")}
+                    style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5,
+                      border:"1px solid "+T.tealBd, background:"transparent",
+                      color:T.teal, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+                    Open footprint →
+                  </button>
+                  <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
+                    style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
+                      border:"1px solid "+T.border, background:"transparent",
+                      color:T.faint, cursor:"pointer" }}>×</button>
+                </div>
+
+                {/* ── Scope rows ── */}
+                <div style={{ padding:"12px 14px", borderBottom:"1px solid "+T.border }}>
+                  <p style={{ fontFamily:T.mono, fontSize:8, fontWeight:600, color:T.faint,
+                    textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>
+                    Scopes with data
+                  </p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+
+                    {/* Scope 1 — placeholder, shown only if data */}
+                    {s1 > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        borderRadius:7, background:T.redBg, border:"1px solid "+T.redBd }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.red,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 1</span>
+                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.red }}>
+                          {fmtT(s1)}
+                        </span>
+                        <span style={{ fontSize:10, color:T.red, opacity:0.7, marginLeft:"auto" }}>
+                          Direct emissions
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Scope 2 — placeholder, shown only if data */}
+                    {s2 > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        borderRadius:7, background:T.amberBg, border:"1px solid "+T.amberBd }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.amber,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 2</span>
+                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.amber }}>
+                          {fmtT(s2)}
+                        </span>
+                        <span style={{ fontSize:10, color:T.amber, opacity:0.7, marginLeft:"auto" }}>
+                          Energy indirect
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Scope 3 Cat 1 — always shown when footprint exists */}
+                    {s3c1 > 0 && (
+                      <div style={{ borderRadius:7, background:T.tealBg, border:"1px solid "+T.tealBd, overflow:"hidden" }}>
+                        {/* Row header */}
+                        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px" }}>
+                          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.teal,
+                            minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                            Scope 3 Cat 1
+                          </span>
+                          <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.teal }}>
+                            {fmtT(s3c1)}
+                          </span>
+                          <span style={{ fontSize:10, color:T.teal, opacity:0.7, marginLeft:"auto" }}>
+                            Purchased goods &amp; services (MTO/MEL)
+                          </span>
+                        </div>
+                        {/* NP / RP stacked bar */}
+                        {(np > 0 || rp > 0) && (
+                          <div style={{ padding:"0 12px 8px" }}>
+                            <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden",
+                              background:T.border, marginBottom:5 }}>
+                              <div style={{ width:npPct+"%", background:T.teal }} />
+                              <div style={{ width:rpPct+"%", background:T.blue }} />
+                            </div>
+                            <div style={{ display:"flex", gap:12 }}>
+                              {np > 0 && <span style={{ fontSize:10, color:T.teal }}>
+                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(np)}</span> NP
+                              </span>}
+                              {rp > 0 && <span style={{ fontSize:10, color:T.blue }}>
+                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(rp)}</span> RP
+                              </span>}
+                            </div>
+                          </div>
+                        )}
+                        {/* Category breakdown — only if > 1 category */}
+                        {cats.length > 1 && (
+                          <div style={{ padding:"0 12px 10px",
+                            borderTop:"1px solid "+T.tealBd, paddingTop:8, marginTop:2 }}>
+                            <p style={{ fontFamily:T.mono, fontSize:8, color:T.teal, opacity:0.7,
+                              textTransform:"uppercase", letterSpacing:"0.07em", margin:"0 0 6px" }}>
+                              By COR category
+                            </p>
+                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                              {cats.map(({ cat, tco2e }, ci) => {
+                                const col = CAT_COLORS[ci % CAT_COLORS.length];
+                                const pct = s3c1 > 0 ? Math.min(100, (tco2e / s3c1) * 100) : 0;
+                                return (
+                                  <div key={cat}>
+                                    <div style={{ display:"flex", justifyContent:"space-between",
+                                      marginBottom:2, alignItems:"center" }}>
+                                      <span style={{ fontSize:10, color:T.text }}>{cat}</span>
+                                      <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:col }}>
+                                        {tco2e.toFixed(3)} tCO₂e
+                                      </span>
+                                    </div>
+                                    <div style={{ height:4, borderRadius:2, background:T.border, overflow:"hidden" }}>
+                                      <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Placeholder rows for scopes not yet calculated */}
+                    {[
+                      s1 === 0 && { label:"Scope 1", sub:"Direct — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
+                      s2 === 0 && { label:"Scope 2", sub:"Energy indirect — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
+                    ].filter(Boolean).map(row => (
+                      <div key={row.label} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 12px",
+                        borderRadius:7, background:row.bg, border:"1px solid "+row.bd, opacity:0.5 }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:row.c,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>{row.label}</span>
+                        <span style={{ fontSize:10, color:row.c, fontStyle:"italic" }}>{row.sub}</span>
+                        <span style={{ fontFamily:T.mono, fontSize:12, color:row.c, marginLeft:"auto" }}>—</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Grand total footer ── */}
+                <div style={{ padding:"9px 14px", background:T.surface2,
+                  display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Total (all scopes)</span>
+                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:T.text }}>
+                    {grandTotal.toFixed(3)} tCO₂e
+                  </span>
+                  {(s1 === 0 || s2 === 0) && (
+                    <span style={{ fontSize:10, color:T.faint, fontStyle:"italic" }}>
+                      · partial (Scope {[s1===0&&"1",s2===0&&"2"].filter(Boolean).join(" & ")} pending)
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* tCO₂e saving strip with scope breakdown */}
+          {opps.length > 0 && totalGhgSaving > 0 && (() => {
+            const sc = calcPortfolioScopeSavings(opps);
+            const fmtT = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t":Math.round(kg)+" kg";
+            return (
+              <div style={{ padding:"11px 16px", marginBottom:"1rem",
+                             background:T.tealBg, border:"1px solid "+T.tealBd, borderRadius:7 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
+                  <span style={{ fontSize:11, color:T.teal, fontWeight:500 }}>tCO₂e savings identified</span>
+                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:500, color:T.tealDark }}>{fmtGhg(totalGhgSaving)}</span>
+                  <span style={{ fontSize:11, color:T.teal, marginLeft:"auto" }}>
+                    {opps.filter(o=>calcGhgTotal(o)).length}/{opps.length} quantified
+                  </span>
+                </div>
+                {(sc.s1+sc.s2+sc.s3)>0 && (
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {[{l:"Scope 1",v:sc.s1,bg:T.redBg,c:T.red,bd:T.redBd},
+                      {l:"Scope 2",v:sc.s2,bg:T.blueBg,c:T.blue,bd:T.blueBd},
+                      {l:"Scope 3",v:sc.s3,bg:T.tealBg,c:T.teal,bd:T.tealBd}]
+                      .filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                      <span key={l} style={{ fontSize:11, padding:"2px 10px", borderRadius:4,
+                                              background:bg, color:c, border:"1px solid "+bd }}>
+                        {l}: <strong style={{ fontFamily:T.mono }}>{fmtT(v)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Status progress bar */}
+          {aspects.length > 0 && (
+            <div style={{ marginBottom:"1.25rem" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:11, fontWeight:500, color:T.muted }}>Aspect status</span>
+                <span style={{ fontSize:11, color:T.faint }}>{aspects.length} total</span>
+              </div>
+              <div style={{ display:"flex", borderRadius:6, overflow:"hidden", height:10, background:T.border, gap:"1px" }}>
+                {STATUSES.map(s => statusCounts[s] > 0 && (
+                  <div key={s} title={s+": "+statusCounts[s]}
+                    style={{ flex:statusCounts[s], background:statusColors[s], transition:"flex 0.3s", minWidth:2 }}/>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:12, marginTop:7, flexWrap:"wrap" }}>
+                {STATUSES.map(s => statusCounts[s] > 0 && (() => {
+                  const sc = s==="Open"?{bg:T.redBg,c:T.red,bd:T.redBd}:s==="In Progress"?{bg:T.amberBg,c:T.amber,bd:T.amberBd}:{bg:T.greenBg,c:T.green,bd:T.greenBd};
+                  return (
+                    <span key={s} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
+                                           padding:"2px 8px", borderRadius:4, fontWeight:500,
+                                           background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>
+                      {s} <strong style={{ fontWeight:700 }}>{statusCounts[s]}</strong>
+                    </span>
+                  );
+                })())}
+              </div>
+            </div>
+          )}
+
+          {dashFilter !== "all" && dashFilter !== "opps" && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"1rem" }}>
+              <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>
+                Showing: <strong style={{ color:T.text }}>{dashFilter==="sig"?"Significant":dashFilter==="watch"?"Watch":"Low"}</strong> ({dashAspects.length})
+              </span>
+              <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>
+                Clear filter x
+              </button>
+            </div>
+          )}
+
+          {dashFilter === "opps" && (
+            <div style={{ marginBottom:"1rem" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"0.75rem" }}>
+                <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>Showing: <strong style={{ color:T.text }}>Opportunities</strong> ({opps.length})</span>
+                <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>Clear filter x</button>
+              </div>
+              {opps.length===0
+                ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
+                : <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>}
+            </div>
+          )}
+
+          {dashFilter !== "opps" && (
+            dashAspects.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
+                {dashFilter==="all"
+                  ? <><p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects identified yet.</p>
+                      <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to get started.</p>
+                      <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+                        <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
+                        <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
+                      </div></>
+                  : <p style={{ margin:0, fontSize:13, color:T.muted }}>No {dashFilter==="sig"?"significant":dashFilter==="watch"?"watch":dashFilter} aspects.</p>}
+              </div>
+            ) : (
+              <AspectTable rows={sortedDashAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
+            )
+          )}
+        </div>
+      )}
+
+      {tab === "screening" && (
+        <ScreeningTab project={project} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
+      )}
+
+      {tab === "risks" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
+            <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
+            <button onClick={()=>setAiOpen(v=>!v)}
+              style={{ padding:"7px 13px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:500, border:"1px solid "+T.purpleBd,
+                       background:aiOpen?T.purpleBg:"transparent", color:T.purple }}>
+              AI suggest
+            </button>
+              <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
+              placeholder="Search aspects..." style={{ width:180, padding:"5px 10px", fontSize:12 }}/>
+            <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
+              {["All","SIGNIFICANT","WATCH","Low"].map(f => (
+                <button key={f} onClick={()=>setAspFilter(f)}
+                  style={{ fontFamily:T.mono, padding:"4px 9px", fontSize:10, borderRadius:4, cursor:"pointer",
+                           fontWeight:aspFilter===f?500:400, letterSpacing:"0.03em",
+                           border: aspFilter===f ? "1px solid "+T.teal : "1px solid "+T.border,
+                           background: aspFilter===f ? T.tealBg : "transparent",
+                           color: aspFilter===f ? T.teal : T.muted }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
+          {filteredAspects.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
+            </div>
+          ) : (
+            <div>
+              {selectedAsp.size > 0 && (
+                <BulkBar count={selectedAsp.size}
+                  accentColor={T.teal} accentBg={T.tealBg} accentBd={T.tealBd}
+                  statusOptions={STATUSES}
+                  onDelete={bulkDeleteAspects}
+                  onStatusChange={s => s ? bulkSetAspStatus(s) : setSelectedAsp(new Set())}/>
+              )}
+              <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "opportunities" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
+            <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
+            <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
+              placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
+
+          </div>
+          {opps.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              <p style={{ margin:"0 0 8px", fontSize:13, color:T.muted }}>No opportunities tracked yet.</p>
+              <p style={{ fontSize:12, margin:0 }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
+            </div>
+          ) : (
+            <div>
+              {selectedOpp.size > 0 && (
+                <BulkBar count={selectedOpp.size}
+                  accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
+                  statusOptions={OPP_STATUSES}
+                  onDelete={bulkDeleteOpps}
+                  onStatusChange={s => s ? bulkSetOppStatus(s) : setSelectedOpp(new Set())}/>
+              )}
+              <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {tab === "matrix" && (() => {
+        // ─── Shared constants ──────────────────────────────────────────────────────
+        const CELL = 60;       // px per grid cell
+        const YLAB = 98;       // total width of Y-axis (rotated label + descriptors)
+        const XLAB = 44;       // height of X-axis header row
+
+        // ─── Shared sub-components ────────────────────────────────────────────────
+        // Axis descriptor column (left side, shared layout)
+        const YAxis = ({ title, labels, order="desc" }) => (
+          <div style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+            {/* Rotated title */}
+            <div style={{ width:20, marginTop:XLAB, height:CELL*5,
+                           display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                             whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>
+                {title}
+              </span>
+            </div>
+            {/* Row labels */}
+            <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
+              {(order==="asc" ? [1,2,3,4,5] : [5,4,3,2,1]).map(v => (
+                <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
+                                       justifyContent:"flex-end", paddingRight:10 }}>
+                  <div style={{ textAlign:"right" }}>
+                    {(labels[v]||"").split("\n").map((ln,i) => (
+                      <div key={i} style={{ fontSize: i===0?9:8, fontWeight:i===0?700:400,
+                        color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln.replace("|"," ")}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+        // X-axis header row (column descriptors)
+        const XAxis = ({ labels, footerLabel }) => (
+          <>
+            <div style={{ display:"flex", height:XLAB, alignItems:"flex-end", paddingBottom:6 }}>
+              {[1,2,3,4,5].map(v => (
+                <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
+                  {(labels[v]||"").split("\n").map((ln,i) => (
+                    <div key={i} style={{ fontSize:i===0?9:8, fontWeight:i===0?700:400,
+                      color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln.replace("|"," ")}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div style={{ paddingTop:2, fontSize:8, fontWeight:600, color:T.faint,
+                           letterSpacing:"0.07em", textTransform:"uppercase" }}>
+              {footerLabel}
+            </div>
+          </>
+        );
+
+        // Unified legend block — used by both matrices
+        // Shared section header
+        const MatrixHeader = ({ title, subtitle, isFirst, legend }) => (
+          <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+                        marginBottom:"0.4rem",
+                        paddingTop: isFirst?0:"0.75rem",
+                        borderTop: isFirst?"none":"1px solid "+T.border }}>
+            <span style={{ fontSize:11, fontWeight:700, color:T.text,
+              textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{title}</span>
+            <span style={{ fontSize:9, color:T.faint }}>{subtitle}</span>
+            {legend && (
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginLeft:"auto" }}>
+                {legend.map((item,i) => (
+                  <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:4,
+                    fontSize:9, color:T.muted, whiteSpace:"nowrap" }}>
+                    <span style={{ width:item.sw||10, height:item.sh||10,
+                      borderRadius:item.br||"50%", background:item.bg,
+                      border:item.bd, flexShrink:0, display:"inline-block" }}/>
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+        // ─── Risk matrix data + rendering ─────────────────────────────────────────
+        const CON_LABELS  = { 1:"C1\nNegligible", 2:"C2\nMinor", 3:"C3\nModerate", 4:"C4\nMajor", 5:"C5\nHuge" };
+        const PROB_LABELS = { 1:"P1\nVery unlikely|(0–1%)", 2:"P2\nUnlikely|(1–5%)", 3:"P3\nLess likely|(5–25%)", 4:"P4\nLikely|(25–50%)", 5:"P5\nVery Likely|(50–100%)" };
+
+        const sigCell = (sv, pb) => {
+          const z = matrixZone(sv, pb);
+          if (z === "SIGNIFICANT") return { bg:"#FFCDD2", bd:"#E57373", zone:"SIGNIFICANT" };
+          if (z === "Low")         return { bg:"#C8E6C9", bd:"#81C784", zone:"Low"         };
+          return                           { bg:"#FFF9C4", bd:"#F9A825", zone:"WATCH"       };
+        };
+        const zoneTextC = { SIGNIFICANT:T.redBd, WATCH:T.amberBd, Low:T.greenBd };
+
+        const riskGrid = {};
+        aspects.forEach(a => {
+          if (!a.severity || !a.probability) return;
+          const sv = Math.min(5,Math.max(1,parseInt(a.severity)));
+          const pb = Math.min(5,Math.max(1,parseInt(a.probability)));
+          const k  = sv+","+pb;
+          if (!riskGrid[k]) riskGrid[k] = [];
+          riskGrid[k].push(a);
+        });
+        const unplotted = aspects.filter(a => !a.severity || !a.probability);
+
+        // ─── Opportunity matrix data + rendering ──────────────────────────────────
+        const OPP_ENV_LABELS  = { 1:"1\nNegligible", 2:"2\nMinor", 3:"3\nModerate", 4:"4\nSignificant", 5:"5\nMajor" };
+        const OPP_FEAS_LABELS = { 1:"1\nV.difficult", 2:"2\nDifficult", 3:"3\nModerate", 4:"4\nAchievable", 5:"5\nEasy" };
+
+        const oppQuadrant = (ev, feas) => {
+          const hE = ev>=4, hF = feas>=4;
+          if  (hE && hF)  return { bg:T.tealBg,   bd:T.tealBd,   label:"Pursue",       c:T.teal   };
+          if  (hE && !hF) return { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",          c:T.blue   };
+          if  (!hE && hF) return { bg:T.purpleBg, bd:T.purpleBd, label:"Quick win",     c:T.purple };
+          return                  { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritise",  c:T.slate  };
+        };
+
+        // Quadrant corner cell: top-right cell of each quadrant region
+        const isQuadrantCorner = (ev, feas) =>
+          (ev===5 && feas===5) || (ev===3 && feas===5) || (ev===5 && feas===3) || (ev===3 && feas===3);
+
+        const oppGrid = {};
+        opps.forEach(o => {
+          const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+          const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
+          const k    = ev+","+feas;
+          if (!oppGrid[k]) oppGrid[k] = [];
+          oppGrid[k].push(o);
+        });
+
+        return (
+          <div>
+            {/* ══ Risk matrix ══════════════════════════════════════════════════════════ */}
+            <MatrixHeader isFirst title="Environmental risk matrix"
+              subtitle="Consequence × Probability"
+              legend={[
+                { bg:"#FFCDD2", bd:"1px solid #E57373", br:"3px", sw:12, sh:12, label:"Significant" },
+                { bg:"#FFF9C4", bd:"1px solid #F9A825", br:"3px", sw:12, sh:12, label:"Watch" },
+                { bg:"#C8E6C9", bd:"1px solid #81C784", br:"3px", sw:12, sh:12, label:"Low" },
+                { bg:"#ef5350", bd:"3px solid #b71c1c", label:"Open" },
+                { bg:"#fb8c00", bd:"3px solid #e65100", label:"In Progress" },
+                { bg:"#43a047", bd:"3px solid #1b5e20", label:"Closed" },
+              ]}/>
+
+            {aspects.length === 0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
+                               borderRadius:8, border:"1px solid "+T.border, color:T.faint,
+                               fontSize:12, marginBottom:"2rem" }}>
+                  No risks yet — use the Screening tab to get started.
+                </div>
+              : <>
+                  <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
+                    <YAxis title="Consequence →" labels={CON_LABELS} order="asc"/>
+                    <div>
+                      <XAxis labels={PROB_LABELS} footerLabel="Probability of occurrence →"/>
+                      {[1,2,3,4,5].map(sv => (
+                        <div key={sv} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(pb => {
+                            const c     = sigCell(sv,pb);
+                            const items = riskGrid[sv+","+pb]||[];
+                            return (
+                              <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                     background:c.bg, border:"1px solid "+c.bd,
+                                                     position:"relative", boxSizing:"border-box" }}>
+                                {/* Score number always in top-left */}
+                                <span style={{ position:"absolute", top:3, left:4,
+                                               fontSize:9, fontWeight:700, lineHeight:1,
+                                               color:zoneTextC[c.zone], opacity:0.6,
+                                               pointerEvents:"none", userSelect:"none" }}>{sv*pb}</span>
+                                {/* Dots centred */}
+                                <div style={{ position:"absolute", inset:0,
+                                              display:"flex", flexWrap:"wrap", gap:3,
+                                              alignContent:"center", justifyContent:"center", padding:"16px 4px 4px" }}>
+                                  {items.map((a,i) => {
+                                    const sig   = calcSig(a);
+                                    // Fill = significance colour (solid)
+                                    const fill  = sig==="SIGNIFICANT"?"#ef5350":sig==="WATCH"?"#fb8c00":"#43a047";
+                                    // Status shown as inner dot pattern
+                                    const statusMark =
+                                        a.status==="Closed"      ? { ring:"#1b5e20", dash:false }
+                                      : a.status==="In Progress" ? { ring:"#e65100", dash:true  }
+                                      :                            { ring:"#b71c1c", dash:false };
+                                    return (
+                                      <div key={i}
+                                        title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+a.severity+"×P"+pb+" = "+sv*pb}
+                                        onClick={()=>setEditAspect(a)}
+                                        style={{ width:20, height:20, borderRadius:"50%",
+                                                 background:fill,
+                                                 border:"3px solid "+statusMark.ring,
+                                                 outline: statusMark.dash ? "2px dashed "+statusMark.ring : "none",
+                                                 outlineOffset:1,
+                                                 cursor:"pointer", flexShrink:0,
+                                                 display:"flex", alignItems:"center", justifyContent:"center",
+                                                 fontSize:8, fontWeight:700, color:"#fff",
+                                                 boxSizing:"border-box" }}>
+                                        {items.length>1&&i===0?items.length:""}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {unplotted.length>0 && (
+                    <p style={{ fontSize:11, color:T.faint, marginTop:"0.5rem" }}>
+                      {unplotted.length} not plotted (C/P missing)
+                    </p>
+                  )}
+                </>
+            }
+
+            {/* ══ Opportunity matrix ═══════════════════════════════════════════════════ */}
+            <MatrixHeader title="Opportunity priority matrix"
+              subtitle="Environmental benefit × Feasibility · dot size = business value"
+              legend={[
+                { bg:T.tealBg,   bd:"1px solid "+T.tealBd,   br:"3px", sw:12, sh:12, label:"Pursue" },
+                { bg:T.blueBg,   bd:"1px solid "+T.blueBd,   br:"3px", sw:12, sh:12, label:"Plan" },
+                { bg:T.purpleBg, bd:"1px solid "+T.purpleBd, br:"3px", sw:12, sh:12, label:"Quick win" },
+                { bg:T.slateBg,  bd:"1px solid "+T.slateBd,  br:"3px", sw:12, sh:12, label:"Deprioritise" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:10, sh:10, label:"Biz: low" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:14, sh:14, label:"med" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:18, sh:18, label:"high" },
+              ]}/>
+
+            {opps.length === 0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
+                               borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+                  No opportunities yet.
+                </div>
+              : <>
+                  <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
+                    <YAxis title="Implementation feasibility →" labels={OPP_FEAS_LABELS}/>
+                    <div>
+                      <XAxis labels={OPP_ENV_LABELS} footerLabel="Environmental benefit / magnitude →"/>
+                      {[5,4,3,2,1].map(feas => (
+                        <div key={feas} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(ev => {
+                            const q     = oppQuadrant(ev,feas);
+                            const items = oppGrid[ev+","+feas]||[];
+                            const isCorner = isQuadrantCorner(ev,feas);
+                            return (
+                              <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                     background:q.bg, border:"1px solid "+q.bd,
+                                                     display:"flex", flexWrap:"wrap",
+                                                     alignContent:"center", justifyContent:"center",
+                                                     gap:4, padding:5, boxSizing:"border-box",
+                                                     position:"relative" }}>
+                                {/* Quadrant label in top-right corner cell of each quadrant */}
+                                {items.length===0 && isCorner && (
+                                  <span style={{ fontSize:9, fontWeight:700, color:q.c,
+                                                 opacity:0.55, textAlign:"center",
+                                                 lineHeight:1.3, padding:2 }}>{q.label}</span>
+                                )}
+                                {items.map((o,i) => {
+                                  const sz  = 10+(Math.min(5,Math.max(1,parseInt(o.bizValue)||1))-1)*2;
+                                  const oC  = {bg:T.tealBg,bd:T.tealBd};
+                                  return (
+                                    <div key={i}
+                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility+" · Business value: "+o.bizValue}
+                                      onClick={()=>setEditOpp(o)}
+                                      style={{ width:sz, height:sz, borderRadius:"50%",
+                                               background:oC.bg, border:"2px solid "+oC.bd,
+                                               cursor:"pointer", flexShrink:0 }}/>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+            }
+          </div>
+        );
+      })()}
+      {tab === "changes" && (()=>{
+        const now = new Date();
+        const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()); weekStart.setHours(0,0,0,0);
+        const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+        const fromMs = new Date(clFrom).getTime();
+        const toMs   = new Date(clTo+"T23:59:59").getTime();
+        const filtered = [...changelog].reverse().filter(e=>{
+          const t = new Date(e.ts).getTime();
+          return t>=fromMs && t<=toMs;
+        });
+        return(
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:"1rem", flexWrap:"wrap" }}>
+            <div>
+              <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:600, fontFamily:T.sans }}>Change log</h3>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>{filtered.length} change{filtered.length!==1?"s":""} in range · {changelog.length} total</p>
+            </div>
+            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <span style={{ fontSize:11, color:T.muted }}>From</span>
+              <input type="date" value={clFrom} onChange={e=>setClFrom(e.target.value)}
+                style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
+              <span style={{ fontSize:11, color:T.muted }}>to</span>
+              <input type="date" value={clTo} onChange={e=>setClTo(e.target.value)}
+                style={{ padding:"4px 8px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text, fontFamily:T.sans }}/>
+              <button onClick={()=>{setClFrom(weekStart.toISOString().slice(0,10));setClTo(weekEnd.toISOString().slice(0,10)+"".slice(0,10));const wd=new Date(now);wd.setDate(now.getDate()+(6-now.getDay()));setClTo(wd.toISOString().slice(0,10));}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.tealBd, background:T.tealBg, color:T.teal, cursor:"pointer", fontFamily:T.sans }}>
+                This week
+              </button>
+              <button onClick={()=>{const m=new Date(now); m.setDate(1); setClFrom(m.toISOString().slice(0,10)); const me=new Date(now.getFullYear(),now.getMonth()+1,0); setClTo(me.toISOString().slice(0,10));}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                This month
+              </button>
+              <button onClick={()=>{const y=now.getFullYear(); setClFrom(y+"-01-01"); setClTo(y+"-12-31");}}
+                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                This year
+              </button>
+            </div>
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              No changes in this date range.{changelog.length>0?" Adjust the date range to see older entries.":""}
+            </div>
+          ) : (
+            <div style={{ background:T.surface, borderRadius:8, border:"1px solid "+T.border, overflow:"hidden" }}>
+              {filtered.map((entry, i) => {
+                const isAdd    = entry.action.startsWith("Added");
+                const isEdit   = entry.action.startsWith("Edited");
+                const isDel    = entry.action.startsWith("Deleted");
+                const dot      = isAdd ? T.teal : isEdit ? T.amber : T.red;
+                const ts       = new Date(entry.ts);
+                const dateStr  = ts.toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
+                const timeStr  = ts.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+                return (
+                  <div key={entry.id} style={{ display:"flex", gap:12, padding:"10px 16px",
+                                               borderBottom: i < filtered.length-1 ? "1px solid "+T.rowBd : "none",
+                                               alignItems:"flex-start" }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:dot, marginTop:6, flexShrink:0 }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      {/* Action badge + detail on same line */}
+                      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                        <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500,
+                                       color: isAdd?T.teal:isDel?T.red:T.amber,
+                                       background: isAdd?T.tealBg:isDel?T.redBg:T.amberBg,
+                                       padding:"1px 6px", borderRadius:3, flexShrink:0 }}>
+                          {entry.action}
+                        </span>
+                        <span style={{ fontSize:12, color:T.text, fontWeight:500 }}>
+                          {entry.detail}
+                        </span>
+                      </div>
+                      {/* Field pills — supports both v (new value) and from/to */}
+                      {(entry.fields||[]).length>0&&(
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                          {(entry.fields||[]).filter(f=>f.v||f.to).map((f,fi)=>(
+                            <span key={fi} style={{ fontSize:11, padding:"2px 8px", borderRadius:10,
+                                                    background:T.surface2, border:"1px solid "+T.border,
+                                                    color:T.muted, display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ color:T.faint, fontSize:10 }}>{f.k}</span>
+                              {f.from!==undefined
+                                ? <><span style={{ color:T.muted, textDecoration:"line-through", fontSize:10 }}>{f.from}</span>
+                                    <span style={{ color:T.faint, fontSize:9 }}>→</span>
+                                    <span style={{ color:T.text }}>{f.to}</span></>
+                                : <span style={{ color:T.text }}>{f.v}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flexShrink:0, textAlign:"right" }}>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{dateStr}</p>
+                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"1px 0 0" }}>{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        );
+      })()}
+
+      {tab === "footprint" && (
+        <FootprintTab project={project} onChange={onChange}/>
+      )}
+
+      {tab === "settings" && (() => {
+        // Collect existing contract names for datalist
+        const existingContracts = [...new Set((allProjects||[]).map(p=>p.contract||"").filter(Boolean))];
+        // Check if projectId is unique
+        const idTaken = (allProjects||[]).some(p=>p.id!==project.id && p.projectId && p.projectId===(project.projectId||""));
+        return (
+        <div>
+          <Card style={{ marginBottom:"1rem" }}>
+            <SectionLabel>Project details</SectionLabel>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px 16px" }}>
+              <Fld label="Project name"><input value={project.name||""} onChange={e=>onChange({...project,name:e.target.value})} placeholder="Project name" style={iw}/></Fld>
+              <Fld label="Project ID">
+                <div>
+                  <input value={project.projectId||""} onChange={e=>onChange({...project,projectId:e.target.value})}
+                    placeholder="e.g. PRJ-00123" style={{ ...iw, borderColor:idTaken?T.red:undefined }}/>
+                  {idTaken && <p style={{ fontSize:11, color:T.red, margin:"3px 0 0" }}>ID already used by another project</p>}
+                </div>
+              </Fld>
+              <Fld label="Company"><input value={project.company||""} onChange={e=>onChange({...project,company:e.target.value})} placeholder="Company" style={iw}/></Fld>
+              <Fld label="Contract / portfolio">
+                <input value={project.contract||""} onChange={e=>onChange({...project,contract:e.target.value})}
+                  placeholder="Type or select existing" list="contract-datalist" style={iw}/>
+                <datalist id="contract-datalist">
+                  {existingContracts.map(c=><option key={c} value={c}/>)}
+                </datalist>
+              </Fld>
+              <Fld label="Project type">
+                <select value={project.type||""} onChange={e=>onChange({...project,type:e.target.value})} style={iw}>
+                  <option value="">Select type</option>{PROJ_TYPES.map(t=><option key={t}>{t}</option>)}
+                </select>
+              </Fld>
+              <Fld label="Current phase">
+                <select value={project.phase||""} onChange={e=>onChange({...project,phase:e.target.value})} style={iw}>
+                  <option value="">Select phase</option>{PHASES.map(p=><option key={p}>{p}</option>)}
+                </select>
+              </Fld>
+            </div>
+          </Card>
+          <div style={{ padding:"1.25rem", borderRadius:8, background:T.redBg, border:"1px solid "+T.redBd }}>
+            <p style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.red, margin:"0 0 6px", letterSpacing:"0.05em", textTransform:"uppercase" }}>Danger zone</p>
+            <p style={{ fontSize:12, color:T.muted, margin:"0 0 12px" }}>Deleting this project permanently removes all its aspects and opportunities. This cannot be undone.</p>
+            {!confirmDelete
+              ? <Btn variant="danger" onClick={()=>setConfirmDelete(true)}>Delete project</Btn>
+              : (
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:11, color:T.red }}>Are you sure?</span>
+                  <Btn variant="danger" onClick={onDelete}>Yes, delete permanently</Btn>
+                  <Btn onClick={()=>setConfirmDelete(false)}>Cancel</Btn>
+                </div>
+              )
+            }
+          </div>
+        </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+
+// ── Portfolio Overview ────────────────────────────────────────────────────────
+function PortfolioView({ projects, onClose, onSelect }) {
+  const fmtKg = kg => kg>=1000?(kg/1000).toFixed(1)+" t CO2e":kg>0?Math.round(kg)+" kg CO2e":"--";
+  const fmtSc = v => v>=1000?(v/1000).toFixed(1)+"t":Math.round(v)+"kg";
+  const [activeContract, setActiveContract] = useState("__all__");
+
+  const contractMap = {};
+  projects.forEach(p => {
+    const key = (p.contract||"").trim() || "__none__";
+    if (!contractMap[key]) contractMap[key] = [];
+    contractMap[key].push(p);
+  });
+  const contractGroups = Object.entries(contractMap).sort(([a],[b]) =>
+    a==="__none__" ? 1 : b==="__none__" ? -1 : a.localeCompare(b)
+  );
+  const visibleGroups = activeContract==="__all__"
+    ? contractGroups
+    : contractGroups.filter(([k])=>k===activeContract);
+  const allAspects = projects.flatMap(p=>p.aspects||[]);
+  const allOpps    = projects.flatMap(p=>p.opportunities||p.opps||[]);
+  const totalGhg   = allOpps.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
+  const allFpProj  = projects.filter(p=>p.footprintSummary);
+  const totalFp    = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.combined)||0),0);
+  const totalFpNP  = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.npTotal)||0),0);
+  const totalFpRP  = allFpProj.reduce((s,p)=>s+(Number(p.footprintSummary.rpTotal)||0),0);
+  const fmtFPH = v => Number(v).toFixed(3)+" tCO₂e";
+
+  const MiniDonut = ({ segments, size=52, strokeW=9 }) => {
+    const r=(size-strokeW)/2; const circ=2*Math.PI*r;
+    const total=segments.reduce((s,g)=>s+g.v,0)||1;
+    let offset=0;
+    return (
+      <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={strokeW}/>
+        {segments.map((g,i)=>{
+          const len=(g.v/total)*circ;
+          const el=<circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
+            stroke={g.c} strokeWidth={strokeW} strokeDasharray={len+" "+(circ-len)}
+            strokeDashoffset={-offset} strokeLinecap="butt"/>;
+          offset+=len; return el;
+        })}
+      </svg>
+    );
+  };
+
+  const ProjectCard = ({ p }) => {
+    const asp=p.aspects||[]; const opp=p.opportunities||p.opps||[];
+    const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+    const watch=asp.filter(a=>calcSig(a)==="WATCH").length;
+    const low=asp.filter(a=>calcSig(a)==="Low").length;
+    const openN=asp.filter(a=>a.status==="Open").length;
+    const inProg=asp.filter(a=>a.status==="In Progress").length;
+    const closed=asp.filter(a=>a.status==="Closed").length;
+    const hi=opp.filter(o=>calcOppScore(o)>=75).length;
+    const tot=asp.length;
+    return (
+      <div onClick={()=>{onSelect(p.id);onClose();}}
+        style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:10,
+                 padding:"14px 16px",cursor:"pointer",transition:"border-color 0.15s",
+                 display:"grid",gridTemplateColumns:"1fr auto",gap:"12px 20px",alignItems:"start" }}
+        onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal-bd)"}
+        onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+        <div>
+          <div style={{ display:"flex",alignItems:"baseline",gap:10,marginBottom:8,flexWrap:"wrap" }}>
+            <span style={{ fontSize:14,fontWeight:600,color:"var(--text)" }}>{p.name||"Unnamed"}</span>
+            {p.projectId&&<span style={{ fontFamily:"var(--mono,monospace)",fontSize:10,color:"var(--faint)" }}>{p.projectId}</span>}
+            {p.company&&<span style={{ fontSize:12,color:"var(--muted)" }}>{p.company}</span>}
+            <div style={{ display:"flex",gap:5,marginLeft:"auto" }}>
+              {p.type&&<span style={{ fontSize:9,padding:"2px 7px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)",border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
+              {p.phase&&<span style={{ fontSize:9,padding:"2px 7px",borderRadius:3,background:"var(--blue-bg)",color:"var(--blue)",border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+              <span style={{ fontSize:10,color:"var(--muted)",fontWeight:500 }}>Significance</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{tot} aspect{tot!==1?"s":""}</span>
+            </div>
+            {tot>0?<div style={{ display:"flex",height:7,borderRadius:4,overflow:"hidden",gap:"1px" }}>
+              {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }} title={"Significant: "+sig}/>}
+              {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }} title={"Watch: "+watch}/>}
+              {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }} title={"Low: "+low}/>}
+            </div>:<div style={{ height:7,borderRadius:4,background:"var(--border)" }}/>}
+            <div style={{ display:"flex",gap:8,marginTop:5 }}>
+              {[{l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
+                {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].map(({l,v,bg,c,bd})=>(
+                <span key={l} style={{ fontSize:10,display:"inline-flex",alignItems:"center",gap:3,
+                                       padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
+                  {l} <strong style={{ fontWeight:700 }}>{v}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+          {opp.length>0&&<div style={{ display:"flex",gap:8,alignItems:"center",marginBottom:p.footprintSummary?6:0 }}>
+            <span style={{ fontSize:10,color:"var(--muted)",fontWeight:500 }}>Opportunities:</span>
+            <span style={{ fontSize:10,color:"var(--muted)" }}>Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong></span>
+            <span style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:3 }}>
+              <span style={{ width:7,height:7,borderRadius:"50%",background:"var(--teal)",display:"inline-block" }}/>
+              High <strong style={{ color:"var(--text)" }}>{hi}</strong>
+            </span>
+          </div>}
+          {p.footprintSummary && (() => {
+            const fp  = p.footprintSummary;
+            const tot = Number(fp.combined || 0);
+            const np  = Number(fp.npTotal  || 0);
+            const rp  = Number(fp.rpTotal  || 0);
+            const fmtF = v => Number(v).toFixed(3);
+            const npPct = tot > 0 ? Math.min(100,(np/tot)*100) : 0;
+            const rpPct = tot > 0 ? Math.min(100,(rp/tot)*100) : 0;
+            const d = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
+            return (
+              <div style={{ padding:"8px 10px", borderRadius:6,
+                border:"1px solid var(--teal-bd)", background:"var(--teal-bg)" }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:5 }}>
+                  <span style={{ fontSize:9, fontWeight:700, color:"var(--teal-dk)",
+                    fontFamily:"var(--mono)", textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                    {fp.scope || "Scope 3 Cat 1"}
+                  </span>
+                  <span style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:700, color:"var(--teal-dk)" }}>
+                    {fmtF(tot)} tCO₂e
+                  </span>
+                  {d && <span style={{ fontSize:9, color:"var(--teal)", opacity:0.7, marginLeft:"auto" }}>{d}</span>}
+                </div>
+                <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:"var(--border)" }}>
+                  <div style={{ width:npPct+"%", background:"var(--teal)" }} />
+                  <div style={{ width:rpPct+"%", background:"var(--blue)" }} />
+                </div>
+                <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                  {np > 0 && <span style={{ fontSize:9, color:"var(--teal)" }}>NP {fmtF(np)}</span>}
+                  {rp > 0 && <span style={{ fontSize:9, color:"var(--blue)" }}>RP {fmtF(rp)}</span>}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+        {tot>0&&(
+          <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:60 }}>
+            <div style={{ position:"relative" }}>
+              <MiniDonut segments={[{v:openN,c:"var(--red)"},{v:inProg,c:"var(--amber)"},{v:closed,c:"var(--green)"}]}/>
+              <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column" }}>
+                <span style={{ fontSize:11,fontWeight:700,color:"var(--text)",lineHeight:1 }}>{tot}</span>
+              </div>
+            </div>
+            <span style={{ fontSize:9,color:"var(--faint)",textAlign:"center" }}>aspects</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const ContractSection = ({ contractKey, ps }) => {
+    const asp=ps.flatMap(p=>p.aspects||[]);
+    const opp=ps.flatMap(p=>p.opportunities||p.opps||[]);
+    const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+    const watch=asp.filter(a=>calcSig(a)==="WATCH").length;
+    const low=asp.filter(a=>calcSig(a)==="Low").length;
+    const openN=asp.filter(a=>a.status==="Open").length;
+    const inP=asp.filter(a=>a.status==="In Progress").length;
+    const cls=asp.filter(a=>a.status==="Closed").length;
+    const hiOpp=opp.filter(o=>calcOppScore(o)>=75).length;
+    const medOpp=opp.filter(o=>{const s=calcOppScore(o);return s>=30&&s<75;}).length;
+    const ghg=opp.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
+    const sc=calcPortfolioScopeSavings(opp);
+    const fpProjects=ps.filter(p=>p.footprintSummary);
+    const fpTotal=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.combined)||0),0);
+    const fpNP=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.npTotal)||0),0);
+    const fpRP=fpProjects.reduce((s,p)=>s+(Number(p.footprintSummary.rpTotal)||0),0);
+    const fmtFP=v=>Number(v).toFixed(3)+" tCO₂e";
+    return (
+      <div style={{ marginBottom:"2rem" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:"0.75rem",
+                       paddingBottom:8,borderBottom:"2px solid var(--border)" }}>
+          <h2 style={{ margin:0,fontSize:14,fontWeight:600,color:"var(--text)" }}>
+            {contractKey==="__none__"?"No contract assigned":contractKey}
+          </h2>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>{ps.length} project{ps.length!==1?"s":""}</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>&middot;</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>{asp.length} aspect{asp.length!==1?"s":""}</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>&middot;</span>
+          <span style={{ fontSize:11,color:"var(--faint)" }}>{opp.length} opportunit{opp.length!==1?"ies":"y"}</span>
+          {ghg>0&&<span style={{ marginLeft:"auto",fontFamily:"var(--mono)",fontSize:12,fontWeight:500,color:"var(--teal-dk)" }}>{fmtKg(ghg)}</span>}
+        </div>
+
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:"1rem" }}>
+          {/* Aspects bar */}
+          <div style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 14px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+              <span style={{ fontSize:11,fontWeight:500,color:"var(--muted)" }}>Aspects — significance</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{asp.length} total</span>
+            </div>
+            {asp.length>0?<>
+              <div style={{ display:"flex",height:8,borderRadius:4,overflow:"hidden",gap:"1px",marginBottom:6 }}>
+                {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }}/>}
+                {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }}/>}
+                {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }}/>}
+                {asp.length-sig-watch-low>0&&<div style={{ flex:asp.length-sig-watch-low,background:"var(--border)",minWidth:2 }}/>}
+              </div>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
+                {[{l:"Significant",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
+                  {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                  {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                  <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
+                    {l} <strong>{v}</strong>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:"1px",marginBottom:5 }}>
+                {openN>0&&<div style={{ flex:openN,background:"var(--red-bd)",minWidth:3 }}/>}
+                {inP>0&&<div style={{ flex:inP,background:"var(--amber-bd)",minWidth:3 }}/>}
+                {cls>0&&<div style={{ flex:cls,background:"var(--green-bd)",minWidth:3 }}/>}
+              </div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                {[{l:"Open",v:openN,c:"var(--red)"},{l:"In progress",v:inP,c:"var(--amber)"},{l:"Closed",v:cls,c:"var(--green)"}].filter(x=>x.v>0).map(({l,v,c})=>(
+                  <span key={l} style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:4 }}>
+                    <span style={{ width:7,height:7,borderRadius:"50%",background:c,display:"inline-block" }}/>{l} <strong style={{ color:"var(--text)" }}>{v}</strong>
+                  </span>
+                ))}
+              </div>
+            </>:<span style={{ fontSize:11,color:"var(--faint)",fontStyle:"italic" }}>No aspects yet</span>}
+          </div>
+
+          {/* Opportunities bar */}
+          <div style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 14px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+              <span style={{ fontSize:11,fontWeight:500,color:"var(--muted)" }}>Opportunities — priority</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{opp.length} total</span>
+            </div>
+            {opp.length>0?<>
+              <div style={{ display:"flex",height:8,borderRadius:4,overflow:"hidden",gap:"1px",marginBottom:6 }}>
+                {hiOpp>0&&<div style={{ flex:hiOpp,background:"var(--teal-bd)",minWidth:4 }}/>}
+                {medOpp>0&&<div style={{ flex:medOpp,background:"var(--amber-bd)",minWidth:4 }}/>}
+                {opp.length-hiOpp-medOpp>0&&<div style={{ flex:opp.length-hiOpp-medOpp,background:"var(--border)",minWidth:3 }}/>}
+              </div>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
+                {[{l:"High",v:hiOpp,bg:"var(--teal-bg)",c:"var(--teal)",bd:"var(--teal-bd)"},
+                  {l:"Medium",v:medOpp,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                  {l:"Low/None",v:opp.length-hiOpp-medOpp,bg:"var(--slate-bg)",c:"var(--slate)",bd:"var(--border)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                  <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
+                    {l} <strong>{v}</strong>
+                  </span>
+                ))}
+              </div>
+              {(sc.s1+sc.s2+sc.s3)>0&&(
+                <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>
+                  {[{l:"S1",v:sc.s1,c:"var(--red)"},{l:"S2",v:sc.s2,c:"var(--blue)"},{l:"S3",v:sc.s3,c:"var(--teal)"}].filter(x=>x.v>0).map(({l,v,c})=>(
+                    <span key={l} style={{ fontSize:11,color:c,fontFamily:"var(--mono)" }}>
+                      {l}: <strong>{fmtSc(v)}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>:<span style={{ fontSize:11,color:"var(--faint)",fontStyle:"italic" }}>No opportunities yet</span>}
+          </div>
+        </div>
+
+        {fpProjects.length > 0 && (
+          <div style={{ background:"var(--surface)", border:"1px solid var(--cat-green-bd)",
+            borderRadius:8, padding:"12px 14px", marginBottom:"1rem" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+              <span style={{ fontSize:10, fontWeight:700, color:"var(--cat-green-hd)",
+                fontFamily:"var(--mono)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                Material CO₂ Footprint
+              </span>
+              <span style={{ fontFamily:"var(--mono)", fontSize:16, fontWeight:700, color:"var(--cat-green-hd)" }}>
+                {fmtFP(fpTotal)}
+              </span>
+              <span style={{ fontSize:10, color:"var(--cat-green-tx)", opacity:0.7 }}>
+                {fpProjects.length}/{ps.length} project{ps.length!==1?"s":""} with footprint
+              </span>
+            </div>
+            <div style={{ display:"flex", height:8, borderRadius:4, overflow:"hidden", background:"var(--border)", marginBottom:6 }}>
+              {fpTotal>0&&<>
+                <div style={{ width:Math.min(100,(fpNP/fpTotal)*100)+"%", background:"var(--teal)", transition:"width 0.5s" }}/>
+                <div style={{ width:Math.min(100,(fpRP/fpTotal)*100)+"%", background:"var(--blue)", transition:"width 0.5s" }}/>
+              </>}
+            </div>
+            <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+              <span style={{ fontSize:10, display:"flex", alignItems:"center", gap:5, color:"var(--muted)" }}>
+                <span style={{ width:10,height:10,borderRadius:2,background:"var(--teal)",display:"inline-block" }}/>
+                NP <strong style={{ color:"var(--teal)", fontFamily:"var(--mono)" }}>{fmtFP(fpNP)}</strong>
+              </span>
+              <span style={{ fontSize:10, display:"flex", alignItems:"center", gap:5, color:"var(--muted)" }}>
+                <span style={{ width:10,height:10,borderRadius:2,background:"var(--blue)",display:"inline-block" }}/>
+                RP <strong style={{ color:"var(--blue)", fontFamily:"var(--mono)" }}>{fmtFP(fpRP)}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10 }}>
+          {ps.map(p=><ProjectCard key={p.id} p={p}/>)}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding:"1.5rem 1.75rem",background:"var(--bg)",minHeight:"100%",fontFamily:"var(--sans,system-ui)" }}>
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem" }}>
+        <div>
+          <h1 style={{ margin:"0 0 3px",fontSize:18,fontWeight:700,color:"var(--text)" }}>Portfolio overview</h1>
+          <p style={{ margin:0,fontSize:12,color:"var(--muted)" }}>
+            {projects.length} project{projects.length!==1?"s":""} &middot; {allAspects.length} aspects &middot; {allOpps.length} opportunities
+            {totalGhg>0&&<span style={{ marginLeft:12,color:"var(--teal-dk)",fontFamily:"var(--mono)",fontWeight:500 }}>{fmtKg(totalGhg)}</span>}
+          </p>
+          {totalFp>0&&(
+            <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6,flexWrap:"wrap" }}>
+              <span style={{ fontSize:10,fontWeight:700,color:"var(--cat-green-hd)",fontFamily:"var(--mono)",
+                textTransform:"uppercase",letterSpacing:"0.07em" }}>Material CO₂ footprint:</span>
+              <span style={{ fontFamily:"var(--mono)",fontSize:14,fontWeight:700,color:"var(--cat-green-hd)" }}>{fmtFPH(totalFp)}</span>
+              <span style={{ fontSize:10,padding:"2px 10px",borderRadius:10,background:"var(--teal-bg)",color:"var(--teal)",border:"1px solid var(--teal-bd)" }}>NP {fmtFPH(totalFpNP)}</span>
+              <span style={{ fontSize:10,padding:"2px 10px",borderRadius:10,background:"var(--blue-bg)",color:"var(--blue)",border:"1px solid var(--blue-bd)" }}>RP {fmtFPH(totalFpRP)}</span>
+              <span style={{ fontSize:10,color:"var(--faint)" }}>{allFpProj.length}/{projects.length} projects</span>
+            </div>
+          )}
+        </div>
+        <button onClick={onClose} style={{ padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"var(--muted)",cursor:"pointer",fontSize:12 }}>Close</button>
+      </div>
+
+      {/* Contract filter tabs */}
+      {contractGroups.length > 1 && (
+        <div style={{ display:"flex",gap:0,flexWrap:"wrap",marginBottom:"1.25rem",
+                      borderBottom:"2px solid var(--border)" }}>
+          {[["__all__","All contracts"],...contractGroups.map(([k])=>[k,k==="__none__"?"No contract":k])].map(([key,label])=>(
+            <button key={key} onClick={()=>setActiveContract(key)}
+              style={{ padding:"7px 16px",fontSize:12,fontWeight:500,cursor:"pointer",
+                       border:"none",background:"transparent",fontFamily:"var(--sans,system-ui)",
+                       borderBottom:"2px solid "+(activeContract===key?"var(--teal)":"transparent"),
+                       marginBottom:"-2px",color:activeContract===key?"var(--teal)":"var(--muted)" }}>
+              {label}
+              {key!=="__all__"&&<span style={{ marginLeft:6,fontSize:10,color:"var(--faint)" }}>
+                ({(contractMap[key]||[]).length})
+              </span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visibleGroups.map(([key,ps])=>(
+        <ContractSection key={key} contractKey={key} ps={ps}/>
+      ))}
+
+      {allAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length>0&&(
+        <div style={{ marginTop:"0.5rem" }}>
+          <h2 style={{ fontSize:13,fontWeight:600,margin:"0 0 0.6rem",color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.06em" }}>
+            Significant aspects ({allAspects.filter(a=>calcSig(a)==="SIGNIFICANT").length})
+          </h2>
+          <div style={{ background:"var(--surface)",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden" }}>
+            <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
+              <thead><tr style={{ background:"var(--surface2)" }}>
+                {["Contract","Project","ID","Ref","Aspect","Score","Phase","Status"].map(h=>(
+                  <th key={h} style={{ padding:"8px 12px",textAlign:"left",fontSize:9,fontWeight:600,color:"var(--muted)",borderBottom:"1px solid var(--border)",textTransform:"uppercase",letterSpacing:"0.07em",whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {projects.flatMap(p=>(p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").map(a=>({...a,_proj:p}))).map((a,i)=>{
+                  const score=calcScore(a);
+                  return(
+                    <tr key={i} style={{ borderBottom:"1px solid var(--row-bd)",borderLeft:"3px solid var(--red-bd)" }}>
+                      <td style={{ padding:"8px 12px",fontSize:11,color:"var(--faint)" }}>{a._proj.contract||"--"}</td>
+                      <td style={{ padding:"8px 12px",fontSize:11,color:"var(--muted)" }}>{a._proj.name||"Unnamed"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontFamily:"monospace",fontSize:10,color:"var(--faint)" }}>{a._proj.projectId||"--"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:10,fontWeight:600,color:"var(--teal)" }}>{a.ref}</span></td>
+                      <td style={{ padding:"8px 12px",fontWeight:500,color:"var(--text)",maxWidth:180 }}><div style={{ overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }} title={a.aspect}>{a.aspect||"--"}</div></td>
+                      <td style={{ padding:"8px 12px",fontWeight:700,color:"var(--red)",whiteSpace:"nowrap" }}>{score!==null?score:"--"}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9,padding:"2px 5px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)" }}>{a.phase||"--"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9,padding:"2px 5px",borderRadius:3,background:"var(--red-bg)",color:"var(--red)" }}>{a.status||"Open"}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate, onPortfolio, portfolioActive }) {
+  const [collapsed, setCollapsed] = useState(false);
+  if (collapsed) return (
+    <div style={{ width:40, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column",
+                   minHeight:"100vh", alignItems:"center", paddingTop:12, gap:8 }}>
+      <div style={{ width:24, height:24, background:T.teal, borderRadius:4, display:"flex", alignItems:"center",
+                     justifyContent:"center", flexShrink:0, marginBottom:4 }}>
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="white" strokeWidth="1.5"/>
+          <path d="M7 4v3.5l2 1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <button onClick={()=>setCollapsed(false)} title="Expand sidebar"
+        style={{ background:"transparent", border:"none", cursor:"pointer", color:T.sbMuted,
+                 fontSize:16, lineHeight:1, padding:"4px 0" }}>
+        ›
+      </button>
+    </div>
+  );
+  return (
+    <div style={{ width:215, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
+      <div style={{ padding:"16px 16px 12px", borderBottom:"1px solid "+T.sbBd }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
+          <div style={{ width:26, height:26, background:T.teal, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="5.5" stroke="white" strokeWidth="1.5"/>
+              <path d="M7 4v3.5l2 1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div style={{ flex:1 }}>
+            <p style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:T.sbText, margin:0, letterSpacing:"0.05em" }}>ENV·ASPECTS</p>
+            <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:0, letterSpacing:"0.07em" }}>TOOLKIT</p>
+          </div>
+          <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
+          <button onClick={()=>setCollapsed(true)} title="Collapse sidebar"
+            style={{ background:"transparent", border:"none", cursor:"pointer", color:T.sbFaint,
+                     fontSize:16, lineHeight:1, padding:"2px 0", marginLeft:2 }}>
+            ‹
+          </button>
+        </div>
+        <button onClick={onPortfolio}
+          style={{ width:"100%", marginTop:8, padding:"6px 10px", borderRadius:5,
+                   border:"1px solid "+(portfolioActive?"var(--teal-bd)":"var(--sb-bd)"),
+                   background:portfolioActive?"var(--teal)":"transparent",
+                   color:portfolioActive?"#fff":"var(--sb-muted)",
+                   fontFamily:"var(--sans,system-ui)", fontSize:11, fontWeight:500,
+                   cursor:"pointer", display:"flex", alignItems:"center", gap:6, justifyContent:"center" }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+            <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+          </svg>
+          Portfolio overview
+        </button>
+      </div>
+      <div style={{ flex:1, overflowY:"auto", padding:"10px 8px" }}>
+        <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.sbFaint, letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 8px 8px" }}>
+          Projects ({projects.length})
+        </p>
+        {projects.length === 0 && <p style={{ fontFamily:T.mono, fontSize:10, color:T.sbFaint, padding:"0 8px", fontStyle:"italic" }}>No projects yet</p>}
+        {projects.map(p => {
+          const sigC    = (p.aspects||[]).filter(a=>calcSig(a)==="SIGNIFICANT").length;
+          const isActive = p.id === activeId;
+          return (
+            <div key={p.id} style={{ position:"relative", marginBottom:1 }}
+              onMouseEnter={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="1"; }}
+              onMouseLeave={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="0"; }}>
+              <button onClick={()=>onSelect(p.id)}
+                style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6,
+                         cursor:"pointer", fontFamily:T.sans, border:"1px solid transparent",
+                         background: isActive ? T.sbBg2 : "transparent",
+                         borderColor: isActive ? T.sbBd : "transparent" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }}>
+                  <span style={{ fontSize:12, fontWeight:isActive?600:400, color:isActive?T.sbText:T.sbMuted,
+                                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {p.name || <span style={{ color:T.sbFaint, fontStyle:"italic" }}>Unnamed project</span>}
+                  </span>
+                  {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"1px 5px",
+                                            borderRadius:3, background:T.sbSig, color:T.sbSigTx, flexShrink:0 }}>{sigC}</span>}
+                </div>
+                <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:"2px 0 0",
+                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {p.type||"No type"} · {(p.aspects||[]).length} aspects
+                </p>
+              </button>
+              <button className="dup-btn" onClick={e=>{ e.stopPropagation(); onDuplicate(p.id); }}
+                title="Duplicate project"
+                style={{ position:"absolute", top:"50%", right:6, transform:"translateY(-50%)",
+                         opacity:0, transition:"opacity 0.15s",
+                         background:T.sbBg2, border:"1px solid "+T.sbBd, borderRadius:4,
+                         padding:"3px 6px", cursor:"pointer", fontSize:11, color:T.sbMuted }}>
+                ⧉
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ padding:"8px", borderTop:"1px solid "+T.sbBd }}>
+        <button onClick={onNew}
+          style={{ width:"100%", padding:"7px", borderRadius:6, border:"1px dashed "+T.sbBd, marginBottom:6,
+                   background:"transparent", color:T.sbFaint, fontFamily:T.mono, fontSize:11, cursor:"pointer" }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.color=T.teal;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--sb-bd)";e.currentTarget.style.color="var(--sb-faint)";}}>
+          + New project
+        </button>
+        <div style={{ display:"flex", gap:4 }}>
+          {[[0.88,"A−"],[1.0,"A"],[1.15,"A+"]].map(([val,label]) => (
+            <button key={val} onClick={()=>onZoom(val)}
+              style={{ flex:1, padding:"4px 0", fontSize:val===1.15?12:val===1.0?11:10,
+                       fontFamily:T.mono, fontWeight:500, cursor:"pointer", borderRadius:4,
+                       border:"1px solid "+(Math.abs(zoom-val)<0.01?T.teal:"var(--sb-bd)"),
+                       background:Math.abs(zoom-val)<0.01?T.teal:"transparent",
+                       color:Math.abs(zoom-val)<0.01?"#fff":"var(--sb-muted)" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── COR Lookup ───────────────────────────────────────────────────────────────
+const COR_LOOKUP = [
+  {code:"BCA",cat:"Architect",desc:"Wall/Cladding",ef:13},{code:"BCB",cat:"Architect",desc:"Floor",ef:13},
+  {code:"BCC",cat:"Architect",desc:"Roof",ef:13},{code:"BCD",cat:"Architect",desc:"Doors & windows",ef:13},
+  {code:"BCE",cat:"Architect",desc:"Furniture & interior",ef:13},{code:"BCF",cat:"Architect",desc:"Signs",ef:13},
+  {code:"BCG",cat:"Architect",desc:"Insulation",ef:13},{code:"BCH",cat:"Architect",desc:"Prefabricated modules",ef:13},
+  {code:"BCZ",cat:"Architect",desc:"Other Architecture & Building Bulk",ef:13},
+  {code:"BJA",cat:"Instrument",desc:"Instrument",ef:24},{code:"BJB",cat:"Instrument",desc:"Instrument valves",ef:7.2},
+  {code:"BJCA",cat:"Instrument",desc:"Group 1 - Instrument Cables",ef:6.8},{code:"BJCB",cat:"Instrument",desc:"Group 2 - Instrument Cables",ef:6.8},
+  {code:"BJCC",cat:"Instrument",desc:"Group 3 - Instrument Cables",ef:6.8},{code:"BJCD",cat:"Instrument",desc:"Group 4 - Instrument Cables",ef:6.8},
+  {code:"BJCE",cat:"Instrument",desc:"Group 5 - Instrument Cables",ef:6.8},{code:"BJCF",cat:"Instrument",desc:"Group 6 - Instrument Cables",ef:6.8},
+  {code:"BTCA",cat:"Instrument",desc:"Group 1 - Coaxial Cables",ef:6.8},{code:"BTCB",cat:"Instrument",desc:"Group 2 - CCTV Cables",ef:6.8},
+  {code:"BTCC",cat:"Instrument",desc:"Group 3 - Optical Cables",ef:6.8},{code:"BTCD",cat:"Instrument",desc:"Group 4 - Comp. Data Cables",ef:6.8},
+  {code:"BJD",cat:"Instrument",desc:"Instrument Junction boxes",ef:7.2},{code:"BTD",cat:"Instrument",desc:"Telecom Junction boxes",ef:7.2},
+  {code:"BJTD",cat:"Instrument",desc:"Junction boxes",ef:7.2},{code:"Umbilicals",cat:"Instrument",desc:"Topside Umbilicals",ef:6.8},
+  {code:"BJE",cat:"Instrument",desc:"Instrument tubes/Tubing",ef:7.2},{code:"BTA",cat:"Instrument",desc:"Telecom. Apparatus",ef:24},
+  {code:"BJG",cat:"Instrument",desc:"Accessories",ef:7.2},{code:"BJZ",cat:"Instrument",desc:"Other instrument bulk",ef:7.2},
+  {code:"BTZ",cat:"Instrument",desc:"Other telecom bulk",ef:7.2},{code:"BJTZ",cat:"Instrument",desc:"Other instrument/telecom bulk",ef:7.2},
+  {code:"BEAA",cat:"Electro",desc:"Group 1 - Electric Cable",ef:6.8},{code:"BEAB",cat:"Electro",desc:"Group 2 - Electric Cable",ef:6.8},
+  {code:"BEAC",cat:"Electro",desc:"Group 3 - Electric Cable",ef:6.8},{code:"BEAD",cat:"Electro",desc:"Group 4 - Electric Cable",ef:6.8},
+  {code:"BEAE",cat:"Electro",desc:"Group 5 - Electric Cable",ef:6.8},{code:"BEAF",cat:"Electro",desc:"Group 6 - Heating cable",ef:6.8},
+  {code:"BEAG",cat:"Electro",desc:"Group 7 - Heating cable",ef:6.8},{code:"BEB",cat:"Electro",desc:"Cable trays, conduit & suspension",ef:7.2},
+  {code:"BEC",cat:"Electro",desc:"Lights",ef:18},{code:"BED",cat:"Electro",desc:"Junction boxes",ef:5.6},
+  {code:"BEE",cat:"Electro",desc:"Accessories",ef:5.2},{code:"BEZ",cat:"Electro",desc:"Other electrical bulk",ef:5.2},
+  {code:"BHB",cat:"HVAC",desc:"Inline items and dampers",ef:7.2},
+  {code:"BMA_Struktur",cat:"Surface treatment",desc:"Structures",ef:6.6},{code:"BMA_Vegger",cat:"Surface treatment",desc:"Walls",ef:6.6},
+  {code:"BMA_Tak",cat:"Surface treatment",desc:"Roof surfaces",ef:6.6},{code:"BMA_Dekksflater",cat:"Surface treatment",desc:"Deck surfaces",ef:6.6},
+  {code:"BMA_Dorer",cat:"Surface treatment",desc:"Doors",ef:6.6},{code:"BMA_Ror_OD_4",cat:"Surface treatment",desc:"Pipes OD<4\"",ef:6.6},
+  {code:"BMA_Ror_OD_4_OD_10",cat:"Surface treatment",desc:"Pipes 4\"<OD<10\"",ef:6.6},{code:"BMA_Ror_OD_10",cat:"Surface treatment",desc:"Pipes OD>10\"",ef:6.6},
+  {code:"BMA_Utstyr",cat:"Surface treatment",desc:"Equipment",ef:6.6},{code:"BMA_Tanker_utvendig",cat:"Surface treatment",desc:"Outside tanks",ef:6.6},
+  {code:"BMA_Tanker_invendig",cat:"Surface treatment",desc:"Inside tanks",ef:6.6},{code:"BMA_Kanaler",cat:"Surface treatment",desc:"Channels",ef:6.6},
+  {code:"BMA_Isolerte_flater",cat:"Surface treatment",desc:"Isolated surfaces",ef:6.6},
+  {code:"EJ",cat:"Instrument",desc:"Instrument",ef:24},{code:"EE",cat:"Electro",desc:"Electro",ef:34},
+  {code:"EG",cat:"HVAC",desc:"HVAC",ef:7.2},{code:"ES",cat:"Safety",desc:"Safety",ef:7.2},
+  {code:"EZ",cat:"Mechanical",desc:"In-line equipment",ef:7.2},{code:"EZR",cat:"Mechanical",desc:"Mechanical rotating",ef:7.2},
+  {code:"BLA",cat:"Piping",desc:"Pipes, flanges & fittings",ef:3},{code:"BLB",cat:"Piping",desc:"Valves",ef:3},
+  {code:"BLC",cat:"Piping",desc:"Supports",ef:3},{code:"BLD",cat:"Piping",desc:"Insulation (INS)",ef:3},
+  {code:"BLZ",cat:"Piping",desc:"Other piping bulk",ef:3},{code:"BLD_Klasse_1",cat:"Insulation",desc:"Insulation class 1 - Heat conservation",ef:-1},
+  {code:"BNAA",cat:"Structure",desc:"Primary Structures",ef:10},{code:"BNAB",cat:"Structure",desc:"Secondary Structures",ef:10},
+  {code:"BNAC",cat:"Structure",desc:"Outfitting: Access platforms",ef:10},{code:"BNAD",cat:"Structure",desc:"Outfitting: Wall & Eq. support",ef:10},
+  {code:"BNAE",cat:"Structure",desc:"Outfitting: Walkways",ef:10},{code:"BNAF",cat:"Structure",desc:"Outfitting: Monorails",ef:10},
+  {code:"BNAG",cat:"Structure",desc:"Outfitting: Handrails",ef:10},{code:"BNAH",cat:"Structure",desc:"Outfitting: Sleeves",ef:10},
+  {code:"BNAJ",cat:"Structure",desc:"Outfitting: Dropped object protection",ef:10},{code:"BNAK",cat:"Structure",desc:"Outfitting: Grating",ef:10},
+  {code:"BNAL",cat:"Structure",desc:"Other Outfitting Structures",ef:10},{code:"BNC",cat:"Structure",desc:"Temporary installation aids",ef:10},
+  {code:"BND",cat:"Structure",desc:"Grillage/seafastening/load out",ef:10},{code:"BNZ",cat:"Structure",desc:"Other structural bulk",ef:10},
+  {code:"CS",cat:"Material",desc:"Carbon Steel",ef:10},{code:"SS",cat:"Material",desc:"Stainless Steel",ef:10},
+  {code:"AL",cat:"Material",desc:"Aluminium",ef:10},{code:"GRP",cat:"Material",desc:"Glassfiber reinforced plastics",ef:10},
+];
+const COR_MAP = {};
+COR_LOOKUP.forEach(r => { COR_MAP[r.code] = r; });
+
+// ── Column-mapping schema ─────────────────────────────────────────────────────
+// Each field lists aliases in descending priority. The engine tries:
+//   1. exact normalised match
+//   2. header contains alias OR alias contains header
+//   3. shared word count >= 2
+// If confidence is low the user is prompted to try AI mapping.
+const FIELD_SCHEMAS = {
+  MTO: {
+    desc:   { label: "Item Description",    req: true,
+              aliases: ["weight item descr","item description","description","item desc",
+                        "tag description","component description","item name","descr",
+                        "component","name","short description"] },
+    mat:    { label: "Material",            req: false,
+              aliases: ["material","material type","mat","material code","material grade",
+                        "alloy","spec","specification","material spec"] },
+    cor:    { label: "COR Code",            req: true,
+              aliases: ["cost code cor","cor code","cor","costcode","cost code",
+                        "commodity code","discipline code","material group","wbs code",
+                        "account code","budget code","class code"] },
+    mhc:    { label: "Handling Code",       req: true,
+              aliases: ["mod. handl. code","module handling code","modular handling code",
+                        "handling code","mhc","mod handling","modular handling",
+                        "module code","handl code","mod handl","installation code"] },
+    weight: { label: "Gross Dry Weight (kg)", req: true,
+              aliases: ["gross dry weight (kg)","gross dry weight","gdw","dry weight (kg)",
+                        "dry weight","gross weight (kg)","gross weight","weight (kg)",
+                        "weight kg","net weight (kg)","net weight","wt (kg)","wt kg",
+                        "weight","mass (kg)","mass","total weight","unit weight"] },
+  },
+  MEL: {
+    desc:   { label: "Equipment Description", req: true,
+              aliases: ["equipment type description","equipment type descr",
+                        "equipment description","equip type desc","tag description",
+                        "equipment name","description","equip desc","tag desc",
+                        "name","item description","descr"] },
+    cor:    { label: "COR Code",              req: true,
+              aliases: ["cost code cor","cor code","cor","costcode","cost code",
+                        "commodity code","discipline code","material group","wbs code",
+                        "account code","class code"] },
+    mhc:    { label: "Handling Code",         req: true,
+              aliases: ["mod. handl. code","module handling code","modular handling code",
+                        "handling code","mhc","mod handling","modular handling",
+                        "module code","handl code","installation code"] },
+    weight: { label: "Gross Dry Weight (kg)", req: true,
+              aliases: ["gross dry weight (kg)","gross dry weight","gdw","dry weight (kg)",
+                        "dry weight","gross weight (kg)","gross weight","weight (kg)",
+                        "weight kg","net weight (kg)","net weight","wt (kg)","wt kg",
+                        "weight","mass (kg)","mass","total weight"] },
+  },
+};
+
+function normCol(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function bestColMatch(headers, aliases) {
+  const nHeaders = headers.map(h => ({ orig: h, norm: normCol(h) }));
+  const nAliases  = aliases.map(normCol);
+  // 1. exact
+  for (const { orig, norm } of nHeaders) {
+    if (nAliases.includes(norm)) return orig;
+  }
+  // 2. substring
+  for (const { orig, norm } of nHeaders) {
+    for (const a of nAliases) {
+      if (a.length > 2 && (norm.includes(a) || a.includes(norm))) return orig;
+    }
+  }
+  // 3. word overlap >= 2 significant words
+  for (const { orig, norm } of nHeaders) {
+    const hw = new Set(norm.split(" ").filter(w => w.length > 2));
+    for (const a of nAliases) {
+      const aw = a.split(" ").filter(w => w.length > 2);
+      if (aw.filter(w => hw.has(w)).length >= 2) return orig;
+    }
+  }
+  return null;
+}
+
+function autoMapHeaders(headers, schemaType) {
+  const schema  = FIELD_SCHEMAS[schemaType];
+  const mapping = {};
+  for (const [key, def] of Object.entries(schema)) {
+    mapping[key] = bestColMatch(headers, def.aliases);
+  }
+  const reqFields   = Object.entries(schema).filter(([, d]) => d.req);
+  const mappedReq   = reqFields.filter(([k]) => mapping[k]).length;
+  const confidence  = reqFields.length > 0 ? mappedReq / reqFields.length : 0;
+  return { mapping, confidence };
+}
+
+// Score a row on how likely it is to be a header row
+function scoreHeaderRow(row) {
+  const HEADER_KEYWORDS = [
+    "description","descr","desc","name","type","item","tag","equip","component",
+    "weight","wt","mass","kg","gdw","gross","dry",
+    "code","cor","cost","commodity","class","account","wbs","group","discipline",
+    "material","mat","alloy","spec",
+    "handling","handl","mhc","module","mod","install",
+    "qty","quantity","unit","no","number","ref","id",
+  ];
+  const cells = row.map(v => String(v == null ? "" : v).trim()).filter(Boolean);
+  if (cells.length < 2) return 0;
+  const textCells    = cells.filter(v => isNaN(Number(v)) || v.length > 8);
+  const keywordHits  = cells.filter(v =>
+    HEADER_KEYWORDS.some(kw => v.toLowerCase().includes(kw))
+  ).length;
+  return textCells.length * 1.5 + keywordHits * 4 + cells.length * 0.3;
+}
+
+function detectHeaderRow(rawRows) {
+  // Scan first 25 rows, return index of most likely header row
+  const scan = rawRows.slice(0, 25);
+  let bestIdx = 0, bestScore = -1;
+  scan.forEach((row, i) => {
+    const score = scoreHeaderRow(row);
+    if (score > bestScore) { bestScore = score; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
+function parseSheetFromRow(rawRows, headerRowIdx) {
+  // Given all rows and a chosen header row index, return { headers, sampleRows }
+  const headerArr = (rawRows[headerRowIdx] || []).map(h => String(h == null ? "" : h).trim());
+  // Deduplicate blank/repeated headers by appending index
+  const headers = headerArr.map((h, i) => {
+    if (!h) return "_col" + i;
+    let name = h, count = 0;
+    const base = h;
+    while (headerArr.slice(0, i).includes(name)) { count++; name = base + "_" + count; }
+    return name;
+  }).filter(h => h !== "_col" + headerArr.indexOf(""));  // keep only non-empty originals
+
+  // Re-derive headers preserving positions for all columns
+  const finalHeaders = headerArr.map((h, i) => h || ("_col" + i));
+
+  const sampleRows = rawRows.slice(headerRowIdx + 1, headerRowIdx + 9)
+    .filter(row => row.some(v => v !== "" && v !== null && v !== undefined))
+    .map(rowArr => {
+      const obj = {};
+      finalHeaders.forEach((h, i) => { obj[h] = rowArr[i]; });
+      return obj;
+    });
+  return { headers: finalHeaders, sampleRows };
+}
+
+function detectSheets(wb) {
+  const result = [];
+  for (const name of wb.SheetNames) {
+    const ws  = wb.Sheets[name];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (raw.length < 2) continue;
+
+    const headerRowIdx = detectHeaderRow(raw);
+    const { headers, sampleRows } = parseSheetFromRow(raw, headerRowIdx);
+    const visibleHeaders = headers.filter(h => !h.startsWith("_col"));
+    if (visibleHeaders.length < 2) continue;
+
+    const mto = autoMapHeaders(visibleHeaders, "MTO");
+    const mel = autoMapHeaders(visibleHeaders, "MEL");
+    let type = "unknown", mapping = {}, confidence = 0;
+    if (mto.confidence >= mel.confidence && mto.confidence > 0.4) {
+      type = "MTO"; mapping = mto.mapping; confidence = mto.confidence;
+    } else if (mel.confidence > 0.4) {
+      type = "MEL"; mapping = mel.mapping; confidence = mel.confidence;
+    } else if (mto.confidence > 0) {
+      type = "MTO"; mapping = mto.mapping; confidence = mto.confidence;
+    } else {
+      type = "MTO"; mapping = mto.mapping; confidence = 0;  // show sheet anyway
+    }
+
+    // Store raw preview rows (first 20) so UI can let user pick header row
+    const rawPreview = raw.slice(0, 20).map(row =>
+      row.map(v => v === null || v === undefined ? "" : String(v))
+    );
+
+    result.push({ name, headers: visibleHeaders, sampleRows,
+                  headerRowIdx, rawPreview,
+                  type, mapping, confidence,
+                  totalRows: Math.max(0, raw.length - 1 - headerRowIdx),
+                  include: false });
+  }
+  return result;
+}
+
+
+
+// ── Calculation (works with any column mapping) ───────────────────────────────
+function calcSheets(wb, sheetMetas) {
+  const mtoRows = [], melRows = [];
+  for (const sm of sheetMetas) {
+    if (!sm.include || sm.type === "unknown") continue;
+    const ws  = wb.Sheets[sm.name];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (raw.length < 2) continue;
+    const hIdx = sm.headerRowIdx != null ? sm.headerRowIdx : detectHeaderRow(raw);
+    const { headers } = parseSheetFromRow(raw, hIdx);
+    raw.slice(hIdx + 1).forEach((rowArr, idx) => {
+      const row = {};
+      headers.forEach((h, j) => { row[h] = rowArr[j]; });
+      const m = sm.mapping;
+      const desc      = m.desc   ? String(row[m.desc]   || "") : "";
+      const material  = m.mat    ? String(row[m.mat]    || "") : "";
+      const cor       = m.cor    ? String(row[m.cor]    || "").trim() : "";
+      const mhc       = m.mhc   ? String(row[m.mhc]    || "").trim() : "";
+      const weightRaw = m.weight ? row[m.weight] : "";
+      if (!desc || !desc.trim()) return; // skip rows with blank description
+      // skip summary/total rows (bottom lines)
+      const descL = desc.trim().toLowerCase();
+      const SKIP_LABELS = ['total','subtotal','sub-total','grand total','bottom line','sum total','totalt','netto','brutto','net weight','gross weight total','sum'];
+      if (SKIP_LABELS.some(p => descL === p || descL === p + ':' || descL === p + ' :') || descL.startsWith('bottom line') || (descL.startsWith('total ') && !descL.includes('valve') && !descL.includes('assembly'))) return;
+      // Only calculate NP and RP handling codes — skip all others silently
+      if (mhc !== "NP" && mhc !== "RP") return;
+      const entry = { _sheet: sm.name, _row: idx + 2, _type: sm.type,
+                      desc, material, cor, mhc, weightRaw };
+      if (sm.type === "MTO") mtoRows.push(entry);
+      else melRows.push(entry);
+    });
+  }
+
+  function validateRows(rows) {
+    const out = [], errs = [];
+    for (const r of rows) {
+      const rowErrs = [];
+      if (!r.cor) {
+        rowErrs.push({ col: "COR Code", val: r.cor, msg: "COR code is blank.", notFound: false });
+      } else if (!COR_MAP[r.cor]) {
+        rowErrs.push({ col: "COR Code", val: r.cor, msg: "COR code '" + r.cor + "' not in lookup.", notFound: true });
+      }
+      if (r.weightRaw === "" || r.weightRaw === null || r.weightRaw === undefined) {
+        rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight is blank." });
+      } else if (isNaN(Number(r.weightRaw))) {
+        rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is not numeric." });
+      }
+      const corEntry = COR_MAP[r.cor];
+      let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
+      if (!rowErrs.length && corEntry) {
+        emissionFactor = corEntry.ef; category = corEntry.cat; corDesc = corEntry.desc;
+        emissionTco2e = (Number(r.weightRaw) * emissionFactor) / 1000;
+      }
+      const row = { source: r._type, sheet: r._sheet, rowNum: r._row,
+                    desc: r.desc, material: r.material, cor: r.cor, mhc: r.mhc,
+                    weight: rowErrs.find(e => e.col === "Weight") ? null : Number(r.weightRaw),
+                    category, corDesc, emissionFactor, emissionTco2e,
+                    status: rowErrs.length ? "ERROR" : "VALID", errors: rowErrs };
+      if (rowErrs.length) errs.push({ sheet: r._sheet, row: r._row, desc: r.desc, cor: r.cor, errs: rowErrs });
+      out.push(row);
+    }
+    return { rows: out, errs };
+  }
+
+  const mto = validateRows(mtoRows);
+  const mel = validateRows(melRows);
+  const allRows   = [...mto.rows, ...mel.rows];
+  const allErrors = [...mto.errs, ...mel.errs];
+  const mtoTotal  = mto.rows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const melTotal  = mel.rows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const unknownCors = [...new Set(allErrors.flatMap(e => e.errs.filter(x => x.notFound).map(x => x.val)))].filter(Boolean);
+  return {
+    success: true,
+    status: allErrors.length > 0 ? "completed_with_errors" : "success",
+    mtoTotal, melTotal, combined: mtoTotal + melTotal,
+    mtoRows: mto.rows, melRows: mel.rows, allRows,
+    errors: allErrors, unknownCors,
+    sheets: sheetMetas.filter(s => s.include),
+  };
+}
+
+// ── Local COR suggestion (no API — pure keyword scoring) ──────────────────────
+function localSuggestCOR(descTexts) {
+  const text  = descTexts.filter(Boolean).join(" ").toLowerCase();
+  const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+  // Domain keyword → likely COR codes (high-confidence boosts)
+  const DOMAIN = [
+    { kws:["valve","valv","kontrollventil"],             codes:["BJB","BLB","BHB"] },
+    { kws:["pipe","piping","flange","fitting","rør"],    codes:["BLA"] },
+    { kws:["cable","kabel","wiring"],                    codes:["BJCA","BEAA","BEAB"] },
+    { kws:["struct","struktur","beam","column","stål"],  codes:["BNAA","BNAB"] },
+    { kws:["platform","walkway","grating","handrail"],   codes:["BNAC","BNAE","BNAK","BNAG"] },
+    { kws:["pump","kompressor","compressor","motor","turbo","compr"],codes:["EZR"] },
+    { kws:["vessel","tank","exchanger","separator"],     codes:["EZ"] },
+    { kws:["instrument","transmitter","sensor","gauge"], codes:["BJA"] },
+    { kws:["junction","jbox","junction box"],            codes:["BJD","BED"] },
+    { kws:["insulation","isolasjon"],                    codes:["BLD","BCG"] },
+    { kws:["electric","elektro","light","lighting"],     codes:["BEAA","BEC"] },
+    { kws:["cable tray","tray","conduit"],               codes:["BEB"] },
+    { kws:["hvac","duct","damper","ventil"],             codes:["EG","BHB"] },
+    { kws:["paint","coating","surface","maling"],        codes:["BMA_Struktur"] },
+    { kws:["support","hanger","bracket"],                codes:["BLC"] },
+    { kws:["steel","stainless","carbon"],                codes:["CS","SS"] },
+    { kws:["telecom","tele","coax","optical","fibre"],   codes:["BTA","BTCA","BTCC"] },
+    { kws:["safety","sikkerhet","fire","brann"],         codes:["ES"] },
+    { kws:["scaffold","temporary","stillas"],            codes:["BNC"] },
+  ];
+
+  const scores = COR_LOOKUP.map(c => {
+    const corText  = (c.code + " " + c.cat + " " + c.desc).toLowerCase();
+    const corWords = corText.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+    let score = 0;
+    // Word overlap
+    words.forEach(w => {
+      if (corWords.includes(w)) score += 4;
+      else corWords.forEach(cw => {
+        if (w.length > 3 && cw.length > 3 && (w.includes(cw) || cw.includes(w))) score += 1;
+      });
+    });
+    // Domain keyword bonus
+    DOMAIN.forEach(({ kws, codes }) => {
+      if (codes.includes(c.code) && kws.some(kw => text.includes(kw))) score += 12;
+    });
+    return { code: c.code, category: c.cat, description: c.desc, ef: c.ef, score,
+             reason: score > 0 ? "Keyword match against description and COR library" : "No strong match" };
+  });
+
+  return scores.sort((a, b) => b.score - a.score).slice(0, 3);
+}
+
+// ── applyOverrides — pure function, applies user COR overrides to a result ────
+function applyOverrides(calcResult, overrides) {
+  if (!calcResult || !calcResult.allRows || !overrides || Object.keys(overrides).length === 0) return calcResult;
+  const newAllRows = calcResult.allRows.map(row => {
+    const key = row.sheet + "|" + row.rowNum;
+    const oc  = overrides[key];
+    if (!oc) return row;
+    const entry = COR_MAP[oc];
+    if (!entry || row.weight == null || isNaN(Number(row.weight))) return row;
+    const ef  = entry.ef;
+    const tco = (Number(row.weight) * ef) / 1000;
+    return { ...row, cor: oc, category: entry.cat, corDesc: entry.desc,
+             emissionFactor: ef, emissionTco2e: tco, status: "VALID", errors: [], _overridden: true };
+  });
+  const mtoRows = newAllRows.filter(r => r.source === "MTO");
+  const melRows = newAllRows.filter(r => r.source === "MEL");
+  const mtoTotal = mtoRows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const melTotal = melRows.filter(r => r.status === "VALID").reduce((s, r) => s + (r.emissionTco2e || 0), 0);
+  const errs = newAllRows.filter(r => r.status === "ERROR").map(r => ({
+    sheet: r.sheet, row: r.rowNum, desc: r.desc, cor: r.cor, errs: r.errors
+  }));
+  const unknownCors = [...new Set(errs.flatMap(e => (e.errs||[]).filter(x => x.notFound).map(x => x.val)))].filter(Boolean);
+  return { ...calcResult, allRows: newAllRows, mtoRows, melRows, mtoTotal, melTotal,
+           combined: mtoTotal + melTotal, errors: errs, unknownCors,
+           status: errs.length > 0 ? "completed_with_errors" : "success" };
+}
+
+// ── FootprintTab ──────────────────────────────────────────────────────────────
+function FootprintTab({ project, onChange }) {
+  const [step, setStep]           = useState("upload");
+  const [fileName, setFileName]   = useState(project.footprintFile || "");
+  const [sheetMetas, setSheetMetas] = useState(project.footprintMeta || []);
+  const [result, setResult]       = useState(project.footprint || null);
+  const [suggestions, setSuggestions] = useState({});
+  const [corOverrides, setCorOverrides]   = useState(project.footprintCorOverrides || {});
+  const [overrideHistory, setOverrideHistory] = useState([project.footprintCorOverrides || {}]);
+  const [historyIdx, setHistoryIdx]           = useState(0);
+  const [overrideInput, setOverrideInput] = useState({});  // rowKey -> typed string
+  const [remapSelections, setRemapSelections] = useState({});  // unknownCode -> selectedReplacement
+  const [toast, setToast] = useState("");
+  const [view, setView]   = useState("summary");
+  const [dFilter, setDFilter] = useState("ALL");
+  const [dSearch, setDSearch] = useState("");
+  const [colHighlight, setColHighlight] = useState(null);  // "sheetName|colName"
+  const hlTimer     = React.useRef(null);
+  const wbRef       = React.useRef(null);      // raw ArrayBuffer kept for re-calc
+  const workerRef   = React.useRef(null);
+  const [workerBusy, setWorkerBusy]   = useState(false);
+  const [workerPct, setWorkerPct]     = useState(0);
+  const [workerLabel, setWorkerLabel] = useState("");
+
+  // spawn / reuse worker
+  const getWorker = () => {
+    if (workerRef.current) return workerRef.current;
+    const w = new Worker(new URL("./fpWorker.js", import.meta.url));
+    workerRef.current = w;
+    return w;
+  };
+  const killWorker = () => {
+    if (workerRef.current) { workerRef.current.terminate(); workerRef.current = null; }
+    setWorkerBusy(false); setWorkerPct(0); setWorkerLabel("");
+  };
+
+  // ── Keyboard Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z for undo/redo ─────────────────
+  React.useEffect(() => {
+    const handler = e => {
+      if (step !== "result") return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (e.key === "z" && !e.shiftKey) { e.preventDefault(); doUndo(); }
+      if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); doRedo(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });  // no dep array — captures latest closure vals via doUndo/doRedo refs
+
+  // displayResult = base result with overrides applied
+  const displayResult = React.useMemo(
+    () => applyOverrides(result, corOverrides),
+    [result, corOverrides]
+  );
+
+  // ── Highlight + scroll to a mapped column ───────────────────────────────────
+  const highlightCol = (sheetName, colName) => {
+    if (!colName) return;
+    if (hlTimer.current) clearTimeout(hlTimer.current);
+    const key = sheetName + "|" + colName;
+    setColHighlight(key);
+    setTimeout(() => {
+      const id = "fp-col-" + (sheetName + "-" + colName).replace(/[^a-zA-Z0-9]/g, "_");
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }, 40);
+    hlTimer.current = setTimeout(() => setColHighlight(null), 2000);
+  };
+
+  // ── CSV export (no raw data, just calculated results) ───────────────────────
+  const exportCSV = () => {
+    if (!displayResult || !displayResult.allRows) return;
+    const hdrs = ["Source","Sheet","Row","Description","Material","COR Code","Category",
+                  "COR Description","Handling Code","Weight (kg)","Emission Factor",
+                  "Emission (tCO2e)","Status","Overridden"];
+    const rows = displayResult.allRows.map(r => [
+      r.source, r.sheet, r.rowNum, r.desc||"", r.material||"", r.cor||"",
+      r.category||"", r.corDesc||"", r.mhc||"",
+      r.weight != null ? r.weight : "",
+      r.emissionFactor != null ? r.emissionFactor : "",
+      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : "",
+      r.status, r._overridden ? "yes" : ""
+    ]);
+    rows.push([]);
+    rows.push(["SUMMARY","","","","","","","","","","",displayResult.mtoTotal.toFixed(6)+" tCO2e","MTO",""]);
+    rows.push(["SUMMARY","","","","","","","","","","",displayResult.melTotal.toFixed(6)+" tCO2e","MEL",""]);
+    rows.push(["SUMMARY","","","","","","","","","","",displayResult.combined.toFixed(6)+" tCO2e","COMBINED",""]);
+    const csv = [hdrs, ...rows]
+      .map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = (project.name || "footprint") + "_calculation.csv";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+
+  // ── File intake — worker-based ───────────────────────────────────────────────
+  const ingestFile = async (file) => {
+    killWorker();
+    setFileName(file.name);
+    setWorkerBusy(true); setWorkerPct(5); setWorkerLabel("Reading file…");
+    const buf = await file.arrayBuffer();
+    wbRef.current = buf;                       // store raw buffer, not parsed wb
+    const w = getWorker();
+    w.onmessage = e => {
+      const { type, sheetMetas: metas, pct, label, message } = e.data;
+      if (type === "PROGRESS") { setWorkerPct(pct); setWorkerLabel(label); }
+      else if (type === "DETECT_DONE") {
+        setWorkerBusy(false);
+        if (!metas || metas.length === 0) {
+          setResult({ success: false, fatalError: "No sheets with usable column headers found." });
+          setStep("result");
+        } else {
+          setSheetMetas(metas); setResult(null); setSuggestions({}); setStep("mapping");
+        }
+      } else if (type === "ERROR") {
+        setWorkerBusy(false);
+        setResult({ success: false, fatalError: "Could not read file: " + message });
+        setStep("result");
+      }
+    };
+    w.postMessage({ type: "DETECT", buffer: buf, fileName: file.name }, [buf.slice(0)]);
+  };
+  const onFile = e => { const f = e.target.files && e.target.files[0]; if (f) { ingestFile(f); e.target.value = ""; } };
+  const onDrop = e => { e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingestFile(f); };
+
+
+
+  const setMapping = (sheetName, field, value) => {
+    setSheetMetas(prev => prev.map(s =>
+      s.name === sheetName ? { ...s, mapping: { ...s.mapping, [field]: value || null } } : s
+    ));
+  };
+  const setSheetType = (sheetName, type) => {
+    setSheetMetas(prev => prev.map(s => {
+      if (s.name !== sheetName) return s;
+      const m = autoMapHeaders(s.headers, type);
+      return { ...s, type, mapping: m.mapping, confidence: m.confidence };
+    }));
+  };
+  const toggleInclude = (sheetName) => {
+    setSheetMetas(prev => prev.map(s =>
+      s.name === sheetName ? { ...s, include: !s.include } : s
+    ));
+  };
+  const setHeaderRow = (sheetName, rowIdx) => {
+    setSheetMetas(prev => prev.map(s => {
+      if (s.name !== sheetName) return s;
+      const rawPreview = s.rawPreview || [];
+      if (!rawPreview[rowIdx]) return s;
+      const { headers, sampleRows } = parseSheetFromRow(rawPreview, rowIdx);
+      const visibleHeaders = headers.filter(h => !h.startsWith("_col"));
+      const mto = autoMapHeaders(visibleHeaders, "MTO");
+      const mel = autoMapHeaders(visibleHeaders, "MEL");
+      const best = s.type === "MEL" ? mel : mto;
+      return { ...s, headerRowIdx: rowIdx, headers: visibleHeaders, sampleRows,
+               mapping: best.mapping, confidence: best.confidence, aiMapped: false };
+    }));
+  };
+
+  // ── Run calculation — worker-based ──────────────────────────────────────────
+  const doCalc = () => {
+    if (!wbRef.current) return;
+    killWorker();
+    setWorkerBusy(true); setWorkerPct(5); setWorkerLabel("Preparing…");
+    const w = getWorker();
+    w.onmessage = e => {
+      const { type, result: cal, pct, label, message } = e.data;
+      if (type === "PROGRESS") { setWorkerPct(pct); setWorkerLabel(label); }
+      else if (type === "CALC_DONE") {
+        setWorkerBusy(false);
+        setResult(cal); setView("summary"); setStep("result");
+        setCorOverrides({});
+        onChange({ ...project, footprint: cal, footprintFile: fileName,
+                   footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
+        setSuggestions({});
+      } else if (type === "ERROR") {
+        setWorkerBusy(false);
+        setResult({ success: false, fatalError: "Calculation failed: " + message });
+        setStep("result");
+      }
+    };
+    // Transfer a copy so the original buffer stays for potential re-calc
+    const bufCopy = wbRef.current.slice(0);
+    w.postMessage({ type: "CALC", buffer: bufCopy, sheetMetas }, [bufCopy]);
+  };
+
+  // ── COR override helpers ─────────────────────────────────────────────────────
+  // ── History-aware override commit ────────────────────────────────────────────
+  const commitOverrides = (upd, msg) => {
+    setCorOverrides(upd);
+    // Truncate future history if we branched
+    const newHist = [...overrideHistory.slice(0, historyIdx + 1), upd];
+    setOverrideHistory(newHist);
+    setHistoryIdx(newHist.length - 1);
+    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+    if (msg) { setToast(msg); setTimeout(() => setToast(""), 2500); }
+  };
+  const doUndo = () => {
+    if (historyIdx <= 0) return;
+    const prev = overrideHistory[historyIdx - 1];
+    setHistoryIdx(historyIdx - 1);
+    setCorOverrides(prev);
+    onChange({ ...project, footprint: result, footprintCorOverrides: prev });
+    setToast("Undo (" + (historyIdx - 1) + " steps back)");
+    setTimeout(() => setToast(""), 1800);
+  };
+  const doRedo = () => {
+    if (historyIdx >= overrideHistory.length - 1) return;
+    const next = overrideHistory[historyIdx + 1];
+    setHistoryIdx(historyIdx + 1);
+    setCorOverrides(next);
+    onChange({ ...project, footprint: result, footprintCorOverrides: next });
+    setToast("Redo");
+    setTimeout(() => setToast(""), 1800);
+  };
+  const setOverride = (rowKey, corCode) => {
+    if (!COR_MAP[corCode]) return;
+    const upd = { ...corOverrides, [rowKey]: corCode };
+    setOverrideInput(p => ({ ...p, [rowKey]: corCode }));
+    commitOverrides(upd, null);
+  };
+  const clearOverride = (rowKey) => {
+    const upd = { ...corOverrides };
+    delete upd[rowKey];
+    setOverrideInput(p => { const n = {...p}; delete n[rowKey]; return n; });
+    commitOverrides(upd, null);
+  };
+  const resetAllOverrides = () => {
+    if (Object.keys(corOverrides).length === 0) return;
+    if (!window.confirm("Clear all " + Object.keys(corOverrides).length + " override(s)? This can be undone with Ctrl+Z.")) return;
+    commitOverrides({}, "All overrides cleared");
+    setOverrideInput({});
+    setRemapSelections({});
+  };
+
+  // Apply a remap to ALL rows with a given original COR code
+  // Uses result.allRows (ground truth) + corOverrides directly — never derived state
+  const applyRemap = (fromCode, toCode) => {
+    if (!COR_MAP[toCode]) return;
+    const baseRows = (result && result.allRows) || [];
+    // All rows whose ORIGINAL cor code matches (regardless of current override state)
+    const targets = baseRows.filter(r => r.cor === fromCode);
+    if (targets.length === 0) return;
+    const upd = { ...corOverrides };
+    targets.forEach(r => { upd[r.sheet + "|" + r.rowNum] = toCode; });
+    const n = targets.length;
+    commitOverrides(upd, n + " row" + (n !== 1 ? "s" : "") + " remapped → " + toCode);
+  };
+
+  // Stamp the current footprint result to the project dashboard
+  const addToProject = () => {
+    if (!displayResult || !displayResult.success) return;
+    const vRows = (displayResult.allRows || []).filter(r => r.status === "VALID");
+    const tot   = displayResult.combined;
+    // Category breakdown (only categories with > 0 tCO2e)
+    const byCat = {};
+    vRows.forEach(r => {
+      const k = r.category || "Unknown";
+      byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0);
+    });
+    const catBreakdown = Object.entries(byCat)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, v]) => ({ cat, tco2e: v }));
+    const summary = {
+      scope: "Scope 3 Cat 1",            // value-chain upstream emissions
+      combined: tot,
+      npTotal: vRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      rpTotal: vRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      catBreakdown,
+      date: new Date().toISOString(),
+    };
+    const entry = { id: Date.now().toString(), ts: new Date().toISOString(),
+      action: "Updated Scope 3 Cat 1 emission footprint",
+      detail: tot.toFixed(3) + " tCO₂e",
+      fields: [
+        { k: "Scope", v: "Scope 3 Cat 1 — Purchased goods & services" },
+        { k: "NP", v: summary.npTotal.toFixed(3) + " tCO₂e" },
+        { k: "RP", v: summary.rpTotal.toFixed(3) + " tCO₂e" },
+        { k: "Combined", v: tot.toFixed(3) + " tCO₂e" },
+      ]
+    };
+    onChange({ ...project, footprintSummary: summary,
+               changelog: [...(project.changelog || []), entry] });
+    setToast("Scope 3 footprint saved to project dashboard ✓");
+    setTimeout(() => setToast(""), 2500);
+  };
+
+  // ── AI COR suggestion ────────────────────────────────────────────────────────
+
+  // ── Colour helpers ───────────────────────────────────────────────────────────
+  const CC = { Architect:{bg:T.slateBg,c:T.slate,bd:T.slateBd}, Instrument:{bg:T.blueBg,c:T.blue,bd:T.blueBd},
+    Electro:{bg:T.amberBg,c:T.amber,bd:T.amberBd}, HVAC:{bg:T.tealBg,c:T.teal,bd:T.tealBd},
+    "Surface treatment":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}, Mechanical:{bg:T.greenBg,c:T.green,bd:T.greenBd},
+    Piping:{bg:T.redBg,c:T.red,bd:T.redBd}, Structure:{bg:T.slateBg,c:T.slate,bd:T.slateBd},
+    Material:{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}, Safety:{bg:T.amberBg,c:T.amber,bd:T.amberBd},
+    Insulation:{bg:T.blueBg,c:T.blue,bd:T.blueBd} };
+  const catC = cat => CC[cat] || { bg: T.slateBg, c: T.slate, bd: T.slateBd };
+  const fmt  = v => {
+    if (v === null || v === undefined || isNaN(Number(v))) return "—";
+    const n = Number(v);
+    return n >= 1 ? n.toFixed(3) + " tCO₂e" : (n * 1000).toFixed(2) + " kgCO₂e";
+  };
+
+  // shared button style
+  const btnSm = (active, ac, bg, bd) => ({
+    padding: "5px 12px", borderRadius: 5, fontSize: 11, fontWeight: 500, cursor: "pointer",
+    border: "1px solid " + (active ? bd : T.border),
+    background: active ? bg : "transparent",
+    color: active ? ac : T.muted, fontFamily: T.sans
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 1 — UPLOAD
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── Worker loading overlay (shown during detect AND calc) ───────────────────
+  if (workerBusy) {
+    return (
+      <div style={{ padding: "2.5rem 1.5rem", textAlign: "center", maxWidth: 400, margin: "0 auto" }}>
+        <div style={{ fontSize: 36, marginBottom: 14 }}>⚙️</div>
+        <p style={{ fontSize: 15, fontWeight: 700, color: T.teal, margin: "0 0 6px" }}>
+          {workerLabel || "Processing…"}
+        </p>
+        <p style={{ fontSize: 12, color: T.muted, margin: "0 0 6px" }}>{fileName}</p>
+        {/* Progress bar */}
+        <div style={{ maxWidth: 320, margin: "0 auto 14px", height: 8, borderRadius: 4,
+          background: T.border, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: workerPct + "%", background: T.teal,
+            borderRadius: 4, transition: "width 0.4s ease" }} />
+        </div>
+        {/* Do-not-navigate warning */}
+        <div style={{ padding: "8px 16px", borderRadius: 7, background: T.amberBg,
+          border: "1px solid " + T.amberBd, marginBottom: 14, display: "inline-block" }}>
+          <span style={{ fontSize: 12, color: T.amber, fontWeight: 600 }}>
+            ⚠ Please stay on this tab until complete
+          </span>
+        </div>
+        <div>
+          <button onClick={killWorker}
+            style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid " + T.border,
+              background: "transparent", color: T.muted, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "upload" && !result) {
+    return (
+      <div style={{ padding: "1.5rem" }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
+        <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>
+          Upload any MTO or MEL workbook — column names are matched automatically.
+        </p>
+        <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
+          style={{ display: "block", border: "2px dashed " + T.border, borderRadius: 12,
+            padding: "3rem 2rem", textAlign: "center", background: T.surface, cursor: "pointer" }}>
+          <input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
+          <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 8px" }}>Drop workbook or click to browse</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>Supports any column naming — auto-detects MTO and MEL sheets</p>
+        </label>
+        {result && !result.success && (
+          <div style={{ marginTop: "1rem", padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: T.red, margin: 0 }}>{result.fatalError}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 2 — MAPPING REVIEW
+  // ════════════════════════════════════════════════════════════════════════════
+  if (step === "mapping") {
+    const includedSheets = sheetMetas.filter(s => s.include);
+    const canCalc = includedSheets.length > 0;
+
+    const MTO_FIELDS = [
+      { key: "desc",   label: "Description",    req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
+      { key: "mat",    label: "Material",        req: false, color: T.slate,  bg: T.slateBg,  bd: T.slateBd  },
+      { key: "cor",    label: "COR Code",        req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
+      { key: "mhc",    label: "Handling Code",   req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
+      { key: "weight", label: "Weight (kg)",     req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
+    ];
+    const MEL_FIELDS = [
+      { key: "desc",   label: "Description",     req: true,  color: T.blue,   bg: T.blueBg,   bd: T.blueBd   },
+      { key: "cor",    label: "COR Code",         req: true,  color: T.teal,   bg: T.tealBg,   bd: T.tealBd   },
+      { key: "mhc",    label: "Handling Code",    req: true,  color: T.purple, bg: T.purpleBg, bd: T.purpleBd },
+      { key: "weight", label: "Weight (kg)",      req: true,  color: T.amber,  bg: T.amberBg,  bd: T.amberBd  },
+    ];
+    const getFields = type => type === "MEL" ? MEL_FIELDS : MTO_FIELDS;
+
+    return (
+      <div style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Map columns</h2>
+            <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName} · Click a field tag to jump to its column · Click a row number to set as header</p>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <label style={{ ...btnSm(false), display: "inline-flex", alignItems: "center", padding: "6px 14px" }}>
+              Different file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+            </label>
+            <button onClick={doCalc} disabled={!canCalc || workerBusy}
+              style={{ padding: "7px 20px", borderRadius: 6, border: "none",
+                background: canCalc && !workerBusy ? T.teal : T.border,
+                color: canCalc && !workerBusy ? "#fff" : T.muted,
+                fontSize: 13, fontWeight: 600, cursor: canCalc && !workerBusy ? "pointer" : "not-allowed", minHeight: 34 }}>
+              Calculate →
+            </button>
+          </div>
+        </div>
+
+        {sheetMetas.map(sm => {
+          const fields    = getFields(sm.type);
+          const reqFields = fields.filter(f => f.req);
+          const mappedReq = reqFields.filter(f => sm.mapping[f.key]).length;
+          const colToKey  = {};
+          Object.entries(sm.mapping).forEach(([fk, col]) => { if (col) colToKey[col] = fk; });
+
+          return (
+            <div key={sm.name} style={{ marginBottom: "1.25rem", background: T.surface, borderRadius: 10,
+              border: "1px solid " + (sm.include ? T.border : T.faint),
+              opacity: sm.include ? 1 : 0.5, overflow: "hidden" }}>
+
+              {/* Card header */}
+              <div style={{ padding: "10px 16px", background: T.surface2, borderBottom: "1px solid " + T.border,
+                display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <input type="checkbox" checked={sm.include} onChange={() => toggleInclude(sm.name)}
+                  style={{ width: 16, height: 16, cursor: "pointer", accentColor: T.teal }} />
+                <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: T.text }}>{sm.name}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint }}>{sm.totalRows} rows</span>
+                <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid " + T.border }}>
+                  {["MTO", "MEL"].map(t => (
+                    <button key={t} onClick={() => setSheetType(sm.name, t)}
+                      style={{ padding: "5px 14px", fontSize: 11, fontWeight: 600, cursor: "pointer", border: "none",
+                        background: sm.type === t ? T.teal : "transparent",
+                        color: sm.type === t ? "#fff" : T.muted, minHeight: 30 }}>{t}</button>
+                  ))}
+                </div>
+                <span style={{ fontFamily: T.mono, fontSize: 10, padding: "3px 10px", borderRadius: 10,
+                  background: mappedReq === reqFields.length ? T.greenBg : mappedReq > 0 ? T.amberBg : T.redBg,
+                  color: mappedReq === reqFields.length ? T.green : mappedReq > 0 ? T.amber : T.red,
+                  border: "1px solid " + (mappedReq === reqFields.length ? T.greenBd : mappedReq > 0 ? T.amberBd : T.redBd) }}>
+                  {mappedReq}/{reqFields.length} required fields
+                </span>
+
+              </div>
+
+              {/* ── Unified table: row picker + field selectors + data preview ── */}
+              {(() => {
+                const rawPrev = sm.rawPreview || [];
+                const hIdx    = sm.headerRowIdx != null ? sm.headerRowIdx : 0;
+                const visHdrs = sm.headers.filter(h => !h.startsWith("_col"));
+                // All raw preview rows (clickable to change header)
+                const dataSamples = sm.sampleRows || [];
+                if (visHdrs.length === 0 && rawPrev.length === 0) {
+                  return (
+                    <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
+                      No columns detected — try a different file.
+                    </div>
+                  );
+                }
+                const ROW_COL_W = 46; // px width of row-number column
+                return (
+                  <div>
+                    {/* ── Field tag bar: clickable pill + dropdown per field ── */}
+                    <div style={{ padding: "8px 14px", borderTop: "1px solid " + T.border,
+                      borderBottom: "1px solid " + T.border, background: T.surface2,
+                      display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+                      {fields.map(f => {
+                        const col   = sm.mapping[f.key];
+                        const isLit = colHighlight === (sm.name + "|" + col);
+                        const miss  = f.req && !col;
+                        return (
+                          <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {/* Clickable pill — jumps to column */}
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 5,
+                              padding: "5px 10px 5px 8px", borderRadius: 20, userSelect: "none",
+                              cursor: col ? "pointer" : "default",
+                              border: "2px solid " + (isLit ? f.color : col ? f.bd : miss ? T.redBd : T.border),
+                              background: isLit ? f.color : col ? f.bg : T.surface,
+                              transition: "all 0.15s", minHeight: 30 }}
+                              onClick={() => highlightCol(sm.name, col)}>
+                              <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                                background: isLit ? "#fff" : col ? f.color : miss ? T.red : T.faint }} />
+                              <span style={{ fontSize: 11, fontWeight: 700,
+                                color: isLit ? "#fff" : col ? f.color : miss ? T.red : T.faint }}>
+                                {f.label}
+                              </span>
+                              {miss && <span style={{ fontSize: 9, color: T.red }}>*</span>}
+                              {col && <>
+                                <span style={{ fontSize: 10, fontFamily: T.mono,
+                                  color: isLit ? "#ffffffcc" : f.color, opacity: 0.85,
+                                  maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  → {col}
+                                </span>
+                                <span onClick={e => { e.stopPropagation(); setMapping(sm.name, f.key, ""); }}
+                                  style={{ fontSize: 14, color: isLit ? "#fff" : f.color,
+                                    cursor: "pointer", paddingLeft: 2, lineHeight: 1, opacity: 0.7 }}>×</span>
+                              </>}
+                            </div>
+                            {/* Dropdown below the pill */}
+                            <select value={col || ""}
+                              onChange={e => {
+                                const newCol = e.target.value;
+                                setSheetMetas(prev => prev.map(s => {
+                                  if (s.name !== sm.name) return s;
+                                  const m = { ...s.mapping };
+                                  Object.keys(m).forEach(k => {
+                                    if (m[k] === col && k === f.key) m[k] = null;
+                                    if (m[k] === newCol && k !== f.key) m[k] = null;
+                                  });
+                                  m[f.key] = newCol || null;
+                                  return { ...s, mapping: m };
+                                }));
+                                if (newCol) setTimeout(() => highlightCol(sm.name, newCol), 50);
+                              }}
+                              style={{ padding: "5px 8px", fontSize: 11, borderRadius: 6, minHeight: 30,
+                                cursor: "pointer", maxWidth: 220,
+                                border: "1px solid " + (col ? f.bd : miss ? T.redBd : T.border),
+                                background: col ? f.bg : T.surface,
+                                color: col ? f.color : T.muted, fontWeight: col ? 600 : 400 }}>
+                              <option value="">— select column —</option>
+                              {sm.headers.filter(h => !h.startsWith("_col")).map(h => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                      <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 10,
+                        color: T.teal, fontWeight: 600, alignSelf: "center" }}>Header: row {hIdx + 1}</span>
+                    </div>
+
+                    {/* ── Table (row picker + dropdowns + data) ── */}
+                    <div style={{ overflowX: "auto" }}>
+                    <div style={{ padding: "4px 14px", background: T.surface2,
+                      borderBottom: "1px solid " + T.border,
+                      display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.faint,
+                        letterSpacing: "0.07em" }}>
+                        Click row № to set header · Click column title to highlight · Use dropdowns to assign
+                      </span>
+                    </div>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                      <thead>
+                        <tr>
+                          {/* Row-number column header (blank) */}
+                          <th style={{ width: ROW_COL_W, minWidth: ROW_COL_W, padding: "6px 8px",
+                            background: T.surface2, borderRight: "2px solid " + T.border,
+                            borderBottom: "3px solid " + T.border, position: "sticky", left: 0, zIndex: 2 }} />
+                          {visHdrs.map(h => {
+                            const fk   = colToKey[h];
+                            const fDef = fk ? fields.find(f => f.key === fk) : null;
+                            const isHl = colHighlight === (sm.name + "|" + h);
+                            const colId = "fp-col-" + (sm.name + "-" + h).replace(/[^a-zA-Z0-9]/g, "_");
+                            return (
+                              <th key={h} id={colId}
+                                style={{ padding: 0, minWidth: 150, maxWidth: 240,
+                                  borderRight: "1px solid " + T.border,
+                                  borderBottom: "3px solid " + (isHl ? T.amber : fDef ? fDef.color : T.border),
+                                  background: isHl ? T.amberBg : fDef ? fDef.bg : T.surface2,
+                                  transition: "background 0.2s, border-color 0.2s",
+                                  verticalAlign: "top" }}>
+                                {/* Clickable column title — jumps+highlights */}
+                                <button onClick={() => highlightCol(sm.name, h)}
+                                  style={{ display: "block", width: "100%", textAlign: "left",
+                                    padding: "6px 10px 4px", background: "transparent", border: "none",
+                                    cursor: "pointer", borderBottom: "1px solid " + (fDef ? fDef.bd : T.border) }}>
+                                  <span style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700,
+                                    color: isHl ? T.amber : fDef ? fDef.color : T.text,
+                                    display: "block", overflow: "hidden", textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap", maxWidth: 210 }} title={h}>{h}</span>
+                                  {fDef && (
+                                    <span style={{ fontFamily: T.mono, fontSize: 8, color: fDef.color,
+                                      textTransform: "uppercase", letterSpacing: "0.06em" }}>{fDef.label}</span>
+                                  )}
+                                </button>
+                                {/* Field assignment dropdown */}
+                                <div style={{ padding: "4px 8px 6px" }}>
+                                  <select value={fk || ""}
+                                    onChange={e => {
+                                      const newKey = e.target.value;
+                                      setSheetMetas(prev => prev.map(s => {
+                                        if (s.name !== sm.name) return s;
+                                        const m = { ...s.mapping };
+                                        Object.keys(m).forEach(k => { if (m[k] === h) m[k] = null; });
+                                        if (newKey && m[newKey] && m[newKey] !== h) m[newKey] = null;
+                                        if (newKey) m[newKey] = h;
+                                        return { ...s, mapping: m };
+                                      }));
+                                    }}
+                                    style={{ width: "100%", padding: "5px 6px", fontSize: 11, borderRadius: 4,
+                                      minHeight: 30, cursor: "pointer",
+                                      border: "1px solid " + (fDef ? fDef.bd : T.border),
+                                      background: fDef ? fDef.bg : T.surface,
+                                      color: fDef ? fDef.color : T.muted,
+                                      fontWeight: fDef ? 600 : 400 }}>
+                                    <option value="">— not assigned —</option>
+                                    {fields.map(f => (
+                                      <option key={f.key} value={f.key}>
+                                        {f.label}{f.req ? " *" : ""}
+                                        {sm.mapping[f.key] && sm.mapping[f.key] !== h ? " (→ " + sm.mapping[f.key] + ")" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* All raw preview rows — click any row № to set as header */}
+                        {rawPrev.map((rawRow, ri) => {
+                          const isH = ri === hIdx;
+                          const isA = ri < hIdx;  // above header: greyed
+                          const isB = ri > hIdx;  // below header: shown as plain raw
+                          return (
+                            <tr key={"raw-" + ri} style={{
+                              background: isH ? T.tealBg : isA ? T.surface2 : ri % 2 === 0 ? T.surface : T.surface2,
+                              borderBottom: "1px solid " + (isH ? T.tealBd : T.rowBd),
+                              opacity: isA ? 0.45 : 1 }}>
+                              {/* Row number — click to set this row as header */}
+                              <td onClick={() => setHeaderRow(sm.name, ri)}
+                                style={{ padding: "4px 8px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
+                                  color: isH ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
+                                  background: isH ? T.tealBg : T.surface2, textAlign: "center",
+                                  borderRight: "2px solid " + (isH ? T.tealBd : T.border),
+                                  whiteSpace: "nowrap", position: "sticky", left: 0, zIndex: 1 }}>
+                                {isH ? "▶ HDR" : ri + 1}
+                              </td>
+                              {isH || isA ? (
+                                /* For header row and rows above — align to raw column positions */
+                                visHdrs.map((h) => {
+                                  const rawHdrRow = rawPrev[hIdx] || [];
+                                  const pos = rawHdrRow.findIndex(v => String(v || "").trim() === h);
+                                  const val = pos >= 0 ? String(rawRow[pos] == null ? "" : rawRow[pos]) : "";
+                                  return (
+                                    <td key={h} style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 10,
+                                      fontWeight: isH ? 700 : 400,
+                                      color: isH ? T.teal : val ? T.text : T.faint,
+                                      borderRight: "1px solid " + T.rowBd, maxWidth: 200,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                      title={val}>{val || (isH ? "" : <span style={{ opacity: 0.2 }}>·</span>)}</td>
+                                  );
+                                })
+                              ) : (
+                                /* Rows below header — show raw cell values by position */
+                                visHdrs.map((h) => {
+                                  const rawHdrRow = rawPrev[hIdx] || [];
+                                  const pos = rawHdrRow.findIndex(v => String(v || "").trim() === h);
+                                  const val = pos >= 0 ? String(rawRow[pos] == null ? "" : rawRow[pos]) : "";
+                                  const fk   = colToKey[h];
+                                  const fDef = fk ? fields.find(f => f.key === fk) : null;
+                                  return (
+                                    <td key={h} style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 10,
+                                      color: fDef ? fDef.color : val ? T.muted : T.faint,
+                                      background: fDef ? fDef.bg + "22" : undefined,
+                                      borderRight: "1px solid " + T.rowBd, maxWidth: 200,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                      title={val}>{val || <span style={{ opacity: 0.2 }}>·</span>}</td>
+                                  );
+                                })
+                              )}
+                            </tr>
+                          );
+                        })}
+
+                      </tbody>
+                    </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Missing required warning */}
+              {reqFields.some(f => !sm.mapping[f.key]) && sm.include && (
+                <div style={{ padding: "8px 16px", background: T.amberBg, borderTop: "1px solid " + T.amberBd }}>
+                  <span style={{ fontSize: 11, color: T.amber }}>
+                    ⚠ Missing: {reqFields.filter(f => !sm.mapping[f.key]).map(f => f.label).join(", ")}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {sheetMetas.length === 0 && (
+          <div style={{ padding: "2rem", textAlign: "center", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, color: T.faint }}>
+            No sheets detected.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 3 — RESULTS (uses displayResult = base + overrides)
+  // ════════════════════════════════════════════════════════════════════════════
+  if (!displayResult || !displayResult.success) {
+    return (
+      <div style={{ padding: "1.5rem" }}>
+        {displayResult && !displayResult.success && (
+          <div style={{ padding: "1rem", background: T.redBg, border: "1px solid " + T.redBd, borderRadius: 8, marginBottom: "1rem" }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: 0 }}>❌ {displayResult.fatalError}</p>
+          </div>
+        )}
+        <label style={{ padding: "7px 16px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "inline-block" }}>
+          Upload file<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+        </label>
+      </div>
+    );
+  }
+
+  const allRows   = displayResult.allRows   || [];
+  const mtoRows   = displayResult.mtoRows   || [];
+  const melRows   = displayResult.melRows   || [];
+  const errList   = displayResult.errors    || [];
+  // Compute unknown COR codes directly from raw result (never from derived displayResult)
+  // This ensures the remap panel is always in sync with actual data
+  const unkCors = [...new Set(
+    ((result && result.allRows) || [])
+      .filter(r => r.status === "ERROR" && Array.isArray(r.errors) && r.errors.some(e => e.notFound))
+      .map(r => r.cor)
+  )].filter(Boolean);
+  const validRows = allRows.filter(r => r.status === "VALID");
+  const errCount  = errList.length;
+  const isOk      = displayResult.status === "success";
+  const overrideCount = Object.keys(corOverrides).length;
+
+  const byCat = {};
+  validRows.forEach(r => { const k = r.category || "Unknown"; byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0); });
+  const catRows = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const byMHC = {};
+  validRows.filter(r => r.mhc).forEach(r => { byMHC[r.mhc] = (byMHC[r.mhc] || 0) + (r.emissionTco2e || 0); });
+  const mhcRows = Object.entries(byMHC).sort((a, b) => b[1] - a[1]);
+
+  let dRows = allRows;
+  if (dFilter === "MTO")      dRows = allRows.filter(r => r.source === "MTO");
+  else if (dFilter === "MEL") dRows = allRows.filter(r => r.source === "MEL");
+  else if (dFilter === "VALID")  dRows = allRows.filter(r => r.status === "VALID");
+  else if (dFilter === "ERROR")  dRows = allRows.filter(r => r.status === "ERROR");
+  if (dSearch) { const q = dSearch.toLowerCase(); dRows = dRows.filter(r => (r.desc || "").toLowerCase().includes(q) || (r.cor || "").toLowerCase().includes(q)); }
+
+  return (
+    <div style={{ padding: "1.25rem", background: T.bg }}>
+      {/* ── Header ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
+          <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName}</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setStep("mapping")} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>
+            ← Edit mapping
+          </button>
+          <button onClick={exportCSV} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
+            ↓ Download CSV
+          </button>
+          <button onClick={addToProject}
+            style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans,
+              border: "1px solid " + T.greenBd, background: T.greenBg, color: T.green,
+              fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            📌 Add to project
+          </button>
+          <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12,
+            fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", minHeight: 32, boxSizing: "border-box" }}>
+            Upload new<input type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+          </label>
+        </div>
+
+      </div>
+
+      {/* ── Status ── */}
+      <div style={{ padding: "9px 14px", borderRadius: 7, marginBottom: "1rem",
+        background: isOk ? T.greenBg : T.amberBg, border: "1px solid " + (isOk ? T.greenBd : T.amberBd),
+        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 15 }}>{isOk ? "✅" : "⚠️"}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isOk ? T.green : T.amber }}>
+          {isOk ? "Calculation completed successfully"
+            : "Completed with " + errCount + " error" + (errCount !== 1 ? "s" : "") + " — affected rows excluded from totals"}
+        </span>
+        {overrideCount > 0 && (
+          <span style={{ fontSize: 11, padding: "2px 10px", borderRadius: 10, background: T.purpleBg, color: T.purple, border: "1px solid " + T.purpleBd }}>
+            {overrideCount} COR override{overrideCount !== 1 ? "s" : ""} applied
+          </span>
+        )}
+        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, marginLeft: "auto" }}>
+          {(displayResult.sheets || []).map(s => s.name + " (" + s.type + ")").join(" · ")}
+        </span>
+      </div>
+
+      {/* ── View tabs ── */}
+      <div style={{ display: "flex", borderBottom: "2px solid " + T.border, marginBottom: "1.25rem" }}>
+        {[
+          { id: "summary", label: "Summary" },
+          { id: "detail",  label: "Detail (" + allRows.length + ")" },
+          { id: "errors",  label: "Errors" + (errCount > 0 ? " (" + errCount + ")" : "") },
+        ].map(tb => (
+          <button key={tb.id} onClick={() => setView(tb.id)}
+            style={{ padding: "8px 18px", fontSize: 12, cursor: "pointer", border: "none",
+              background: "transparent", fontFamily: T.sans, fontWeight: 500, minHeight: 38,
+              borderBottom: "2px solid " + (view === tb.id ? T.teal : "transparent"), marginBottom: "-2px",
+              color: view === tb.id ? T.teal : (tb.id === "errors" && errCount > 0 ? T.amber : T.muted) }}>
+            {tb.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ════ SUMMARY ════ */}
+      {view === "summary" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: "1.25rem" }}>
+            {[
+              { label: "MTO Footprint",  val: displayResult.mtoTotal, cnt: mtoRows.filter(r => r.status === "VALID").length, c: T.teal,     bg: T.tealBg,   bd: T.tealBd },
+              { label: "MEL Footprint",  val: displayResult.melTotal, cnt: melRows.filter(r => r.status === "VALID").length, c: T.blue,     bg: T.blueBg,   bd: T.blueBd },
+              { label: "Combined Total", val: displayResult.combined, cnt: validRows.length,                                  c: T.tealDark, bg: T.tealBg,   bd: T.tealBd },
+            ].map(card => (
+              <div key={card.label} style={{ background: card.bg, border: "1px solid " + card.bd, borderRadius: 8, padding: "16px 18px" }}>
+                <p style={{ fontFamily: T.mono, fontSize: 9, color: card.c, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.label}</p>
+                <p style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 700, color: card.c, margin: "0 0 3px", lineHeight: 1 }}>
+                  {Number(card.val) >= 1 ? Number(card.val).toFixed(3) : (Number(card.val) * 1000).toFixed(2)}
+                </p>
+                <p style={{ fontFamily: T.mono, fontSize: 10, color: card.c, margin: 0, opacity: 0.7 }}>
+                  {Number(card.val) >= 1 ? "tCO₂e" : "kgCO₂e"} · {card.cnt} row{card.cnt !== 1 ? "s" : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+          {catRows.length > 0 && (() => {
+            // Pre-calc NP and RP totals per category
+            const catNP = {}, catRP = {};
+            validRows.filter(r => r.mhc === "NP").forEach(r => { const k = r.category||"Unknown"; catNP[k] = (catNP[k]||0) + (r.emissionTco2e||0); });
+            validRows.filter(r => r.mhc === "RP").forEach(r => { const k = r.category||"Unknown"; catRP[k] = (catRP[k]||0) + (r.emissionTco2e||0); });
+            const npTotal = validRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0);
+            const rpTotal = validRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0);
+            return (
+              <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px", marginBottom: "1rem" }}>
+                {/* NP / RP totals header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: 0, flex: 1 }}>By COR Category</p>
+                  <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 10, background: T.tealBg, color: T.teal, border: "1px solid " + T.tealBd, fontFamily: T.mono }}>NP {fmt(npTotal)}</span>
+                  <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 10, background: T.blueBg, color: T.blue, border: "1px solid " + T.blueBd, fontFamily: T.mono }}>RP {fmt(rpTotal)}</span>
+                </div>
+                {catRows.map(([cat, val]) => {
+                  const c   = catC(cat);
+                  const np  = catNP[cat] || 0;
+                  const rp  = catRP[cat] || 0;
+                  const tot = np + rp;
+                  const pct = displayResult.combined > 0 ? Math.min(100, (tot / displayResult.combined) * 100) : 0;
+                  const npPct = tot > 0 ? (np / tot) * 100 : 0;
+                  const rpPct = tot > 0 ? (rp / tot) * 100 : 0;
+                  return (
+                    <div key={cat} style={{ marginBottom: 11 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, alignItems: "center" }}>
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 10px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{cat}</span>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          {np > 0 && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.teal }}>NP {fmt(np)}</span>}
+                          {rp > 0 && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.blue }}>RP {fmt(rp)}</span>}
+                          <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 700, color: T.text }}>{fmt(tot)}</span>
+                        </div>
+                      </div>
+                      {/* Stacked bar: NP (teal) + RP (blue) */}
+                      <div style={{ height: 7, borderRadius: 3, background: T.border, overflow: "hidden", display: "flex" }}>
+                        <div style={{ width: (pct * npPct / 100) + "%", background: T.teal, transition: "width 0.4s" }} />
+                        <div style={{ width: (pct * rpPct / 100) + "%", background: T.blue, transition: "width 0.4s" }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Legend */}
+                <div style={{ display: "flex", gap: 14, marginTop: 10, paddingTop: 8, borderTop: "1px solid " + T.border }}>
+                  <span style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, color: T.muted }}>
+                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.teal, display: "inline-block" }} />NP — New Permanently
+                  </span>
+                  <span style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, color: T.muted }}>
+                    <span style={{ width: 12, height: 7, borderRadius: 2, background: T.blue, display: "inline-block" }} />RP — Removal of Permanent items
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ════ DETAIL ════ */}
+      {view === "detail" && (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <input value={dSearch} onChange={e => setDSearch(e.target.value)} placeholder="Search description or COR…"
+              style={{ padding: "6px 12px", fontSize: 12, border: "1px solid " + T.border, borderRadius: 6,
+                background: T.surface, color: T.text, width: 220, height: 32, boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 3 }}>
+              {["ALL", "MTO", "MEL", "VALID", "ERROR"].map(f => (
+                <button key={f} onClick={() => setDFilter(f)} style={{ ...btnSm(dFilter === f, T.teal, T.tealBg, T.tealBd), minHeight: 32, minWidth: 50 }}>{f}</button>
+              ))}
+            </div>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, marginLeft: "auto" }}>{dRows.length} rows</span>
+          </div>
+          <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid " + T.border }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: T.surface2 }}>
+                  {["Src","Sheet","Row","Description","COR","Category","MHC","Weight kg","EF","tCO₂e","Status"].map(h => (
+                    <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                      fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
+                      whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dRows.map((r, i) => {
+                  const c = catC(r.category);
+                  return (
+                    <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd,
+                      background: r._overridden ? T.purpleBg + "33" : r.status === "ERROR" ? T.redBg + "33" : undefined }}>
+                      <td style={{ padding: "6px 10px" }}>
+                        <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 6px", borderRadius: 3,
+                          background: r.source === "MTO" ? T.tealBg : T.blueBg,
+                          color: r.source === "MTO" ? T.teal : T.blue }}>{r.source}</span>
+                      </td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap" }}>{r.sheet}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{r.rowNum}</td>
+                      <td style={{ padding: "6px 10px", maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500, color: T.text }} title={r.desc}>
+                        {r._overridden && <span style={{ fontSize: 8, marginRight: 4, color: T.purple, fontFamily: T.mono }}>OVR</span>}
+                        {r.desc || "—"}
+                      </td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "—"}</td>
+                      <td style={{ padding: "6px 10px" }}>{r.category ? <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>—</span>}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, fontWeight: r.emissionTco2e ? 600 : 400, color: r.emissionTco2e ? T.teal : T.faint, textAlign: "right" }}>
+                        {r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "—"}
+                      </td>
+                      <td style={{ padding: "6px 10px" }}>
+                        <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 7px", borderRadius: 3, fontWeight: 500,
+                          background: r.status === "VALID" ? T.greenBg : T.redBg,
+                          color: r.status === "VALID" ? T.green : T.red,
+                          border: "1px solid " + (r.status === "VALID" ? T.greenBd : T.redBd) }}>{r.status}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ════ ERRORS ════ */}
+      {/* Fixed undo/redo overlay — visible whenever results are shown */}
+      {step === "result" && (
+        <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 200,
+          display: "flex", alignItems: "center", gap: 0,
+          boxShadow: "0 2px 12px rgba(0,0,0,0.15)", borderRadius: 8, overflow: "hidden" }}>
+          {/* Toast — grows leftward */}
+          {toast && (
+            <div style={{ padding: "8px 14px", background: T.tealBg, border: "1px solid " + T.tealBd,
+              borderRight: "none", fontSize: 12, fontWeight: 600, color: T.teal,
+              fontFamily: T.mono, whiteSpace: "nowrap", borderRadius: "8px 0 0 8px" }}>
+              {toast}
+            </div>
+          )}
+          {/* Reset button — only when overrides exist */}
+          {Object.keys(corOverrides).length > 0 && !toast && (
+            <div style={{ padding: "8px 12px", background: T.redBg, border: "1px solid " + T.redBd,
+              borderRight: "none", fontSize: 11, fontWeight: 600, color: T.red,
+              fontFamily: T.sans, cursor: "pointer", whiteSpace: "nowrap",
+              borderRadius: toast ? 0 : "8px 0 0 8px" }}
+              onClick={resetAllOverrides}>
+              Reset ({Object.keys(corOverrides).length})
+            </div>
+          )}
+          {/* Undo */}
+          <button onClick={doUndo} disabled={historyIdx <= 0}
+            title="Undo (Ctrl+Z)"
+            style={{ padding: "10px 14px", border: "1px solid " + T.border, borderRight: "none",
+              background: historyIdx > 0 ? T.surface : T.surface2,
+              color: historyIdx > 0 ? T.text : T.faint,
+              fontSize: 16, cursor: historyIdx > 0 ? "pointer" : "not-allowed",
+              fontFamily: T.sans, borderRadius: 0, margin: 0 }}>
+            ↩
+          </button>
+          {/* Redo */}
+          <button onClick={doRedo} disabled={historyIdx >= overrideHistory.length - 1}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{ padding: "10px 14px", border: "1px solid " + T.border,
+              background: historyIdx < overrideHistory.length - 1 ? T.surface : T.surface2,
+              color: historyIdx < overrideHistory.length - 1 ? T.text : T.faint,
+              fontSize: 16, cursor: historyIdx < overrideHistory.length - 1 ? "pointer" : "not-allowed",
+              fontFamily: T.sans, borderRadius: "0 8px 8px 0", margin: 0 }}>
+            ↪
+          </button>
+        </div>
+      )}
+
+      {/* ════ ERRORS ════ */}
+      {view === "errors" && (
+        <div>
+          {/* COR datalist kept for possible future use */}
+          <datalist id="fp-cor-datalist">
+            {COR_LOOKUP.map(c => (
+              <option key={c.code} value={c.code}>{c.code} — {c.cat}: {c.desc} (EF={c.ef})</option>
+            ))}
+          </datalist>
+
+          {errCount === 0 ? (
+            <div style={{ padding: "2rem", textAlign: "center", background: T.greenBg, border: "1px solid " + T.greenBd, borderRadius: 8, color: T.green, fontSize: 13 }}>
+              ✅ No validation errors.
+            </div>
+          ) : (
+            <div>
+              {/* ── COR Code Remap Panel ── */}
+              {unkCors.length > 0 && (
+                <div style={{ marginBottom: "1.25rem", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
+                  <div style={{ padding: "10px 16px", background: T.surface2, borderBottom: "1px solid " + T.border, display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 700, color: T.text }}>Remap COR codes</span>
+                    <span style={{ fontSize: 11, color: T.muted }}>Pick a replacement for each unknown code — applies to all rows sharing it and updates totals instantly</span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: T.surface2 }}>
+                        {["Unknown code", "Rows / Samples", "Best-fit suggestions", "Replace with", "Action"].map(h => (
+                          <th key={h} style={{ padding: "7px 14px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                            fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
+                            textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unkCors.map(code => {
+                        // Use result.allRows (ground truth) + corOverrides directly
+                        const baseRows   = ((result && result.allRows) || []).filter(r => r.cor === code);
+                        const pending    = baseRows.filter(r => !corOverrides[r.sheet + "|" + r.rowNum]);
+                        const done       = baseRows.filter(r =>  !!corOverrides[r.sheet + "|" + r.rowNum]);
+                        const sel        = remapSelections[code] || "";
+                        const selEntry   = sel ? COR_MAP[sel] : null;
+                        const allDone    = pending.length === 0 && done.length > 0;
+                        const grouped    = COR_LOOKUP.reduce((acc, c) => { (acc[c.cat] = acc[c.cat] || []).push(c); return acc; }, {});
+                        const allSamples = [...new Set(baseRows.map(r => r.desc).filter(Boolean))].slice(0, 6);
+                        const localSugs  = localSuggestCOR(allSamples);
+                        return (
+                          <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg + "33" : undefined, verticalAlign: "top" }}>
+                            <td style={{ padding: "12px 14px" }}>
+                              <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: allDone ? T.green : T.red }}>{code}</span>
+                              {allDone && <div style={{ fontSize: 10, color: T.green, marginTop: 2 }}>✓ remapped</div>}
+                            </td>
+                            <td style={{ padding: "12px 14px", minWidth: 160 }}>
+                              {pending.length > 0 && <div style={{ color: T.red, fontFamily: T.mono, fontSize: 11, marginBottom: 6 }}>{pending.length} pending</div>}
+                              {done.length > 0 && <div style={{ color: T.green, fontFamily: T.mono, fontSize: 11, marginBottom: 6 }}>{done.length} done</div>}
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                {allSamples.map((d, i) => (
+                                  <span key={i} style={{ fontSize: 10, color: T.muted, fontStyle: "italic",
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}
+                                    title={d}>· {d}</span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ padding: "12px 14px", minWidth: 260 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                                {localSugs.map((s, si) => {
+                                  const sc = catC(s.category);
+                                  const isSelected = sel === s.code;
+                                  return (
+                                    <button key={si} onClick={() => setRemapSelections(p => ({ ...p, [code]: s.code }))}
+                                      style={{ textAlign: "left", padding: "6px 10px", borderRadius: 6, cursor: "pointer",
+                                        border: "2px solid " + (isSelected ? sc.c : sc.bd),
+                                        background: isSelected ? sc.bg : T.surface,
+                                        transition: "all 0.1s" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 700, color: sc.c }}>{s.code}</span>
+                                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: sc.bg, color: sc.c, border: "1px solid " + sc.bd }}>{s.category}</span>
+                                        <span style={{ fontFamily: T.mono, fontSize: 10, color: sc.c, marginLeft: "auto" }}>EF={s.ef}</span>
+                                      </div>
+                                      <div style={{ fontSize: 10, color: T.text, marginTop: 2 }}>{s.description}</div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                            <td style={{ padding: "8px 14px", minWidth: 260 }}>
+                              <select value={sel}
+                                onChange={e => setRemapSelections(p => ({ ...p, [code]: e.target.value }))}
+                                style={{ width: "100%", padding: "6px 8px", fontSize: 11, borderRadius: 5, minHeight: 32,
+                                  border: "1px solid " + (selEntry ? T.tealBd : T.border),
+                                  background: selEntry ? T.tealBg : T.surface,
+                                  color: selEntry ? T.teal : T.text, cursor: "pointer" }}>
+                                <option value="">— choose replacement —</option>
+                                {Object.entries(grouped).sort(([a],[b]) => a.localeCompare(b)).map(([cat, items]) => (
+                                  <optgroup key={cat} label={cat}>
+                                    {items.map(c => (
+                                      <option key={c.code} value={c.code}>{c.code} — {c.desc} (EF={c.ef})</option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </select>
+                              {selEntry && (
+                                <div style={{ marginTop: 4, fontSize: 10, color: T.teal }}>
+                                  {selEntry.cat} · {selEntry.desc} · EF = {selEntry.ef} kg CO₂e / kg
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: "8px 14px", whiteSpace: "nowrap" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <button disabled={!sel || pending.length === 0}
+                                  onClick={() => applyRemap(code, sel)}
+                                  style={{ padding: "6px 14px", borderRadius: 6, border: "none", minHeight: 32,
+                                    background: sel && pending.length > 0 ? T.teal : T.border,
+                                    color: sel && pending.length > 0 ? "#fff" : T.muted,
+                                    fontSize: 11, fontWeight: 600,
+                                    cursor: sel && pending.length > 0 ? "pointer" : "not-allowed" }}>
+                                  Apply to {pending.length} row{pending.length !== 1 ? "s" : ""}
+                                </button>
+                                {done.length > 0 && (
+                                  <button onClick={() => {
+                                    const upd = { ...corOverrides };
+                                    (result && result.allRows || []).filter(r => r.cor === code)
+                                      .forEach(r => { delete upd[r.sheet + "|" + r.rowNum]; });
+                                    setRemapSelections(p => { const n = {...p}; delete n[code]; return n; });
+                                    commitOverrides(upd, "Overrides cleared for " + code);
+                                  }}
+                                    style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid " + T.redBd,
+                                      background: "transparent", color: T.red, fontSize: 10, cursor: "pointer" }}>
+                                    Clear overrides
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── Other row errors (weight, handling code) ── */}
+              {errList.filter(e => (e.errs || []).some(er => er.col !== "COR Code")).length > 0 && (
+                <div style={{ background: T.surface, borderRadius: 8, border: "1px solid " + T.border, overflow: "hidden" }}>
+                  <div style={{ padding: "9px 14px", background: T.redBg, borderBottom: "1px solid " + T.redBd, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>Other row errors</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.red, opacity: 0.7 }}>
+                      {errList.filter(e => (e.errs || []).some(er => er.col !== "COR Code")).length} rows
+                    </span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ background: T.surface2 }}>
+                        {["Sheet", "Row", "Description", "Error"].map(h => (
+                          <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                            fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
+                            textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errList.filter(e => (e.errs || []).some(er => er.col !== "COR Code")).map((e, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd }}>
+                          <td style={{ padding: "7px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.sheet}</td>
+                          <td style={{ padding: "7px 12px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{e.row}</td>
+                          <td style={{ padding: "7px 12px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{e.desc || "—"}</td>
+                          <td style={{ padding: "7px 12px" }}>
+                            {(e.errs || []).filter(er => er.col !== "COR Code").map((er, j) => (
+                              <div key={j} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, padding: "1px 5px", borderRadius: 3, background: T.redBg }}>{er.col}</span>
+                                <span style={{ fontSize: 11, color: T.muted }}>{er.msg}</span>
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Root App ──────────────────────────────────────────────────────────────────
+export default function App() {
+  const [projects, setProjects] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [loaded,   setLoaded]   = useState(false);
+  const [isDark,   setIsDark]   = useState(false);
+  const [zoom,    setZoom]    = useState(() => parseFloat(localStorage.getItem("env-zoom")||"1"));
+  const [showPortfolio, setShowPortfolio] = useState(false);
+
+  useEffect(() => {
+    applyTheme("light");
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const d = JSON.parse(saved);
+        if (d.projects && d.projects.length) {
+          setProjects(d.projects);
+          setActiveId(d.activeId || d.projects[0].id);
+        }
+        if (d.theme === "dark") { setIsDark(true); applyTheme("dark"); }
+      }
+    } catch {}
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId, theme: isDark?"dark":"light" })); } catch {}
+    localStorage.setItem("env-zoom", String(zoom));
+  }, [projects, activeId, loaded, isDark]);
+
+  useEffect(() => { document.body.style.zoom = String(zoom); }, [zoom]);
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    applyTheme(next?"dark":"light");
+  };
+  const handleZoom = v => { setZoom(v); localStorage.setItem("env-zoom", String(v)); };
+
+  const [newProjectId, setNewProjectId] = useState(null);
+  const createProject = () => {
+    const p = newProject();
+    setProjects(prev => [...prev, p]);
+    setActiveId(p.id);
+    setNewProjectId(p.id);
+  };
+  const updateProject = u => setProjects(prev => prev.map(p => p.id===u.id ? u : p));
+  const duplicateProject = id => {
+    const src = projects.find(p=>p.id===id);
+    if (!src) return;
+    const ts = Date.now();
+    const newId = ts.toString();
+    const copy = {
+      ...src,
+      id: newId,
+      name: (src.name||"Unnamed")+" (copy)",
+      createdAt: new Date().toISOString(),
+      aspects: (src.aspects||[]).map((a,i) => ({ ...a, id:(ts+i+1).toString() })),
+      opps:    (src.opps||[]).map((o,i)    => ({ ...o, id:(ts+100+i).toString() })),
+      changelog: [],
+    };
+    setProjects(prev => {
+      const idx = prev.findIndex(p=>p.id===id);
+      const next = [...prev];
+      next.splice(idx+1, 0, copy);
+      return next;
+    });
+    setActiveId(newId);
+  };
+  const deleteProject = id => {
+    const remaining = projects.filter(p => p.id !== id);
+    setProjects(remaining);
+    setActiveId(remaining.length>0 ? remaining[remaining.length-1].id : null);
+  };
+
+  if (!loaded) return (
+    <div style={{ padding:"2rem", fontFamily:"'IBM Plex Mono',monospace", fontSize:12, color:"var(--muted)", background:"var(--bg)", minHeight:"100vh" }}>
+      Loading...
+    </div>
+  );
+
+  const active = projects.find(p => p.id === activeId) || null;
+
+  return (
+    <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
+      <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
+               isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}
+               onPortfolio={()=>setShowPortfolio(v=>!v)} portfolioActive={showPortfolio}/>
+      <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
+        {showPortfolio ? (
+          <div style={{ flex:1, overflow:"auto" }}>
+            <PortfolioView projects={projects} onClose={()=>setShowPortfolio(false)} onSelect={setActiveId}/>
+          </div>
+        ) : !active ? (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                        flex:1, gap:14, padding:"2rem" }}>
+            <div style={{ width:48, height:48, background:T.teal, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <circle cx="11" cy="11" r="9" stroke="white" strokeWidth="1.8"/>
+                <path d="M11 7v4.5l2.5 2" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <p style={{ fontSize:16, fontWeight:600, color:T.text, margin:0 }}>No project selected</p>
+            <p style={{ fontSize:13, color:T.muted, margin:0, textAlign:"center" }}>Create a new project to get started.</p>
+            <button onClick={createProject}
+              style={{ padding:"9px 20px", borderRadius:7, border:"none", background:T.teal, color:"#fff",
+                       fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:T.sans, marginTop:4 }}>
+              + New project
+            </button>
+          </div>
+        ) : (
+          <div style={{ flex:1, display:"flex", flexDirection:"column" }}>
+            <div style={{ padding:"14px 20px 0", background:T.surface, borderBottom:"1px solid "+T.border }}>
+              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:0 }}>
+                <h1 style={{ fontSize:17, fontWeight:600, margin:0, fontFamily:T.sans, color:T.text }}>
+                  {active.name || <span style={{ color:T.faint, fontStyle:"italic" }}>Unnamed project</span>}
+                </h1>
+                {active.company && <span style={{ fontSize:12, color:T.muted }}>{active.company}</span>}
+              </div>
+            </div>
+            <div style={{ flex:1, overflow:"auto" }}>
+              <ProjectView key={active.id} project={active} allProjects={projects} onChange={updateProject} onDelete={()=>deleteProject(active.id)} initialTab={active.id===newProjectId?"settings":undefined}/>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
