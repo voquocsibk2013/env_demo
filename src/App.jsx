@@ -3937,6 +3937,27 @@ This cannot be undone.`)) return;
               </Fld>
             </div>
           </Card>
+          <Card style={{ marginBottom:"1rem" }}>
+            <SectionLabel>Export &amp; Import</SectionLabel>
+            <p style={{ fontSize:12, color:T.muted, margin:"0 0 14px", lineHeight:1.65 }}>
+              Export this project to a <code style={{ fontFamily:T.mono, fontSize:11 }}>.envproject</code> file you can
+              back up, share, or transfer to another device. Import replaces all current project data with the file contents.
+            </p>
+            <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+              <Btn variant="primary" onClick={exportProject}>↓ Export project</Btn>
+              <label style={{ display:"inline-block", cursor:"pointer" }}>
+                <span style={{ fontSize:12, padding:"6px 14px", borderRadius:6,
+                  border:"1px solid "+T.border, background:T.surface2,
+                  color:T.muted, cursor:"pointer", fontFamily:T.sans, display:"inline-block", lineHeight:1 }}>
+                  ↑ Import project…
+                </span>
+                <input type="file" accept=".envproject,.json" style={{ display:"none" }}
+                  onChange={e=>{ importProjectFile(e.target.files[0]); e.target.value=""; }}/>
+              </label>
+              <span style={{ fontSize:11, color:T.faint }}>Accepts <code style={{ fontFamily:T.mono }}>.envproject</code> files exported from this app.</span>
+            </div>
+          </Card>
+
           <div style={{ padding:"1.25rem", borderRadius:8, background:T.redBg, border:"1px solid "+T.redBd }}>
             <p style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.red, margin:"0 0 6px", letterSpacing:"0.05em", textTransform:"uppercase" }}>Danger zone</p>
             <p style={{ fontSize:12, color:T.muted, margin:"0 0 12px" }}>Deleting this project permanently removes all its aspects and opportunities. This cannot be undone.</p>
