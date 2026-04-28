@@ -2761,8 +2761,8 @@ This cannot be undone.`)) return;
   const TAB_LABELS = {
     dashboard:     "Dashboard",
     screening:     "Screening",
-    risks:         "Registered Risks",
-    opportunities: "Registered Opportunities",
+    risks:         "Risks",
+    opportunities: "Opportunities",
     footprint:     "Environmental Budget",
     waste:         "Waste Handling",
     attendees:     "Attendees",
@@ -3142,6 +3142,8 @@ This cannot be undone.`)) return;
                   onStatusChange={s => s ? bulkSetAspStatus(s) : setSelectedAsp(new Set())}/>
               )}
               <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
+            </div>
+          )}
         {/* ── Risk Matrix ── */}
         <div style={{ marginTop:"2.5rem" }}>
           <div style={{ marginBottom:"0.75rem" }}>
@@ -3358,9 +3360,6 @@ This cannot be undone.`)) return;
             );
           })()}
         </div>
-
-            </div>
-          )}
         </div>
       )}
 
@@ -3389,6 +3388,8 @@ This cannot be undone.`)) return;
                   onStatusChange={s => s ? bulkSetOppStatus(s) : setSelectedOpp(new Set())}/>
               )}
               <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
+            </div>
+          )}
         {/* ── Opportunity Matrix ── */}
         <div style={{ marginTop:"2.5rem" }}>
           <div style={{ marginBottom:"0.75rem" }}>
@@ -3403,14 +3404,14 @@ This cannot be undone.`)) return;
             // Threshold >= 4 for high
             const oppQ = (ev, feas) => {
               const hE = ev >= 4, hF = feas >= 4;
-              if  (hE && hF)  return { bg:T.purpleBg, bd:T.purpleBd, label:"Pursue",       c:T.purple };
-              if  (hE && !hF) return { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",          c:T.blue   };
-              if  (!hE && hF) return { bg:T.greenBg,  bd:T.greenBd,  label:"Quick win",     c:T.green  };
-              return                  { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritize",  c:T.slate  };
+              if  (!hE && hF)  return { bg:T.purpleBg, bd:T.purpleBd, label:"Pursue",       c:T.purple };
+              if  (hE  && hF)  return { bg:T.greenBg,  bd:T.greenBd,  label:"Quick win",    c:T.green  };
+              if  (!hE && !hF) return { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritize", c:T.slate  };
+              return                   { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",         c:T.blue   };
             };
 
             const isQCorner = (ev, feas) =>
-              (ev===5&&feas===5)||(ev===3&&feas===5)||(ev===5&&feas===3)||(ev===3&&feas===3);
+              (ev===1&&feas===5)||(ev===5&&feas===5)||(ev===1&&feas===1)||(ev===5&&feas===1);
 
             const oGrid = {};
             opps.forEach(o => {
@@ -3513,10 +3514,10 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Quadrant guide</p>
                     {[
-                      {l:"Pursue",      c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"High value + achievable → act now"},
-                      {l:"Quick win",   c:T.green, bd:T.greenBd, bg:T.greenBg, d:"Easy to capture → move fast"},
-                      {l:"Plan",        c:T.blue,  bd:T.blueBd,  bg:T.blueBg,  d:"High value but harder → plan resources"},
-                      {l:"Deprioritize",c:T.slate, bd:T.slateBd, bg:T.slateBg, d:"Low value + difficult → defer"},
+                      {l:"Pursue",      c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"Low environmental effort, high feasibility"},
+                      {l:"Quick win",   c:T.green, bd:T.greenBd, bg:T.greenBg, d:"High value and achievable"},
+                      {l:"Plan",        c:T.blue,  bd:T.blueBd,  bg:T.blueBg,  d:"High value but low feasibility"},
+                      {l:"Deprioritize",c:T.slate, bd:T.slateBd, bg:T.slateBg, d:"Low value and low feasibility"},
                     ].map(({l,c,bd,bg,d})=>(
                       <div key={l} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:8 }}>
                         <div style={{ width:14, height:14, borderRadius:3, background:bg,
@@ -3590,8 +3591,6 @@ This cannot be undone.`)) return;
             );
           })()}
         </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -3599,6 +3598,165 @@ This cannot be undone.`)) return;
       {tab === "footprint" && (
         <FootprintTab project={project} onChange={onChange}/>
       )}
+
+      {tab === "waste" && (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", gap:8 }}>
+            <div>
+              <h2 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>Waste Handling Register</h2>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>Track waste streams, handling methods, volumes and disposal routes for this project.</p>
+            </div>
+            <Btn variant="primary" disabled>+ Add waste stream</Btn>
+          </div>
+          <div style={{ padding:"3rem", textAlign:"center", background:T.surface, borderRadius:10,
+            border:"2px dashed "+T.border, color:T.faint }}>
+            <div style={{ fontSize:32, marginBottom:12 }}>🗑</div>
+            <p style={{ fontSize:14, fontWeight:600, color:T.muted, margin:"0 0 6px" }}>Waste Handling table coming soon</p>
+            <p style={{ fontSize:12, margin:0 }}>This register will track waste streams by type, volume, handling code, disposal route and compliance status.</p>
+          </div>
+        </div>
+      )}
+
+      {tab === "attendees" && (() => {
+        const sessions    = project.attendeeSessions || [];
+        const setSessions = (next) => onChange({ ...project, attendeeSessions: next });
+
+        const addSession = () => {
+          const today = new Date().toISOString().slice(0,10);
+          setSessions([...sessions, { id: Date.now().toString(), date: today, label:"", rows:[{ name:"", role:"" }] }]);
+        };
+
+        const updateSession = (sid, patch) =>
+          setSessions(sessions.map(s => s.id===sid ? {...s,...patch} : s));
+
+        const deleteSession = (sid) =>
+          setSessions(sessions.filter(s => s.id!==sid));
+
+        const addRow = (sid) =>
+          updateSession(sid, { rows:[...(sessions.find(s=>s.id===sid)?.rows||[]), { name:"", role:"" }] });
+
+        const updateRow = (sid, ri, field, val) =>
+          updateSession(sid, { rows: sessions.find(s=>s.id===sid).rows.map((r,i)=>i===ri?{...r,[field]:val}:r) });
+
+        const deleteRow = (sid, ri) => {
+          const sess = sessions.find(s=>s.id===sid);
+          if (sess.rows.length <= 1) return;
+          updateSession(sid, { rows: sess.rows.filter((_,i)=>i!==ri) });
+        };
+
+        const iw = { padding:"5px 8px", fontSize:12, borderRadius:5,
+          border:"1px solid "+T.border, background:T.bg, color:T.text,
+          fontFamily:T.sans, width:"100%" };
+
+        return (
+          <div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
+              <div>
+                <h2 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>Attendees</h2>
+                <p style={{ margin:0, fontSize:12, color:T.muted }}>
+                  Record participants by session date. Each session can have different attendees.
+                </p>
+              </div>
+              <Btn variant="primary" onClick={addSession}>+ New session</Btn>
+            </div>
+
+            {sessions.length === 0 && (
+              <div style={{ padding:"3rem", textAlign:"center", background:T.surface, borderRadius:10,
+                border:"2px dashed "+T.border, color:T.faint }}>
+                <div style={{ fontSize:32, marginBottom:12 }}>👥</div>
+                <p style={{ fontSize:14, fontWeight:600, color:T.muted, margin:"0 0 6px" }}>No sessions yet</p>
+                <p style={{ fontSize:12, margin:"0 0 16px" }}>Create a session to start recording attendees by date.</p>
+                <Btn variant="primary" onClick={addSession}>+ New session</Btn>
+              </div>
+            )}
+
+            <div style={{ display:"flex", flexDirection:"column", gap:"1.25rem" }}>
+              {sessions.map((sess, si) => (
+                <div key={sess.id} style={{ background:T.surface, border:"1px solid "+T.border,
+                  borderRadius:10, overflow:"hidden" }}>
+
+                  {/* Session header */}
+                  <div style={{ padding:"10px 14px", background:T.surface2,
+                    borderBottom:"1px solid "+T.border,
+                    display:"flex", alignItems:"center", gap:10 }}>
+                    <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.faint,
+                      textTransform:"uppercase", letterSpacing:"0.08em", flexShrink:0 }}>Session {si+1}</span>
+                    <input type="date" value={sess.date}
+                      onChange={e=>updateSession(sess.id,{date:e.target.value})}
+                      style={{ ...iw, width:140 }}/>
+                    <input value={sess.label} placeholder="Session label (optional, e.g. HAZID Workshop)"
+                      onChange={e=>updateSession(sess.id,{label:e.target.value})}
+                      style={{ ...iw, flex:1 }}/>
+                    <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint, flexShrink:0 }}>
+                      {sess.rows.filter(r=>r.name).length} attendee{sess.rows.filter(r=>r.name).length!==1?"s":""}
+                    </span>
+                    <button onClick={()=>deleteSession(sess.id)}
+                      style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
+                        border:"1px solid "+T.border, background:"transparent",
+                        color:T.faint, cursor:"pointer" }}>Remove session</button>
+                  </div>
+
+                  {/* Attendee table */}
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                      <thead>
+                        <tr style={{ background:T.surface2 }}>
+                          <th style={{ padding:"7px 12px", textAlign:"left", fontFamily:T.mono,
+                            fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
+                            letterSpacing:"0.07em", borderBottom:"1px solid "+T.border, width:"45%" }}>Name</th>
+                          <th style={{ padding:"7px 12px", textAlign:"left", fontFamily:T.mono,
+                            fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
+                            letterSpacing:"0.07em", borderBottom:"1px solid "+T.border }}>Role / Title</th>
+                          <th style={{ padding:"7px 12px", width:36,
+                            borderBottom:"1px solid "+T.border }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sess.rows.map((row, ri) => (
+                          <tr key={ri}
+                            style={{ borderBottom:"1px solid "+T.rowBd }}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <td style={{ padding:"5px 8px" }}>
+                              <input value={row.name} placeholder="Full name"
+                                onChange={e=>updateRow(sess.id,ri,"name",e.target.value)}
+                                style={{ ...iw }}/>
+                            </td>
+                            <td style={{ padding:"5px 8px" }}>
+                              <input value={row.role} placeholder="e.g. Environmental Engineer"
+                                onChange={e=>updateRow(sess.id,ri,"role",e.target.value)}
+                                style={{ ...iw }}/>
+                            </td>
+                            <td style={{ padding:"5px 8px", textAlign:"center" }}>
+                              <button onClick={()=>deleteRow(sess.id,ri)}
+                                disabled={sess.rows.length<=1}
+                                style={{ fontSize:13, padding:"2px 6px", borderRadius:4,
+                                  border:"1px solid "+T.border, background:"transparent",
+                                  color:sess.rows.length<=1?T.faint:T.red, cursor:sess.rows.length<=1?"default":"pointer",
+                                  opacity:sess.rows.length<=1?0.35:1 }}>×</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Add row */}
+                  <div style={{ padding:"8px 14px", borderTop:"1px solid "+T.rowBd }}>
+                    <button onClick={()=>addRow(sess.id)}
+                      style={{ fontSize:11, padding:"4px 12px", borderRadius:5,
+                        border:"1px solid "+T.border, background:"transparent",
+                        color:T.muted, cursor:"pointer", fontFamily:T.sans }}>
+                      + Add attendee
+                    </button>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {tab === "settings" && (() => {
         // Collect existing contract names for datalist
