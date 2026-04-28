@@ -1373,7 +1373,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
       <Card style={{marginBottom:"1rem"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
           <Fld label="Opportunity type">
-            {(f.prefillGhgIds&&f.prefillGhgIds.length>0)||(f.type&&(f.type.startsWith("Scope 1")||f.type.startsWith("Scope 2")||f.type.startsWith("Scope 3"))) ? (
+            {f.prefillGhgIds&&f.prefillGhgIds.length>0 ? (
               <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
                            border:"1px solid "+T.border,fontSize:12,color:T.text,fontWeight:500}}>
                 {f.type||"—"}
@@ -1406,23 +1406,12 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               </select>
             )}
           </Fld>
-          <Fld label="Materiality">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-              {["Inside-out","Outside-in","Both"].map(opt => {
-                const active = (f.materiality||"").startsWith(opt);
-                return (
-                  <button key={opt} type="button"
-                    onClick={() => set("materiality", opt)}
-                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
-                      cursor:"pointer", border:"1px solid "+(active ? T.purpleBd : T.border),
-                      background: active ? T.purpleBg : "transparent",
-                      color: active ? T.purple : T.muted, fontWeight: active ? 600 : 400,
-                      fontFamily:"var(--sans,system-ui)" }}>
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
+          <Fld label="Materiality (CSRD)">
+            <select value={f.materiality} onChange={e=>set("materiality",e.target.value)} style={iw}>
+              <option>Inside-out (positive impact on environment)</option>
+              <option>Outside-in (financial / business benefit)</option>
+              <option>Both</option>
+            </select>
           </Fld>
           <Fld label="Opportunity description" wide>
             <textarea value={f.description} onChange={e=>set("description",e.target.value)} rows={3}
@@ -1952,7 +1941,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
                                                marginRight:8 }}>{item.sub}</span>
-                                <span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>
+                                {!isAdded&&!isSkipped&&<span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>}
                               </div>
                               {/* Reference badge or actions */}
                               {isAdded&&addedItems[item.id]&&(
@@ -2062,7 +2051,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                               textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
                               {btn.label.replace("\n"," ")}
                             </span>
-                            <span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>
+                            {!isAdded&&!isSkipped&&<span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>}
                           </div>
                           {isAdded&&addedOpp2&&(
                             <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
@@ -2250,230 +2239,12 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
 }
 
 // ── Project view ──────────────────────────────────────────────────────────────
-// ── Collapsible dashboard section ─────────────────────────────────────────────
-function DashSection({ title, count, accentColor, accentBd, accentBg, children }) {
-  const [open, setOpen] = React.useState(true);
-  return (
-    <div style={{ marginBottom:"1.25rem", borderRadius:9, overflow:"hidden",
-      border:"1px solid "+T.border, background:T.surface }}>
-      <div onClick={()=>setOpen(v=>!v)}
-        style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
-          background:T.surface2, borderBottom: open ? "1px solid "+T.border : "none",
-          cursor:"pointer", userSelect:"none" }}>
-        <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase",
-          letterSpacing:"0.08em", color:accentColor }}>{title}</span>
-        {count !== null && (
-          <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:600,
-            padding:"1px 7px", borderRadius:10,
-            background:accentBg, color:accentColor,
-            border:"1px solid "+accentBd }}>{count}</span>
-        )}
-        <span style={{ marginLeft:"auto", fontSize:12, color:T.faint }}>{open?"▲":"▼"}</span>
-      </div>
-      {open && <div style={{ padding:"12px 14px" }}>{children}</div>}
-    </div>
-  );
-}
-
-// ── Inline risk matrix for Dashboard ──────────────────────────────────────────
-function InlineRiskMatrix({ aspects, hoveredId, onHover, onEdit }) {
-  const CELL=54, YLAB=86, XLAB=40;
-  const CON_LABELS = {1:"C1\nNegligible",2:"C2\nMinor",3:"C3\nModerate",4:"C4\nMajor",5:"C5\nHuge"};
-  const PROB_LABELS = {1:"P1\nVery unlikely",2:"P2\nUnlikely",3:"P3\nLess likely",4:"P4\nLikely",5:"P5\nVery Likely"};
-  const riskGrid = {};
-  aspects.forEach(a => {
-    const c=parseInt(a.severity),p=parseInt(a.probability);
-    if(c&&p){const k=c+","+p;(riskGrid[k]=riskGrid[k]||[]).push(a);}
-  });
-  const sigCell=(c,p)=>{const z=matrixZone(c,p);return z==="SIGNIFICANT"?{bg:"#FFCDD2",bd:"#E57373"}:z==="Low"?{bg:"#C8E6C9",bd:"#81C784"}:{bg:"#FFF9C4",bd:"#F9A825"};};
-  const statusRing=a=>a.status==="Closed"?"#1b5e20":a.status==="In Progress"?"#e65100":"#b71c1c";
-  const sigFill=a=>{const z=matrixZone(parseInt(a.severity),parseInt(a.probability));return z==="SIGNIFICANT"?"#ef5350":z==="WATCH"?"#fb8c00":"#43a047";};
-  return (
-    <div style={{ marginTop:12, overflowX:"auto" }}>
-      <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
-        letterSpacing:"0.08em", marginBottom:6 }}>Risk matrix</div>
-      <div style={{ display:"flex" }}>
-        {/* Y axis */}
-        <div style={{ display:"flex", flexShrink:0 }}>
-          <div style={{ width:16, marginTop:XLAB, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontSize:8, fontWeight:700, color:T.muted, transform:"rotate(-90deg)", whiteSpace:"nowrap", textTransform:"uppercase" }}>Consequence</span>
-          </div>
-          <div style={{ width:YLAB-16, marginTop:XLAB }}>
-            {[1,2,3,4,5].map(v=>(
-              <div key={v} style={{ height:CELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
-                {CON_LABELS[v].split("\n").map((ln,i)=>(
-                  <div key={i} style={{ textAlign:"right", fontSize:i===0?8:7, fontWeight:i===0?700:400, color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Grid */}
-        <div>
-          {/* X axis */}
-          <div style={{ display:"flex", height:XLAB, alignItems:"flex-end", paddingBottom:4 }}>
-            {[1,2,3,4,5].map(v=>(
-              <div key={v} style={{ width:CELL, textAlign:"center" }}>
-                {PROB_LABELS[v].split("\n").map((ln,i)=>(
-                  <div key={i} style={{ fontSize:i===0?8:7, fontWeight:i===0?700:400, color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-          {[1,2,3,4,5].map(sv=>(
-            <div key={sv} style={{ display:"flex" }}>
-              {[1,2,3,4,5].map(pb=>{
-                const c=sigCell(sv,pb);
-                const items=riskGrid[sv+","+pb]||[];
-                return (
-                  <div key={pb} style={{ width:CELL, height:CELL, flexShrink:0, background:c.bg, border:"1px solid "+c.bd, position:"relative", boxSizing:"border-box" }}>
-                    <span style={{ position:"absolute", top:2, left:3, fontSize:8, fontWeight:700, color:"#666", opacity:0.5, pointerEvents:"none" }}>{sv*pb}</span>
-                    <div style={{ position:"absolute", inset:0, display:"flex", flexWrap:"wrap", gap:2, alignContent:"center", justifyContent:"center", padding:"14px 3px 3px" }}>
-                      {items.map((a,i)=>{
-                        const isHov = hoveredId===a.id;
-                        return (
-                          <div key={i} title={"["+a.status+"] "+a.aspect}
-                            onMouseEnter={()=>onHover&&onHover(a.id)}
-                            onMouseLeave={()=>onHover&&onHover(null)}
-                            onClick={()=>onEdit&&onEdit(a)}
-                            style={{ width:isHov?22:18, height:isHov?22:18, borderRadius:"50%",
-                              background:sigFill(a), border:"3px solid "+statusRing(a),
-                              outline:a.status==="In Progress"?"2px dashed "+statusRing(a):"none",
-                              outlineOffset:1, cursor:"pointer", transition:"all 0.15s",
-                              boxShadow:isHov?"0 0 0 3px "+T.teal:"none",
-                              display:"flex", alignItems:"center", justifyContent:"center",
-                              fontSize:7, fontWeight:700, color:"#fff", boxSizing:"border-box" }}>
-                            {items.length>1&&i===0?items.length:""}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-          <div style={{ paddingTop:2, fontSize:7, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.07em" }}>Probability of occurrence →</div>
-        </div>
-        {/* Legend */}
-        <div style={{ marginLeft:14, display:"flex", flexDirection:"column", gap:6, justifyContent:"center", fontSize:9, color:T.muted }}>
-          <div style={{ fontWeight:700, color:T.text, marginBottom:2, fontSize:9 }}>Legend</div>
-          {[{bg:"#FFCDD2",bd:"1px solid #E57373",label:"Significant"},{bg:"#FFF9C4",bd:"1px solid #F9A825",label:"Watch"},{bg:"#C8E6C9",bd:"1px solid #81C784",label:"Low"}].map(({bg,bd,label})=>(
-            <span key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
-              <span style={{ width:12,height:12,borderRadius:2,background:bg,border:bd,flexShrink:0 }}/>
-              {label}
-            </span>
-          ))}
-          <div style={{ marginTop:4, fontWeight:700, color:T.text, fontSize:9 }}>Status (ring)</div>
-          {[{c:"#b71c1c",label:"Open"},{c:"#e65100",label:"In Progress"},{c:"#1b5e20",label:"Closed"}].map(({c,label})=>(
-            <span key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
-              <span style={{ width:12,height:12,borderRadius:"50%",background:c,border:"2px solid "+c,flexShrink:0 }}/>
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Inline opportunity matrix for Dashboard ────────────────────────────────────
-function InlineOppMatrix({ opps, hoveredId, onHover, onEdit }) {
-  const CELL=54, YLAB=86, XLAB=40;
-  const ENV_LABELS  = {1:"1\nNegligible",2:"2\nMinor",3:"3\nModerate",4:"4\nSignificant",5:"5\nMajor"};
-  const FEAS_LABELS = {1:"1\nV.difficult",2:"2\nDifficult",3:"3\nModerate",4:"4\nAchievable",5:"5\nEasy"};
-  const oppGrid = {};
-  opps.forEach(o=>{
-    const e=parseInt(o.envValue),f=parseInt(o.feasibility);
-    if(e&&f){const k=e+","+f;(oppGrid[k]=oppGrid[k]||[]).push(o);}
-  });
-  const oppZone=(e,f)=>{const s=e*f;return s>=16?"High":s>=6?"Medium":"Low";};
-  const zoneStyle=(z)=>z==="High"?{bg:"#E8F5E9",bd:"#81C784"}:z==="Medium"?{bg:"#FFF9C4",bd:"#F9A825"}:{bg:"#F5F5F5",bd:"#BDBDBD"};
-  const dotColor=(o)=>{const s=calcOppScore(o);return s>=75?"#26a69a":s>=30?"#7e57c2":"#90a4ae";};
-  return (
-    <div style={{ marginTop:12, overflowX:"auto" }}>
-      <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
-        letterSpacing:"0.08em", marginBottom:6 }}>Opportunity matrix</div>
-      <div style={{ display:"flex" }}>
-        <div style={{ display:"flex", flexShrink:0 }}>
-          <div style={{ width:16, marginTop:XLAB, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontSize:8, fontWeight:700, color:T.muted, transform:"rotate(-90deg)", whiteSpace:"nowrap", textTransform:"uppercase" }}>Feasibility</span>
-          </div>
-          <div style={{ width:YLAB-16, marginTop:XLAB }}>
-            {[5,4,3,2,1].map(v=>(
-              <div key={v} style={{ height:CELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
-                {FEAS_LABELS[v].split("\n").map((ln,i)=>(
-                  <div key={i} style={{ textAlign:"right", fontSize:i===0?8:7, fontWeight:i===0?700:400, color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{ display:"flex", height:XLAB, alignItems:"flex-end", paddingBottom:4 }}>
-            {[1,2,3,4,5].map(v=>(
-              <div key={v} style={{ width:CELL, textAlign:"center" }}>
-                {ENV_LABELS[v].split("\n").map((ln,i)=>(
-                  <div key={i} style={{ fontSize:i===0?8:7, fontWeight:i===0?700:400, color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-          {[5,4,3,2,1].map(fv=>(
-            <div key={fv} style={{ display:"flex" }}>
-              {[1,2,3,4,5].map(ev=>{
-                const z=oppZone(ev,fv);
-                const s=zoneStyle(z);
-                const items=oppGrid[ev+","+fv]||[];
-                return (
-                  <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0, background:s.bg, border:"1px solid "+s.bd, position:"relative", boxSizing:"border-box" }}>
-                    <span style={{ position:"absolute", top:2, left:3, fontSize:8, opacity:0.4, fontWeight:700, pointerEvents:"none" }}>{ev*fv}</span>
-                    <div style={{ position:"absolute", inset:0, display:"flex", flexWrap:"wrap", gap:2, alignContent:"center", justifyContent:"center", padding:"14px 3px 3px" }}>
-                      {items.map((o,i)=>{
-                        const isHov=hoveredId===o.id;
-                        return (
-                          <div key={i} title={o.description}
-                            onMouseEnter={()=>onHover&&onHover(o.id)}
-                            onMouseLeave={()=>onHover&&onHover(null)}
-                            onClick={()=>onEdit&&onEdit(o)}
-                            style={{ width:isHov?22:18, height:isHov?22:18, borderRadius:"50%",
-                              background:dotColor(o), border:"2px solid rgba(0,0,0,0.2)",
-                              cursor:"pointer", transition:"all 0.15s",
-                              boxShadow:isHov?"0 0 0 3px "+T.purple:"none",
-                              display:"flex", alignItems:"center", justifyContent:"center",
-                              fontSize:7, fontWeight:700, color:"#fff", boxSizing:"border-box" }}>
-                            {items.length>1&&i===0?items.length:""}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-          <div style={{ paddingTop:2, fontSize:7, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.07em" }}>Environmental benefit →</div>
-        </div>
-        <div style={{ marginLeft:14, display:"flex", flexDirection:"column", gap:6, justifyContent:"center", fontSize:9, color:T.muted }}>
-          <div style={{ fontWeight:700, color:T.text, marginBottom:2, fontSize:9 }}>Priority</div>
-          {[{c:"#26a69a",label:"High (≥75)"},{c:"#7e57c2",label:"Medium (30–74)"},{c:"#90a4ae",label:"Low (<30)"}].map(({c,label})=>(
-            <span key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
-              <span style={{ width:12,height:12,borderRadius:"50%",background:c,flexShrink:0 }}/>
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
   const [aiOpen, setAiOpen]               = useState(false);
-  const [dashFilter, setDashFilter]       = useState("risks");
+  const [dashFilter, setDashFilter]       = useState("all");
   const [aspFilter, setAspFilter]         = useState("All");
   const [aspSort,   setAspSort]           = useState({ col:null, dir:"asc" });
   const [aspSearch, setAspSearch]         = useState("");
@@ -2490,8 +2261,6 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const d=new Date(); d.setDate(d.getDate()+(6-d.getDay())); d.setHours(23,59,59,999);
     return d.toISOString().slice(0,10);
   });
-  const [hoveredAspId, setHoveredAspId] = useState(null);
-  const [hoveredOppId, setHoveredOppId] = useState(null);
 
   const aspects = project.aspects || [];
   const opps    = project.opportunities || project.opps || [];
@@ -2642,7 +2411,7 @@ This cannot be undone.`)) return;
   const statusBg    = { "Open":T.redBg, "In Progress":T.amberBg, "Closed":T.greenBg };
 
   // Dashboard filter drives which aspects show
-  const dashAspects = dashFilter==="risks"    ? aspects
+  const dashAspects = dashFilter==="all"     ? aspects
                     : dashFilter==="sig"     ? aspects.filter(a=>calcSig(a)==="SIGNIFICANT")
                     : dashFilter==="watch"   ? aspects.filter(a=>calcSig(a)==="WATCH")
                     : dashFilter==="low"     ? aspects.filter(a=>calcSig(a)==="Low")
@@ -2696,7 +2465,7 @@ This cannot be undone.`)) return;
   const StatCard = ({ label, value, bg, color, border, filterId }) => {
     const active = dashFilter === filterId;
     return (
-      <div onClick={() => { setDashFilter(dashFilter===filterId?"risks":filterId); }}
+      <div onClick={() => { setDashFilter(dashFilter===filterId?"all":filterId); if(filterId!=="opps") setTab("dashboard"); }}
         style={{ background:bg||T.surface, borderRadius:7, padding:"12px 14px",
                  border: active ? "2px solid "+color : "1px solid "+(border||T.border),
                  cursor:"pointer", transition:"all 0.15s",
@@ -2780,7 +2549,7 @@ This cannot be undone.`)) return;
                  color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
                  letterSpacing:"0.07em", textTransform:"uppercase" }}>{children}</th>
   );
-  const AspectTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll, hoveredId, onHover }) => (
+  const AspectTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll }) => (
     <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
         <thead><tr>
@@ -2911,7 +2680,7 @@ This cannot be undone.`)) return;
       </th>
     );
   };
-  const OppTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll, hoveredId, onHover }) => (
+  const OppTable = ({ rows, onEdit, onDelete: onDel, selection, onToggle, onToggleAll }) => (
     <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
         <thead><tr>
@@ -2948,18 +2717,15 @@ This cannot be undone.`)) return;
                     style={{ cursor:"pointer", width:13, height:13 }}/>
                 </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
-                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:120 }}>
-                  {(() => {
-                    if (!o.type) return <span style={{ color:T.faint }}>—</span>;
-                    const OPP_SHORT = {"Resource Efficiency":"Resource Efficiency","Circular Economy":"Circular Economy","Low-Carbon Technology":"Low-Carbon Tech","Nature-Based Solutions":"Nature-Based","Green Finance & Taxonomy":"Green Finance","New Business / Market":"New Business","Reputational / SLO":"Reputational","Climate Resilience":"Climate Resilience","Regulatory Incentive":"Regulatory","Biodiversity Net Gain":"Biodiversity"};
-                    const display = OPP_SHORT[o.type] || o.type;
-                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
-                      background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
-                      border:"1px solid "+(rc?rc.border:T.purpleBd),
-                      display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
-                      {display}
-                    </span>;
-                  })()}
+                <td style={{ padding:"9px 12px", minWidth:80, maxWidth:140 }}>
+                  {o.type
+                    ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                        background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
+                        border:"1px solid "+(rc?rc.border:T.purpleBd),
+                        display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
+                        {o.type}
+                      </span>
+                    : <span style={{ color:T.faint }}>—</span>}
                 </td>
                 <td style={{ padding:"9px 12px", minWidth:140, maxWidth:260 }}>
                   <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
@@ -2971,7 +2737,7 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
                 <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
-                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.startsWith("Inside")?("Inside-out"):o.materiality.startsWith("Outside")?("Outside-in"):o.materiality}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
@@ -2991,7 +2757,7 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","changes","settings"];
+  const TABS = ["dashboard","screening","risks","opportunities","matrix","footprint","changes","settings"];
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
@@ -3004,7 +2770,7 @@ This cannot be undone.`)) return;
                        fontWeight:500, background:"transparent", border:"none",
                        borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
                        marginBottom:"-2px", color: tab===t ? T.teal : T.muted }}>
-              {({dashboard:"Dashboard",screening:"Screening",changes:"Changes",settings:"Settings"}[t]||t)}
+              {t.charAt(0).toUpperCase()+t.slice(1)}
             </button>
           ))}
         </div>
@@ -3016,138 +2782,297 @@ This cannot be undone.`)) return;
 
       {tab === "dashboard" && (
         <div>
-          {/* ── Summary stat cards ── */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:8, marginBottom:"1.25rem" }}>
-            <StatCard label="Registered Risks"         value={aspects.length} filterId="risks" color={T.red}    border={T.redBd}    bg={T.redBg}/>
-            <StatCard label="Significant"              value={sigCount}       filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
-            <StatCard label="Registered Opportunities" value={opps.length}    filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
-            <StatCard label="High priority"            value={highOpps}       filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
+            <StatCard label="All aspects"   value={aspects.length}  filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
+            <StatCard label="Significant"   value={sigCount}        filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
+            <StatCard label="Watch"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Opportunities" value={opps.length}     filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
+            <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
           </div>
 
-          {/* ── Environmental Budget card ── */}
+          {/* ── Emission Footprint card ── */}
           {project.footprintSummary && (() => {
             const fp   = project.footprintSummary;
             const fmtT = v => Number(v).toFixed(3) + " tCO₂e";
             const d    = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
+            // Scope totals — only what has data
+            const s3c1 = Number(fp.combined || 0);  // only scope we have so far
             const s1   = Number(fp.scope1   || 0);
             const s2   = Number(fp.scope2   || 0);
-            const s3c1 = Number(fp.combined || 0);
             const grandTotal = s1 + s2 + s3c1;
+            // NP / RP
             const np   = Number(fp.npTotal  || 0);
             const rp   = Number(fp.rpTotal  || 0);
+            const npPct = s3c1 > 0 ? Math.min(100, (np / s3c1) * 100) : 0;
+            const rpPct = s3c1 > 0 ? Math.min(100, (rp / s3c1) * 100) : 0;
+            // Category breakdown
             const cats = fp.catBreakdown || [];
+            const SCOPE_COLORS = {
+              "Scope 1":        { c:T.red,   bg:T.redBg,    bd:T.redBd    },
+              "Scope 2":        { c:T.amber, bg:T.amberBg,  bd:T.amberBd  },
+              "Scope 3 Cat 1":  { c:T.teal,  bg:T.tealBg,   bd:T.tealBd   },
+              "Scope 3 Cat 4":  { c:T.purple,bg:T.purpleBg, bd:T.purpleBd },
+            };
             const CAT_COLORS = [T.teal,T.blue,T.purple,T.amber,T.green,T.slate,T.red,T.tealDark];
             return (
-              <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden", border:"1px solid "+T.border, background:T.surface }}>
-                <div style={{ padding:"9px 14px", background:T.surface2, borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text, textTransform:"uppercase", letterSpacing:"0.08em" }}>Environmental Budget</span>
+              <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden",
+                border:"1px solid "+T.border, background:T.surface }}>
+
+                {/* ── Card header ── */}
+                <div style={{ padding:"9px 14px", background:T.surface2,
+                  borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text,
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Emission Footprint</span>
                   {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{d}</span>}
-                  <button onClick={()=>setTab("environmental-budget")}
-                    style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5, border:"1px solid "+T.tealBd, background:"transparent", color:T.teal, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
-                    Open Environmental Budget →
+                  <button onClick={()=>setTab("footprint")}
+                    style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5,
+                      border:"1px solid "+T.tealBd, background:"transparent",
+                      color:T.teal, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
+                    Open footprint →
                   </button>
                   <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
-                    style={{ fontSize:12, padding:"3px 8px", borderRadius:4, border:"1px solid "+T.border, background:"transparent", color:T.faint, cursor:"pointer" }}>×</button>
+                    style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
+                      border:"1px solid "+T.border, background:"transparent",
+                      color:T.faint, cursor:"pointer" }}>×</button>
                 </div>
-                <div style={{ padding:"10px 14px", display:"flex", gap:12, flexWrap:"wrap", alignItems:"center" }}>
-                  {s1>0 && <span style={{ fontFamily:T.mono, fontSize:12, color:T.red }}>Scope 1: <strong>{fmtT(s1)}</strong></span>}
-                  {s2>0 && <span style={{ fontFamily:T.mono, fontSize:12, color:T.amber }}>Scope 2: <strong>{fmtT(s2)}</strong></span>}
-                  {s3c1>0 && <span style={{ fontFamily:T.mono, fontSize:12, color:T.teal }}>Scope 3: <strong>{fmtT(s3c1)}</strong></span>}
-                  <span style={{ fontFamily:T.mono, fontSize:13, fontWeight:700, color:T.text, marginLeft:"auto" }}>Total: {grandTotal.toFixed(3)} tCO₂e</span>
+
+                {/* ── Scope rows ── */}
+                <div style={{ padding:"12px 14px", borderBottom:"1px solid "+T.border }}>
+                  <p style={{ fontFamily:T.mono, fontSize:8, fontWeight:600, color:T.faint,
+                    textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>
+                    Scopes with data
+                  </p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+
+                    {/* Scope 1 — placeholder, shown only if data */}
+                    {s1 > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        borderRadius:7, background:T.redBg, border:"1px solid "+T.redBd }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.red,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 1</span>
+                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.red }}>
+                          {fmtT(s1)}
+                        </span>
+                        <span style={{ fontSize:10, color:T.red, opacity:0.7, marginLeft:"auto" }}>
+                          Direct emissions
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Scope 2 — placeholder, shown only if data */}
+                    {s2 > 0 && (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        borderRadius:7, background:T.amberBg, border:"1px solid "+T.amberBd }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.amber,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 2</span>
+                        <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.amber }}>
+                          {fmtT(s2)}
+                        </span>
+                        <span style={{ fontSize:10, color:T.amber, opacity:0.7, marginLeft:"auto" }}>
+                          Energy indirect
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Scope 3 Cat 1 — always shown when footprint exists */}
+                    {s3c1 > 0 && (
+                      <div style={{ borderRadius:7, background:T.tealBg, border:"1px solid "+T.tealBd, overflow:"hidden" }}>
+                        {/* Row header */}
+                        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px" }}>
+                          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.teal,
+                            minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                            Scope 3 Cat 1
+                          </span>
+                          <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:T.teal }}>
+                            {fmtT(s3c1)}
+                          </span>
+                          <span style={{ fontSize:10, color:T.teal, opacity:0.7, marginLeft:"auto" }}>
+                            Purchased goods &amp; services (MTO/MEL)
+                          </span>
+                        </div>
+                        {/* NP / RP stacked bar */}
+                        {(np > 0 || rp > 0) && (
+                          <div style={{ padding:"0 12px 8px" }}>
+                            <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden",
+                              background:T.border, marginBottom:5 }}>
+                              <div style={{ width:npPct+"%", background:T.teal }} />
+                              <div style={{ width:rpPct+"%", background:T.blue }} />
+                            </div>
+                            <div style={{ display:"flex", gap:12 }}>
+                              {np > 0 && <span style={{ fontSize:10, color:T.teal }}>
+                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(np)}</span> NP
+                              </span>}
+                              {rp > 0 && <span style={{ fontSize:10, color:T.blue }}>
+                                <span style={{ fontFamily:T.mono, fontWeight:700 }}>{fmtT(rp)}</span> RP
+                              </span>}
+                            </div>
+                          </div>
+                        )}
+                        {/* Category breakdown — only if > 1 category */}
+                        {cats.length > 1 && (
+                          <div style={{ padding:"0 12px 10px",
+                            borderTop:"1px solid "+T.tealBd, paddingTop:8, marginTop:2 }}>
+                            <p style={{ fontFamily:T.mono, fontSize:8, color:T.teal, opacity:0.7,
+                              textTransform:"uppercase", letterSpacing:"0.07em", margin:"0 0 6px" }}>
+                              By COR category
+                            </p>
+                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                              {cats.map(({ cat, tco2e }, ci) => {
+                                const col = CAT_COLORS[ci % CAT_COLORS.length];
+                                const pct = s3c1 > 0 ? Math.min(100, (tco2e / s3c1) * 100) : 0;
+                                return (
+                                  <div key={cat}>
+                                    <div style={{ display:"flex", justifyContent:"space-between",
+                                      marginBottom:2, alignItems:"center" }}>
+                                      <span style={{ fontSize:10, color:T.text }}>{cat}</span>
+                                      <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:col }}>
+                                        {tco2e.toFixed(3)} tCO₂e
+                                      </span>
+                                    </div>
+                                    <div style={{ height:4, borderRadius:2, background:T.border, overflow:"hidden" }}>
+                                      <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Placeholder rows for scopes not yet calculated */}
+                    {[
+                      s1 === 0 && { label:"Scope 1", sub:"Direct — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
+                      s2 === 0 && { label:"Scope 2", sub:"Energy indirect — coming soon", c:T.faint, bg:T.surface2, bd:T.border },
+                    ].filter(Boolean).map(row => (
+                      <div key={row.label} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 12px",
+                        borderRadius:7, background:row.bg, border:"1px solid "+row.bd, opacity:0.5 }}>
+                        <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:row.c,
+                          minWidth:90, textTransform:"uppercase", letterSpacing:"0.07em" }}>{row.label}</span>
+                        <span style={{ fontSize:10, color:row.c, fontStyle:"italic" }}>{row.sub}</span>
+                        <span style={{ fontFamily:T.mono, fontSize:12, color:row.c, marginLeft:"auto" }}>—</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Grand total footer ── */}
+                <div style={{ padding:"9px 14px", background:T.surface2,
+                  display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Total (all scopes)</span>
+                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:700, color:T.text }}>
+                    {grandTotal.toFixed(3)} tCO₂e
+                  </span>
+                  {(s1 === 0 || s2 === 0) && (
+                    <span style={{ fontSize:10, color:T.faint, fontStyle:"italic" }}>
+                      · partial (Scope {[s1===0&&"1",s2===0&&"2"].filter(Boolean).join(" & ")} pending)
+                    </span>
+                  )}
                 </div>
               </div>
             );
           })()}
 
-          {/* ── tCO₂e savings strip ── */}
+          {/* tCO₂e saving strip with scope breakdown */}
           {opps.length > 0 && totalGhgSaving > 0 && (() => {
             const sc = calcPortfolioScopeSavings(opps);
             const fmtT = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t":Math.round(kg)+" kg";
             return (
-              <div style={{ padding:"10px 14px", marginBottom:"1rem", background:T.tealBg, border:"1px solid "+T.tealBd, borderRadius:7, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                <span style={{ fontSize:11, color:T.teal, fontWeight:500 }}>tCO₂e savings identified</span>
-                <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:500, color:T.tealDark }}>{fmtGhg(totalGhgSaving)}</span>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginLeft:"auto" }}>
-                  {[{l:"Scope 1",v:sc.s1,bg:T.redBg,c:T.red,bd:T.redBd},{l:"Scope 2",v:sc.s2,bg:T.blueBg,c:T.blue,bd:T.blueBd},{l:"Scope 3",v:sc.s3,bg:T.tealBg,c:T.teal,bd:T.tealBd}]
-                    .filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
-                    <span key={l} style={{ fontSize:11, padding:"2px 10px", borderRadius:4, background:bg, color:c, border:"1px solid "+bd }}>
-                      {l}: <strong style={{ fontFamily:T.mono }}>{fmtT(v)}</strong>
-                    </span>
-                  ))}
+              <div style={{ padding:"11px 16px", marginBottom:"1rem",
+                             background:T.tealBg, border:"1px solid "+T.tealBd, borderRadius:7 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
+                  <span style={{ fontSize:11, color:T.teal, fontWeight:500 }}>tCO₂e savings identified</span>
+                  <span style={{ fontFamily:T.mono, fontSize:16, fontWeight:500, color:T.tealDark }}>{fmtGhg(totalGhgSaving)}</span>
+                  <span style={{ fontSize:11, color:T.teal, marginLeft:"auto" }}>
+                    {opps.filter(o=>calcGhgTotal(o)).length}/{opps.length} quantified
+                  </span>
                 </div>
+                {(sc.s1+sc.s2+sc.s3)>0 && (
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {[{l:"Scope 1",v:sc.s1,bg:T.redBg,c:T.red,bd:T.redBd},
+                      {l:"Scope 2",v:sc.s2,bg:T.blueBg,c:T.blue,bd:T.blueBd},
+                      {l:"Scope 3",v:sc.s3,bg:T.tealBg,c:T.teal,bd:T.tealBd}]
+                      .filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                      <span key={l} style={{ fontSize:11, padding:"2px 10px", borderRadius:4,
+                                              background:bg, color:c, border:"1px solid "+bd }}>
+                        {l}: <strong style={{ fontFamily:T.mono }}>{fmtT(v)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
 
-          {/* ══ REGISTERED RISKS ═══════════════════════════════════════════════ */}
-          <DashSection title="Registered Risks" count={aspects.length} accentColor={T.red} accentBd={T.redBd} accentBg={T.redBg}>
-            <div style={{ display:"flex", gap:8, marginBottom:"0.75rem", flexWrap:"wrap", alignItems:"center" }}>
-              <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add risk</Btn>
-              <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
-                placeholder="Search risks..." style={{ width:180, padding:"5px 10px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text }}/>
-              <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
-                {["All","SIGNIFICANT","WATCH","Low"].map(f => (
-                  <button key={f} onClick={()=>setAspFilter(f)}
-                    style={{ fontFamily:T.mono, padding:"4px 9px", fontSize:10, borderRadius:4, cursor:"pointer",
-                             fontWeight:aspFilter===f?500:400,
-                             border: aspFilter===f ? "1px solid "+T.teal : "1px solid "+T.border,
-                             background: aspFilter===f ? T.tealBg : "transparent",
-                             color: aspFilter===f ? T.teal : T.muted }}>{f}</button>
+          {/* Status progress bar */}
+          {aspects.length > 0 && (
+            <div style={{ marginBottom:"1.25rem" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:11, fontWeight:500, color:T.muted }}>Aspect status</span>
+                <span style={{ fontSize:11, color:T.faint }}>{aspects.length} total</span>
+              </div>
+              <div style={{ display:"flex", borderRadius:6, overflow:"hidden", height:10, background:T.border, gap:"1px" }}>
+                {STATUSES.map(s => statusCounts[s] > 0 && (
+                  <div key={s} title={s+": "+statusCounts[s]}
+                    style={{ flex:statusCounts[s], background:statusColors[s], transition:"flex 0.3s", minWidth:2 }}/>
                 ))}
               </div>
+              <div style={{ display:"flex", gap:12, marginTop:7, flexWrap:"wrap" }}>
+                {STATUSES.map(s => statusCounts[s] > 0 && (() => {
+                  const sc = s==="Open"?{bg:T.redBg,c:T.red,bd:T.redBd}:s==="In Progress"?{bg:T.amberBg,c:T.amber,bd:T.amberBd}:{bg:T.greenBg,c:T.green,bd:T.greenBd};
+                  return (
+                    <span key={s} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
+                                           padding:"2px 8px", borderRadius:4, fontWeight:500,
+                                           background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>
+                      {s} <strong style={{ fontWeight:700 }}>{statusCounts[s]}</strong>
+                    </span>
+                  );
+                })())}
+              </div>
             </div>
-            {selectedAsp.size > 0 && (
-              <BulkBar count={selectedAsp.size} accentColor={T.teal} accentBg={T.tealBg} accentBd={T.tealBd}
-                statusOptions={STATUSES} onDelete={bulkDeleteAspects}
-                onStatusChange={s=>s?bulkSetAspStatus(s):setSelectedAsp(new Set())}/>
-            )}
-            {filteredAspects.length === 0
-              ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-                  {aspects.length===0
-                    ? <><p style={{ margin:"0 0 8px" }}>No risks yet.</p><Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn></>
-                    : "No risks match filter."}
-                </div>
-              : <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect}
-                  selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}
-                  hoveredId={hoveredAspId} onHover={setHoveredAspId}/>
-            }
-            {aspects.length > 0 && <InlineRiskMatrix aspects={aspects} hoveredId={hoveredAspId} onHover={setHoveredAspId} onEdit={setEditAspect}/>}
-          </DashSection>
+          )}
 
-          {/* ══ REGISTERED OPPORTUNITIES ════════════════════════════════════════ */}
-          <DashSection title="Registered Opportunities" count={opps.length} accentColor={T.purple} accentBd={T.purpleBd} accentBg={T.purpleBg}>
-            <div style={{ display:"flex", gap:8, marginBottom:"0.75rem", flexWrap:"wrap", alignItems:"center" }}>
-              <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
-              <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
-                placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12, borderRadius:5, border:"1px solid "+T.border, background:T.surface, color:T.text }}/>
+          {dashFilter !== "all" && dashFilter !== "opps" && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"1rem" }}>
+              <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>
+                Showing: <strong style={{ color:T.text }}>{dashFilter==="sig"?"Significant":dashFilter==="watch"?"Watch":"Low"}</strong> ({dashAspects.length})
+              </span>
+              <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>
+                Clear filter x
+              </button>
             </div>
-            {selectedOpp.size > 0 && (
-              <BulkBar count={selectedOpp.size} accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
-                statusOptions={OPP_STATUSES} onDelete={bulkDeleteOpps}
-                onStatusChange={s=>s?bulkSetOppStatus(s):setSelectedOpp(new Set())}/>
-            )}
-            {filteredOpps.length === 0
-              ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
-              : <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp}
-                  selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}
-                  hoveredId={hoveredOppId} onHover={setHoveredOppId}/>
-            }
-            {opps.length > 0 && <InlineOppMatrix opps={opps} hoveredId={hoveredOppId} onHover={setHoveredOppId} onEdit={setEditOpp}/>}
-          </DashSection>
+          )}
 
-          {/* ══ WASTE HANDLING ══════════════════════════════════════════════════ */}
-          <DashSection title="Waste Handling" count={null} accentColor={T.amber} accentBd={T.amberBd} accentBg={T.amberBg}>
-            <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              Waste handling register — coming soon.
+          {dashFilter === "opps" && (
+            <div style={{ marginBottom:"1rem" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:"0.75rem" }}>
+                <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>Showing: <strong style={{ color:T.text }}>Opportunities</strong> ({opps.length})</span>
+                <button onClick={()=>setDashFilter("all")} style={{ fontFamily:T.mono, fontSize:10, background:"transparent", border:"none", color:T.teal, cursor:"pointer", padding:0 }}>Clear filter x</button>
+              </div>
+              {opps.length===0
+                ? <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>No opportunities yet.</div>
+                : <OppTable rows={opps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>}
             </div>
-          </DashSection>
+          )}
 
-          {/* ══ ATTENDEES ═══════════════════════════════════════════════════════ */}
-          <DashSection title="Attendees" count={null} accentColor={T.teal} accentBd={T.tealBd} accentBg={T.tealBg}>
-            <div style={{ textAlign:"center", padding:"2rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              Attendees register — coming soon.
-            </div>
-          </DashSection>
+          {dashFilter !== "opps" && (
+            dashAspects.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
+                {dashFilter==="all"
+                  ? <><p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects identified yet.</p>
+                      <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to get started.</p>
+                      <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+                        <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
+                        <Btn onClick={()=>setEditAspect(emptyAspect())}>+ Manual entry</Btn>
+                      </div></>
+                  : <p style={{ margin:0, fontSize:13, color:T.muted }}>No {dashFilter==="sig"?"significant":dashFilter==="watch"?"watch":dashFilter} aspects.</p>}
+              </div>
+            ) : (
+              <AspectTable rows={sortedDashAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
+            )
+          )}
         </div>
       )}
 
@@ -3155,9 +3080,362 @@ This cannot be undone.`)) return;
         <ScreeningTab project={project} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
       )}
 
+      {tab === "risks" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
+            <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
+            <button onClick={()=>setAiOpen(v=>!v)}
+              style={{ padding:"7px 13px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans,
+                       fontWeight:500, border:"1px solid "+T.purpleBd,
+                       background:aiOpen?T.purpleBg:"transparent", color:T.purple }}>
+              AI suggest
+            </button>
+              <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
+              placeholder="Search aspects..." style={{ width:180, padding:"5px 10px", fontSize:12 }}/>
+            <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
+              {["All","SIGNIFICANT","WATCH","Low"].map(f => (
+                <button key={f} onClick={()=>setAspFilter(f)}
+                  style={{ fontFamily:T.mono, padding:"4px 9px", fontSize:10, borderRadius:4, cursor:"pointer",
+                           fontWeight:aspFilter===f?500:400, letterSpacing:"0.03em",
+                           border: aspFilter===f ? "1px solid "+T.teal : "1px solid "+T.border,
+                           background: aspFilter===f ? T.tealBg : "transparent",
+                           color: aspFilter===f ? T.teal : T.muted }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
+          {filteredAspects.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
+            </div>
+          ) : (
+            <div>
+              {selectedAsp.size > 0 && (
+                <BulkBar count={selectedAsp.size}
+                  accentColor={T.teal} accentBg={T.tealBg} accentBd={T.tealBd}
+                  statusOptions={STATUSES}
+                  onDelete={bulkDeleteAspects}
+                  onStatusChange={s => s ? bulkSetAspStatus(s) : setSelectedAsp(new Set())}/>
+              )}
+              <AspectTable rows={filteredAspects} onEdit={setEditAspect} onDelete={deleteAspect} selection={selectedAsp} onToggle={toggleSelAsp} onToggleAll={toggleAllAsp}/>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "opportunities" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
+            <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
+            <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
+              placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
+            <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>
+              {filteredOpps.length} of {opps.length} opportunit{opps.length!==1?"ies":"y"}
+            </span>
+          </div>
+          {opps.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              <p style={{ margin:"0 0 8px", fontSize:13, color:T.muted }}>No opportunities tracked yet.</p>
+              <p style={{ fontSize:12, margin:0 }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
+            </div>
+          ) : (
+            <div>
+              {selectedOpp.size > 0 && (
+                <BulkBar count={selectedOpp.size}
+                  accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
+                  statusOptions={OPP_STATUSES}
+                  onDelete={bulkDeleteOpps}
+                  onStatusChange={s => s ? bulkSetOppStatus(s) : setSelectedOpp(new Set())}/>
+              )}
+              <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
+            </div>
+          )}
+        </div>
+      )}
 
 
+      {tab === "matrix" && (() => {
+        // ─── Shared constants ──────────────────────────────────────────────────────
+        const CELL = 60;       // px per grid cell
+        const YLAB = 98;       // total width of Y-axis (rotated label + descriptors)
+        const XLAB = 44;       // height of X-axis header row
 
+        // ─── Shared sub-components ────────────────────────────────────────────────
+        // Axis descriptor column (left side, shared layout)
+        const YAxis = ({ title, labels, order="desc" }) => (
+          <div style={{ display:"flex", alignItems:"flex-start", flexShrink:0 }}>
+            {/* Rotated title */}
+            <div style={{ width:20, marginTop:XLAB, height:CELL*5,
+                           display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ fontSize:10, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                             whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>
+                {title}
+              </span>
+            </div>
+            {/* Row labels */}
+            <div style={{ width:YLAB-20, flexShrink:0, marginTop:XLAB }}>
+              {(order==="asc" ? [1,2,3,4,5] : [5,4,3,2,1]).map(v => (
+                <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
+                                       justifyContent:"flex-end", paddingRight:10 }}>
+                  <div style={{ textAlign:"right" }}>
+                    {(labels[v]||"").split("\n").map((ln,i) => (
+                      <div key={i} style={{ fontSize: i===0?9:8, fontWeight:i===0?700:400,
+                        color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln.replace("|"," ")}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+        // X-axis header row (column descriptors)
+        const XAxis = ({ labels, footerLabel }) => (
+          <>
+            <div style={{ display:"flex", height:XLAB, alignItems:"flex-end", paddingBottom:6 }}>
+              {[1,2,3,4,5].map(v => (
+                <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
+                  {(labels[v]||"").split("\n").map((ln,i) => (
+                    <div key={i} style={{ fontSize:i===0?9:8, fontWeight:i===0?700:400,
+                      color:i===0?T.text:T.faint, lineHeight:1.2 }}>{ln.replace("|"," ")}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div style={{ paddingTop:2, fontSize:8, fontWeight:600, color:T.faint,
+                           letterSpacing:"0.07em", textTransform:"uppercase" }}>
+              {footerLabel}
+            </div>
+          </>
+        );
+
+        // Unified legend block — used by both matrices
+        // Shared section header
+        const MatrixHeader = ({ title, subtitle, isFirst, legend }) => (
+          <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+                        marginBottom:"0.4rem",
+                        paddingTop: isFirst?0:"0.75rem",
+                        borderTop: isFirst?"none":"1px solid "+T.border }}>
+            <span style={{ fontSize:11, fontWeight:700, color:T.text,
+              textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>{title}</span>
+            <span style={{ fontSize:9, color:T.faint }}>{subtitle}</span>
+            {legend && (
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginLeft:"auto" }}>
+                {legend.map((item,i) => (
+                  <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:4,
+                    fontSize:9, color:T.muted, whiteSpace:"nowrap" }}>
+                    <span style={{ width:item.sw||10, height:item.sh||10,
+                      borderRadius:item.br||"50%", background:item.bg,
+                      border:item.bd, flexShrink:0, display:"inline-block" }}/>
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+        // ─── Risk matrix data + rendering ─────────────────────────────────────────
+        const CON_LABELS  = { 1:"C1\nNegligible", 2:"C2\nMinor", 3:"C3\nModerate", 4:"C4\nMajor", 5:"C5\nHuge" };
+        const PROB_LABELS = { 1:"P1\nVery unlikely|(0–1%)", 2:"P2\nUnlikely|(1–5%)", 3:"P3\nLess likely|(5–25%)", 4:"P4\nLikely|(25–50%)", 5:"P5\nVery Likely|(50–100%)" };
+
+        const sigCell = (sv, pb) => {
+          const z = matrixZone(sv, pb);
+          if (z === "SIGNIFICANT") return { bg:"#FFCDD2", bd:"#E57373", zone:"SIGNIFICANT" };
+          if (z === "Low")         return { bg:"#C8E6C9", bd:"#81C784", zone:"Low"         };
+          return                           { bg:"#FFF9C4", bd:"#F9A825", zone:"WATCH"       };
+        };
+        const zoneTextC = { SIGNIFICANT:T.redBd, WATCH:T.amberBd, Low:T.greenBd };
+
+        const riskGrid = {};
+        aspects.forEach(a => {
+          if (!a.severity || !a.probability) return;
+          const sv = Math.min(5,Math.max(1,parseInt(a.severity)));
+          const pb = Math.min(5,Math.max(1,parseInt(a.probability)));
+          const k  = sv+","+pb;
+          if (!riskGrid[k]) riskGrid[k] = [];
+          riskGrid[k].push(a);
+        });
+        const unplotted = aspects.filter(a => !a.severity || !a.probability);
+
+        // ─── Opportunity matrix data + rendering ──────────────────────────────────
+        const OPP_ENV_LABELS  = { 1:"1\nNegligible", 2:"2\nMinor", 3:"3\nModerate", 4:"4\nSignificant", 5:"5\nMajor" };
+        const OPP_FEAS_LABELS = { 1:"1\nV.difficult", 2:"2\nDifficult", 3:"3\nModerate", 4:"4\nAchievable", 5:"5\nEasy" };
+
+        const oppQuadrant = (ev, feas) => {
+          const hE = ev>=4, hF = feas>=4;
+          if  (hE && hF)  return { bg:T.tealBg,   bd:T.tealBd,   label:"Pursue",       c:T.teal   };
+          if  (hE && !hF) return { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",          c:T.blue   };
+          if  (!hE && hF) return { bg:T.purpleBg, bd:T.purpleBd, label:"Quick win",     c:T.purple };
+          return                  { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritise",  c:T.slate  };
+        };
+
+        // Quadrant corner cell: top-right cell of each quadrant region
+        const isQuadrantCorner = (ev, feas) =>
+          (ev===5 && feas===5) || (ev===3 && feas===5) || (ev===5 && feas===3) || (ev===3 && feas===3);
+
+        const oppGrid = {};
+        opps.forEach(o => {
+          const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+          const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
+          const k    = ev+","+feas;
+          if (!oppGrid[k]) oppGrid[k] = [];
+          oppGrid[k].push(o);
+        });
+
+        return (
+          <div>
+            {/* ══ Risk matrix ══════════════════════════════════════════════════════════ */}
+            <MatrixHeader isFirst title="Environmental risk matrix"
+              subtitle="Consequence × Probability"
+              legend={[
+                { bg:"#FFCDD2", bd:"1px solid #E57373", br:"3px", sw:12, sh:12, label:"Significant" },
+                { bg:"#FFF9C4", bd:"1px solid #F9A825", br:"3px", sw:12, sh:12, label:"Watch" },
+                { bg:"#C8E6C9", bd:"1px solid #81C784", br:"3px", sw:12, sh:12, label:"Low" },
+                { bg:"#ef5350", bd:"3px solid #b71c1c", label:"Open" },
+                { bg:"#fb8c00", bd:"3px solid #e65100", label:"In Progress" },
+                { bg:"#43a047", bd:"3px solid #1b5e20", label:"Closed" },
+              ]}/>
+
+            {aspects.length === 0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
+                               borderRadius:8, border:"1px solid "+T.border, color:T.faint,
+                               fontSize:12, marginBottom:"2rem" }}>
+                  No risks yet — use the Screening tab to get started.
+                </div>
+              : <>
+                  <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
+                    <YAxis title="Consequence →" labels={CON_LABELS} order="asc"/>
+                    <div>
+                      <XAxis labels={PROB_LABELS} footerLabel="Probability of occurrence →"/>
+                      {[1,2,3,4,5].map(sv => (
+                        <div key={sv} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(pb => {
+                            const c     = sigCell(sv,pb);
+                            const items = riskGrid[sv+","+pb]||[];
+                            return (
+                              <div key={sv} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                     background:c.bg, border:"1px solid "+c.bd,
+                                                     position:"relative", boxSizing:"border-box" }}>
+                                {/* Score number always in top-left */}
+                                <span style={{ position:"absolute", top:3, left:4,
+                                               fontSize:9, fontWeight:700, lineHeight:1,
+                                               color:zoneTextC[c.zone], opacity:0.6,
+                                               pointerEvents:"none", userSelect:"none" }}>{sv*pb}</span>
+                                {/* Dots centred */}
+                                <div style={{ position:"absolute", inset:0,
+                                              display:"flex", flexWrap:"wrap", gap:3,
+                                              alignContent:"center", justifyContent:"center", padding:"16px 4px 4px" }}>
+                                  {items.map((a,i) => {
+                                    const sig   = calcSig(a);
+                                    // Fill = significance colour (solid)
+                                    const fill  = sig==="SIGNIFICANT"?"#ef5350":sig==="WATCH"?"#fb8c00":"#43a047";
+                                    // Status shown as inner dot pattern
+                                    const statusMark =
+                                        a.status==="Closed"      ? { ring:"#1b5e20", dash:false }
+                                      : a.status==="In Progress" ? { ring:"#e65100", dash:true  }
+                                      :                            { ring:"#b71c1c", dash:false };
+                                    return (
+                                      <div key={i}
+                                        title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+a.severity+"×P"+pb+" = "+sv*pb}
+                                        onClick={()=>setEditAspect(a)}
+                                        style={{ width:20, height:20, borderRadius:"50%",
+                                                 background:fill,
+                                                 border:"3px solid "+statusMark.ring,
+                                                 outline: statusMark.dash ? "2px dashed "+statusMark.ring : "none",
+                                                 outlineOffset:1,
+                                                 cursor:"pointer", flexShrink:0,
+                                                 display:"flex", alignItems:"center", justifyContent:"center",
+                                                 fontSize:8, fontWeight:700, color:"#fff",
+                                                 boxSizing:"border-box" }}>
+                                        {items.length>1&&i===0?items.length:""}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {unplotted.length>0 && (
+                    <p style={{ fontSize:11, color:T.faint, marginTop:"0.5rem" }}>
+                      {unplotted.length} not plotted (C/P missing)
+                    </p>
+                  )}
+                </>
+            }
+
+            {/* ══ Opportunity matrix ═══════════════════════════════════════════════════ */}
+            <MatrixHeader title="Opportunity priority matrix"
+              subtitle="Environmental benefit × Feasibility · dot size = business value"
+              legend={[
+                { bg:T.tealBg,   bd:"1px solid "+T.tealBd,   br:"3px", sw:12, sh:12, label:"Pursue" },
+                { bg:T.blueBg,   bd:"1px solid "+T.blueBd,   br:"3px", sw:12, sh:12, label:"Plan" },
+                { bg:T.purpleBg, bd:"1px solid "+T.purpleBd, br:"3px", sw:12, sh:12, label:"Quick win" },
+                { bg:T.slateBg,  bd:"1px solid "+T.slateBd,  br:"3px", sw:12, sh:12, label:"Deprioritise" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:10, sh:10, label:"Biz: low" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:14, sh:14, label:"med" },
+                { bg:T.tealBg, bd:"2px solid "+T.tealBd, sw:18, sh:18, label:"high" },
+              ]}/>
+
+            {opps.length === 0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:T.surface,
+                               borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+                  No opportunities yet.
+                </div>
+              : <>
+                  <div style={{ display:"flex", alignItems:"flex-start", overflowX:"auto" }}>
+                    <YAxis title="Implementation feasibility →" labels={OPP_FEAS_LABELS}/>
+                    <div>
+                      <XAxis labels={OPP_ENV_LABELS} footerLabel="Environmental benefit / magnitude →"/>
+                      {[5,4,3,2,1].map(feas => (
+                        <div key={feas} style={{ display:"flex" }}>
+                          {[1,2,3,4,5].map(ev => {
+                            const q     = oppQuadrant(ev,feas);
+                            const items = oppGrid[ev+","+feas]||[];
+                            const isCorner = isQuadrantCorner(ev,feas);
+                            return (
+                              <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
+                                                     background:q.bg, border:"1px solid "+q.bd,
+                                                     display:"flex", flexWrap:"wrap",
+                                                     alignContent:"center", justifyContent:"center",
+                                                     gap:4, padding:5, boxSizing:"border-box",
+                                                     position:"relative" }}>
+                                {/* Quadrant label in top-right corner cell of each quadrant */}
+                                {items.length===0 && isCorner && (
+                                  <span style={{ fontSize:9, fontWeight:700, color:q.c,
+                                                 opacity:0.55, textAlign:"center",
+                                                 lineHeight:1.3, padding:2 }}>{q.label}</span>
+                                )}
+                                {items.map((o,i) => {
+                                  const sz  = 10+(Math.min(5,Math.max(1,parseInt(o.bizValue)||1))-1)*2;
+                                  const oC  = {bg:T.tealBg,bd:T.tealBd};
+                                  return (
+                                    <div key={i}
+                                      title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv benefit: "+o.envValue+" · Feasibility: "+o.feasibility+" · Business value: "+o.bizValue}
+                                      onClick={()=>setEditOpp(o)}
+                                      style={{ width:sz, height:sz, borderRadius:"50%",
+                                               background:oC.bg, border:"2px solid "+oC.bd,
+                                               cursor:"pointer", flexShrink:0 }}/>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+            }
+          </div>
+        );
+      })()}
       {tab === "changes" && (()=>{
         const now = new Date();
         const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay()); weekStart.setHours(0,0,0,0);
@@ -3259,7 +3537,7 @@ This cannot be undone.`)) return;
         );
       })()}
 
-      {tab === "environmental-budget" && (
+      {tab === "footprint" && (
         <FootprintTab project={project} onChange={onChange}/>
       )}
 
@@ -4315,7 +4593,7 @@ function FootprintTab({ project, onChange }) {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href = url;
-    a.download = (project.name || "environmental-budget") + "_calculation.csv";
+    a.download = (project.name || "footprint") + "_calculation.csv";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
