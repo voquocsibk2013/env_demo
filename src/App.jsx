@@ -4863,7 +4863,8 @@ function applyOverrides(calcResult, overrides) {
     const ef  = entry.ef;
     const tco = (Number(row.weight) * ef) / 1000;
     return { ...row, cor: oc, category: entry.cat, corDesc: entry.desc,
-             emissionFactor: ef, emissionTco2e: tco, status: "VALID", errors: [], _overridden: true };
+             emissionFactor: ef, emissionTco2e: tco, status: "VALID", errors: [], _overridden: true,
+             _originalCor: row._originalCor || row.cor };
   });
   const mtoRows = newAllRows.filter(r => r.source === "MTO");
   const melRows = newAllRows.filter(r => r.source === "MEL");
@@ -4947,32 +4948,80 @@ function FootprintTab({ project, onChange }) {
     hlTimer.current = setTimeout(() => setColHighlight(null), 2000);
   };
 
-  // ── CSV export (no raw data, just calculated results) ───────────────────────
+  // ── CSV export — structured MTO / MEL sections ───────────────────────────────
   const exportCSV = () => {
     if (!displayResult || !displayResult.allRows) return;
-    const hdrs = ["Source","Sheet","Row","Description","Material","COR Code","Category",
-                  "COR Description","Handling Code","Weight (kg)","Emission Factor",
-                  "Emission (tCO2e)","Status","Overridden"];
-    const rows = displayResult.allRows.map(r => [
-      r.source, r.sheet, r.rowNum, r.desc||"", r.material||"", r.cor||"",
-      r.category||"", r.corDesc||"", r.mhc||"",
+
+    const esc = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    const row = arr => arr.map(esc).join(",");
+
+    const mtoRows = displayResult.allRows.filter(r => r.source === "MTO");
+    const melRows = displayResult.allRows.filter(r => r.source === "MEL");
+
+    const MTO_HDRS = [
+      "COR_Code", "Original COR_Code", "Category",
+      "Weight Item Descr.", "Material",
+      "Mod. Handl. Code", "Gross Dry Weight (kg)",
+      "Emission Factor", "Emission (tCO2e)"
+    ];
+    const MEL_HDRS = [
+      "COR_Code", "Original COR_Code", "Category",
+      "Equipment Type Description",
+      "Mod. Handl. Code", "Gross Dry Weight (kg)",
+      "Emission Factor", "Emission (tCO2e)"
+    ];
+
+    const mtoDataRows = mtoRows.map(r => row([
+      r.cor || "",
+      r._originalCor || r.cor || "",
+      r.category || "",
+      r.desc || "",
+      r.material || "",
+      r.mhc || "",
       r.weight != null ? r.weight : "",
       r.emissionFactor != null ? r.emissionFactor : "",
-      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : "",
-      r.status, r._overridden ? "yes" : ""
-    ]);
-    rows.push([]);
-    rows.push(["SUMMARY","","","","","","","","","","",displayResult.mtoTotal.toFixed(6)+" tCO2e","MTO",""]);
-    rows.push(["SUMMARY","","","","","","","","","","",displayResult.melTotal.toFixed(6)+" tCO2e","MEL",""]);
-    rows.push(["SUMMARY","","","","","","","","","","",displayResult.combined.toFixed(6)+" tCO2e","COMBINED",""]);
-    const csv = [hdrs, ...rows]
-      .map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(","))
-      .join("\n");
+      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : ""
+    ]));
+
+    const melDataRows = melRows.map(r => row([
+      r.cor || "",
+      r._originalCor || r.cor || "",
+      r.category || "",
+      r.desc || "",
+      r.mhc || "",
+      r.weight != null ? r.weight : "",
+      r.emissionFactor != null ? r.emissionFactor : "",
+      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : ""
+    ]));
+
+    const lines = [];
+
+    // MTO section
+    lines.push(row(["=== MTO — Material Take-Off ==="]));
+    lines.push(row(MTO_HDRS));
+    mtoDataRows.forEach(r => lines.push(r));
+    lines.push(row(["","","","","","","TOTAL MTO (tCO2e)","",displayResult.mtoTotal.toFixed(6)]));
+    lines.push("");
+
+    // MEL section
+    lines.push(row(["=== MEL — Material Equipment List ==="]));
+    lines.push(row(MEL_HDRS));
+    melDataRows.forEach(r => lines.push(r));
+    lines.push(row(["","","","","","TOTAL MEL (tCO2e)","",displayResult.melTotal.toFixed(6)]));
+    lines.push("");
+
+    // Summary
+    lines.push(row(["=== SUMMARY ==="]));
+    lines.push(row(["","MTO (tCO2e)",displayResult.mtoTotal.toFixed(6)]));
+    lines.push(row(["","MEL (tCO2e)",displayResult.melTotal.toFixed(6)]));
+    lines.push(row(["","COMBINED (tCO2e)",displayResult.combined.toFixed(6)]));
+
+    const csv  = lines.join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    a.href = url;
-    a.download = (project.name || "footprint") + "_calculation.csv";
+    a.href     = url;
+    a.download = (project.name || "footprint") + "_environmental_budget.csv";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
