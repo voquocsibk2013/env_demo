@@ -2282,6 +2282,200 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     URL.revokeObjectURL(url);
   };
 
+
+  // ── PDF Report export ────────────────────────────────────────────────────────
+  const exportPDF = () => {
+    const now        = new Date();
+    const dateStr    = now.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
+    const sig        = aspects.filter(a => calcSig(a) === "SIGNIFICANT");
+    const watch      = aspects.filter(a => calcSig(a) === "WATCH");
+    const low        = aspects.filter(a => calcSig(a) === "Low");
+    const highOpps   = opps.filter(o => calcOppScore(o) >= 75);
+    const openRisks  = aspects.filter(a => a.status !== "Closed");
+    const fp         = project.footprintSummary;
+
+    const pct = (n, total) => total > 0 ? Math.round((n / total) * 100) : 0;
+    const fmt6 = v => Number(v).toFixed(6);
+    const fmtT = kg => kg >= 1000 ? (kg/1000).toFixed(3) + " tCO₂e" : Math.round(kg) + " kg CO₂e";
+
+    const sigRow = a => {
+      const s = calcSig(a);
+      const sc = calcScore(a) || "—";
+      const bg = s==="SIGNIFICANT"?"#fee2e2":s==="WATCH"?"#fefce8":"#f0fdf4";
+      const co = s==="SIGNIFICANT"?"#991b1b":s==="WATCH"?"#92400e":"#166534";
+      return `<tr>
+        <td style="font-family:monospace;font-size:10px;color:#475569">${a.ref||""}</td>
+        <td style="font-size:10px">${(a.aspect||"").slice(0,80)}</td>
+        <td style="font-size:10px;color:#64748b">${a.area||""}</td>
+        <td style="font-size:10px;color:#64748b">${a.phase||""}</td>
+        <td style="text-align:center"><span style="background:${bg};color:${co};padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">${s||"—"}</span></td>
+        <td style="text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:${co}">${sc}</td>
+        <td style="text-align:center;font-size:10px;color:#64748b">${a.status||""}</td>
+      </tr>`;
+    };
+
+    const oppRow = o => {
+      const sc = calcOppScore(o);
+      const pr = sc>=75?"High":sc>=30?"Medium":"Low";
+      const co = sc>=75?"#7c3aed":sc>=30?"#2563eb":"#64748b";
+      const ghg = calcGhgTotal(o);
+      return `<tr>
+        <td style="font-family:monospace;font-size:10px;color:#475569">${o.ref||""}</td>
+        <td style="font-size:10px">${(o.description||o.type||"").slice(0,80)}</td>
+        <td style="font-size:10px;color:#64748b">${o.type||""}</td>
+        <td style="text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:${co}">${sc}</td>
+        <td style="text-align:center"><span style="color:${co};font-size:9px;font-weight:700">${pr}</span></td>
+        <td style="text-align:center;font-size:10px;color:#0d9488">${ghg ? fmtT(ghg) : "—"}</td>
+        <td style="text-align:center;font-size:10px;color:#64748b">${o.status||""}</td>
+      </tr>`;
+    };
+
+    const html = `<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"/>
+<title>Environmental Report — ${project.name||"Project"}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; font-size:11px; color:#1e293b; background:#fff; }
+  @page { size:A4 landscape; margin:15mm 12mm; }
+  @media print { .no-print { display:none !important; } }
+
+  .page-header { display:flex; justify-content:space-between; align-items:flex-start;
+    padding-bottom:12px; border-bottom:3px solid #1e4d35; margin-bottom:18px; }
+  .project-title { font-size:20px; font-weight:700; color:#1e4d35; }
+  .project-meta  { font-size:10px; color:#475569; margin-top:4px; line-height:1.7; }
+  .report-label  { font-size:9px; text-transform:uppercase; letter-spacing:0.08em;
+    color:#64748b; font-weight:600; }
+  .report-date   { font-size:10px; color:#475569; margin-top:2px; }
+
+  .kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:18px; }
+  .kpi { padding:10px 8px; border-radius:6px; border:1px solid #e2e8f0; background:#f8fafc; text-align:center; }
+  .kpi-val { font-size:22px; font-weight:700; line-height:1; }
+  .kpi-lbl { font-size:9px; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:0.06em; }
+  .kpi-sig  { background:#fee2e2; border-color:#fca5a5; }
+  .kpi-sig  .kpi-val { color:#dc2626; }
+  .kpi-watch{ background:#fefce8; border-color:#fde047; }
+  .kpi-watch .kpi-val { color:#d97706; }
+  .kpi-low  { background:#f0fdf4; border-color:#86efac; }
+  .kpi-low  .kpi-val { color:#16a34a; }
+  .kpi-opp  { background:#f5f3ff; border-color:#c4b5fd; }
+  .kpi-opp  .kpi-val { color:#7c3aed; }
+  .kpi-fp   { background:#f0fdfa; border-color:#5eead4; }
+  .kpi-fp   .kpi-val { color:#0d9488; }
+
+  .section-title { font-size:12px; font-weight:700; color:#1e4d35; margin:0 0 8px;
+    padding:6px 10px; background:#f1f5f9; border-left:3px solid #1e4d35; border-radius:0 4px 4px 0; }
+
+  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  th { background:#1e4d35; color:#fff; padding:6px 8px; text-align:left;
+       font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; }
+  td { padding:5px 8px; border-bottom:1px solid #e2e8f0; vertical-align:middle; }
+  tr:nth-child(even) td { background:#f8fafc; }
+
+  .fp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
+  .fp-card { padding:10px 14px; border-radius:6px; border:1px solid #e2e8f0; }
+  .fp-card-title { font-size:9px; color:#64748b; text-transform:uppercase; letter-spacing:0.07em; }
+  .fp-card-val   { font-size:16px; font-weight:700; color:#0d9488; margin-top:2px; font-family:monospace; }
+  .fp-card-sub   { font-size:9px; color:#94a3b8; margin-top:1px; }
+
+  .footer { margin-top:24px; padding-top:10px; border-top:1px solid #e2e8f0;
+    display:flex; justify-content:space-between; color:#94a3b8; font-size:9px; }
+
+  .no-print { position:fixed; top:16px; right:16px; z-index:100;
+    display:flex; gap:8px; }
+  .btn-print { padding:8px 18px; background:#1e4d35; color:#fff; border:none;
+    border-radius:6px; font-size:12px; cursor:pointer; }
+  .btn-close { padding:8px 18px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0;
+    border-radius:6px; font-size:12px; cursor:pointer; }
+</style>
+</head><body>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Print / Save as PDF</button>
+  <button class="btn-close" onclick="window.close()">✕ Close</button>
+</div>
+
+<div class="page-header">
+  <div>
+    <div class="project-title">${project.name||"Untitled Project"}</div>
+    <div class="project-meta">
+      ${project.projectId ? `<strong>ID:</strong> ${project.projectId} &nbsp;·&nbsp; ` : ""}
+      ${project.company  ? `<strong>Company:</strong> ${project.company} &nbsp;·&nbsp; ` : ""}
+      ${project.contract ? `<strong>Contract:</strong> ${project.contract} &nbsp;·&nbsp; ` : ""}
+      ${project.type     ? `<strong>Type:</strong> ${project.type} &nbsp;·&nbsp; ` : ""}
+      ${project.phase    ? `<strong>Phase:</strong> ${project.phase}` : ""}
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div class="report-label">Environmental Risk Assessment Report</div>
+    <div class="report-date">${dateStr}</div>
+  </div>
+</div>
+
+<!-- KPI strip -->
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-val">${aspects.length}</div><div class="kpi-lbl">Total aspects</div></div>
+  <div class="kpi kpi-sig">  <div class="kpi-val">${sig.length}</div>  <div class="kpi-lbl">Significant</div></div>
+  <div class="kpi kpi-watch"><div class="kpi-val">${watch.length}</div><div class="kpi-lbl">Watch</div></div>
+  <div class="kpi kpi-low">  <div class="kpi-val">${low.length}</div>  <div class="kpi-lbl">Low</div></div>
+  <div class="kpi kpi-opp">  <div class="kpi-val">${opps.length}</div> <div class="kpi-lbl">Opportunities</div></div>
+  <div class="kpi kpi-fp">   <div class="kpi-val">${openRisks.length}</div><div class="kpi-lbl">Open risks</div></div>
+</div>
+
+${fp ? `
+<!-- Footprint summary -->
+<div class="section-title">Environmental Budget</div>
+<div class="fp-grid">
+  <div class="fp-card">
+    <div class="fp-card-title">MTO — Material Take-Off</div>
+    <div class="fp-card-val">${Number(fp.mtoTotal||0).toFixed(3)} tCO₂e</div>
+    <div class="fp-card-sub">Scope 3 Cat. 1 embodied carbon</div>
+  </div>
+  <div class="fp-card">
+    <div class="fp-card-title">MEL — Material Equipment List</div>
+    <div class="fp-card-val">${Number(fp.melTotal||0).toFixed(3)} tCO₂e</div>
+    <div class="fp-card-sub">Scope 3 Cat. 1 embodied carbon</div>
+  </div>
+  <div class="fp-card" style="border-color:#5eead4;background:#f0fdfa">
+    <div class="fp-card-title">Combined Total</div>
+    <div class="fp-card-val">${Number(fp.combined||0).toFixed(3)} tCO₂e</div>
+    <div class="fp-card-sub">As of ${fp.date ? new Date(fp.date).toLocaleDateString("en-GB") : dateStr}</div>
+  </div>
+</div>` : ""}
+
+<!-- Risk register -->
+<div class="section-title">Risk Register (${aspects.length} aspects)</div>
+<table>
+  <thead><tr>
+    <th style="width:70px">Ref</th><th>Aspect</th><th style="width:120px">Area</th>
+    <th style="width:80px">Phase</th><th style="width:90px;text-align:center">Significance</th>
+    <th style="width:50px;text-align:center">Score</th><th style="width:70px;text-align:center">Status</th>
+  </tr></thead>
+  <tbody>${aspects.map(sigRow).join("")}</tbody>
+</table>
+
+<!-- Opportunity register -->
+<div class="section-title">Opportunity Register (${opps.length} opportunities)</div>
+<table>
+  <thead><tr>
+    <th style="width:70px">Ref</th><th>Description</th><th style="width:140px">Type</th>
+    <th style="width:50px;text-align:center">Score</th><th style="width:70px;text-align:center">Priority</th>
+    <th style="width:110px;text-align:center">GHG saving</th><th style="width:70px;text-align:center">Status</th>
+  </tr></thead>
+  <tbody>${opps.map(oppRow).join("")}</tbody>
+</table>
+
+<div class="footer">
+  <span>ENV·ASPECTS TOOLKIT — Environmental Risk Assessment Report</span>
+  <span>Generated ${dateStr} &nbsp;·&nbsp; ${project.name||"Untitled"} ${project.projectId ? "· " + project.projectId : ""}</span>
+</div>
+
+</body></html>`;
+
+    const win = window.open("", "_blank");
+    win.document.write(html);
+    win.document.close();
+  };
+
   const importProjectFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -3945,6 +4139,7 @@ This cannot be undone.`)) return;
             </p>
             <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
               <Btn variant="primary" onClick={exportProject}>↓ Export project</Btn>
+              <Btn onClick={exportPDF}>📄 Export PDF report</Btn>
               <label style={{ display:"inline-block", cursor:"pointer" }}>
                 <span style={{ fontSize:12, padding:"6px 14px", borderRadius:6,
                   border:"1px solid "+T.border, background:T.surface2,
@@ -4948,82 +5143,116 @@ function FootprintTab({ project, onChange }) {
     hlTimer.current = setTimeout(() => setColHighlight(null), 2000);
   };
 
-  // ── CSV export — structured MTO / MEL sections ───────────────────────────────
-  const exportCSV = () => {
+  // ── Excel export — MTO sheet + MEL sheet + Summary sheet ────────────────────
+  const exportXLSX = () => {
     if (!displayResult || !displayResult.allRows) return;
 
-    const esc = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-    const row = arr => arr.map(esc).join(",");
+    const wb = XLSX.utils.book_new();
+    const exportDate = new Date();
 
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    const hdrStyle = { font:{ bold:true, color:{ rgb:"FFFFFF" } }, fill:{ fgColor:{ rgb:"1E4D35" } },
+                       alignment:{ horizontal:"center", vertical:"center", wrapText:true } };
+    const subStyle = { font:{ bold:true }, fill:{ fgColor:{ rgb:"D6EAD8" } } };
+    const numFmt6  = "0.000000";
+    const numFmt2  = "0.00";
+    const dateFmt  = "DD/MM/YYYY HH:MM";
+
+    // Annotate sheet array: { v, t?, z?, s? }
+    const cell = (v, t, z) => {
+      if (v == null || v === "") return { v:"", t:"s" };
+      const c = { v, t: t || (typeof v === "number" ? "n" : v instanceof Date ? "d" : "s") };
+      if (z) c.z = z;
+      return c;
+    };
+    const hdr  = v => ({ v, t:"s", s: hdrStyle });
+    const sub  = v => ({ v, t:"s", s: subStyle });
+
+    const setColWidths = (ws, widths) => {
+      ws["!cols"] = widths.map(w => ({ wch: w }));
+    };
+
+    const autoFreeze = (ws) => { ws["!freeze"] = { xSplit:0, ySplit:2 }; };
+
+    // ── MTO sheet ────────────────────────────────────────────────────────────
+    const MTO_W = [14, 16, 18, 40, 22, 18, 20, 16, 18];
     const mtoRows = displayResult.allRows.filter(r => r.source === "MTO");
+    const mtoAoa  = [
+      [ hdr("COR Code"), hdr("Original COR Code"), hdr("Category"),
+        hdr("Weight Item Descr."), hdr("Material"),
+        hdr("Mod. Handl. Code"), hdr("Gross Dry Weight (kg)"),
+        hdr("Emission Factor"), hdr("Emission (tCO2e)") ],
+      ...mtoRows.map(r => [
+        cell(r.cor||""),
+        cell(r._originalCor||r.cor||""),
+        cell(r.category||""),
+        cell(r.desc||""),
+        cell(r.material||""),
+        cell(r.mhc||""),
+        r.weight != null ? cell(Number(r.weight),"n",numFmt2) : cell(""),
+        r.emissionFactor != null ? cell(Number(r.emissionFactor),"n","0.0000") : cell(""),
+        r.emissionTco2e  != null ? cell(Number(r.emissionTco2e), "n",numFmt6)  : cell(""),
+      ]),
+      [ sub("TOTAL"), sub(""), sub(""), sub(""), sub(""), sub(""),
+        sub(""), sub("TOTAL MTO (tCO2e)"),
+        { v: displayResult.mtoTotal, t:"n", z:numFmt6, s:subStyle } ],
+    ];
+    const wsMTO = XLSX.utils.aoa_to_sheet(mtoAoa);
+    setColWidths(wsMTO, MTO_W);
+    XLSX.utils.book_append_sheet(wb, wsMTO, "MTO");
+
+    // ── MEL sheet ────────────────────────────────────────────────────────────
+    const MEL_W = [14, 16, 18, 50, 18, 20, 16, 18];
     const melRows = displayResult.allRows.filter(r => r.source === "MEL");
-
-    const MTO_HDRS = [
-      "COR_Code", "Original COR_Code", "Category",
-      "Weight Item Descr.", "Material",
-      "Mod. Handl. Code", "Gross Dry Weight (kg)",
-      "Emission Factor", "Emission (tCO2e)"
+    const melAoa  = [
+      [ hdr("COR Code"), hdr("Original COR Code"), hdr("Category"),
+        hdr("Equipment Type Description"),
+        hdr("Mod. Handl. Code"), hdr("Gross Dry Weight (kg)"),
+        hdr("Emission Factor"), hdr("Emission (tCO2e)") ],
+      ...melRows.map(r => [
+        cell(r.cor||""),
+        cell(r._originalCor||r.cor||""),
+        cell(r.category||""),
+        cell(r.desc||""),
+        cell(r.mhc||""),
+        r.weight != null ? cell(Number(r.weight),"n",numFmt2) : cell(""),
+        r.emissionFactor != null ? cell(Number(r.emissionFactor),"n","0.0000") : cell(""),
+        r.emissionTco2e  != null ? cell(Number(r.emissionTco2e), "n",numFmt6)  : cell(""),
+      ]),
+      [ sub("TOTAL"), sub(""), sub(""), sub(""),
+        sub(""), sub(""), sub("TOTAL MEL (tCO2e)"),
+        { v: displayResult.melTotal, t:"n", z:numFmt6, s:subStyle } ],
     ];
-    const MEL_HDRS = [
-      "COR_Code", "Original COR_Code", "Category",
-      "Equipment Type Description",
-      "Mod. Handl. Code", "Gross Dry Weight (kg)",
-      "Emission Factor", "Emission (tCO2e)"
+    const wsMEL = XLSX.utils.aoa_to_sheet(melAoa);
+    setColWidths(wsMEL, MEL_W);
+    XLSX.utils.book_append_sheet(wb, wsMEL, "MEL");
+
+    // ── Summary sheet ────────────────────────────────────────────────────────
+    const fp = project.footprintSummary;
+    const summAoa = [
+      [ hdr("Environmental Budget Summary"), hdr("") ],
+      [ sub("Project"),   cell(project.name||"")      ],
+      [ sub("Company"),   cell(project.company||"")   ],
+      [ sub("Contract"),  cell(project.contract||"")  ],
+      [ sub("Type"),      cell(project.type||"")      ],
+      [ sub("Phase"),     cell(project.phase||"")     ],
+      [ sub("Exported"),  cell(exportDate,"d",dateFmt)],
+      [ cell(""), cell("") ],
+      [ hdr("Section"), hdr("Total (tCO2e)") ],
+      [ cell("MTO — Material Take-Off"), cell(displayResult.mtoTotal,"n",numFmt6) ],
+      [ cell("MEL — Material Equipment List"), cell(displayResult.melTotal,"n",numFmt6) ],
+      [ sub("COMBINED"), { v: displayResult.combined, t:"n", z:numFmt6, s:subStyle } ],
+      [ cell(""), cell("") ],
+      [ cell("MTO rows"), cell(mtoRows.length,"n","0") ],
+      [ cell("MEL rows"), cell(melRows.length,"n","0") ],
+      [ cell("Total rows"), cell(mtoRows.length+melRows.length,"n","0") ],
     ];
+    const wsSumm = XLSX.utils.aoa_to_sheet(summAoa);
+    wsSumm["!cols"] = [{ wch:38 }, { wch:22 }];
+    XLSX.utils.book_append_sheet(wb, wsSumm, "Summary");
 
-    const mtoDataRows = mtoRows.map(r => row([
-      r.cor || "",
-      r._originalCor || r.cor || "",
-      r.category || "",
-      r.desc || "",
-      r.material || "",
-      r.mhc || "",
-      r.weight != null ? r.weight : "",
-      r.emissionFactor != null ? r.emissionFactor : "",
-      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : ""
-    ]));
-
-    const melDataRows = melRows.map(r => row([
-      r.cor || "",
-      r._originalCor || r.cor || "",
-      r.category || "",
-      r.desc || "",
-      r.mhc || "",
-      r.weight != null ? r.weight : "",
-      r.emissionFactor != null ? r.emissionFactor : "",
-      r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : ""
-    ]));
-
-    const lines = [];
-
-    // MTO section
-    lines.push(row(["=== MTO — Material Take-Off ==="]));
-    lines.push(row(MTO_HDRS));
-    mtoDataRows.forEach(r => lines.push(r));
-    lines.push(row(["","","","","","","TOTAL MTO (tCO2e)","",displayResult.mtoTotal.toFixed(6)]));
-    lines.push("");
-
-    // MEL section
-    lines.push(row(["=== MEL — Material Equipment List ==="]));
-    lines.push(row(MEL_HDRS));
-    melDataRows.forEach(r => lines.push(r));
-    lines.push(row(["","","","","","TOTAL MEL (tCO2e)","",displayResult.melTotal.toFixed(6)]));
-    lines.push("");
-
-    // Summary
-    lines.push(row(["=== SUMMARY ==="]));
-    lines.push(row(["","MTO (tCO2e)",displayResult.mtoTotal.toFixed(6)]));
-    lines.push(row(["","MEL (tCO2e)",displayResult.melTotal.toFixed(6)]));
-    lines.push(row(["","COMBINED (tCO2e)",displayResult.combined.toFixed(6)]));
-
-    const csv  = lines.join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = (project.name || "footprint") + "_environmental_budget.csv";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    const slug = (project.name||"footprint").replace(/[^a-z0-9]/gi,"_").toLowerCase();
+    XLSX.writeFile(wb, `${slug}_environmental_budget.xlsx`);
   };
 
   // ── File intake — worker-based ───────────────────────────────────────────────
@@ -5691,8 +5920,8 @@ function FootprintTab({ project, onChange }) {
           <button onClick={() => setStep("mapping")} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>
             ← Edit mapping
           </button>
-          <button onClick={exportCSV} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
-            ↓ Download CSV
+          <button onClick={exportXLSX} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
+            ↓ Download Excel
           </button>
           <button onClick={addToProject}
             style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans,
