@@ -2525,142 +2525,136 @@ ${fp ? `
   };
 
 
-  // ── Export full template Excel (mirrors source template format) ──────────────
-  const exportTemplateExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const H  = (v) => ({ v, t:"s", s:{ font:{bold:true,color:{rgb:"FFFFFF"}}, fill:{fgColor:{rgb:"1E4D35"}}, alignment:{horizontal:"center",vertical:"center",wrapText:true} }});
-    const H2 = (v) => ({ v, t:"s", s:{ font:{bold:true,color:{rgb:"FFFFFF"}}, fill:{fgColor:{rgb:"2D6E4E"}}, alignment:{horizontal:"left",vertical:"center",wrapText:true} }});
-    const SH = (v) => ({ v, t:"s", s:{ font:{bold:true}, fill:{fgColor:{rgb:"D6EAD8"}}, alignment:{wrapText:true} }});
-    const GH = (v) => ({ v, t:"s", s:{ font:{bold:true,color:{rgb:"1E4D35"}}, fill:{fgColor:{rgb:"EAF4EC"}}, alignment:{wrapText:true} }});
-    const C  = (v) => ({ v: v == null || v === "" ? "" : v, t: (typeof v === "number" ? "n" : "s"), s:{ alignment:{wrapText:true,vertical:"top"} }});
-    const Cn = (v) => ({ v: v != null && v !== "" ? Number(v)||0 : "", t: v != null && v !== "" ? "n" : "s", s:{ alignment:{horizontal:"center",vertical:"top"} }});
+  // ── Export full report — fills project data into the original template ──────────
+  const exportTemplateExcel = async () => {
+    try {
+      // 1. Fetch the blank template (preserves all original styles / merges / colors)
+      const resp = await fetch("/template.xlsx");
+      if (!resp.ok) { alert("Could not load template.xlsx from public folder."); return; }
+      const buf  = await resp.arrayBuffer();
+      const wb   = XLSX.read(new Uint8Array(buf), { type:"array", cellStyles:true, sheetStubs:true });
 
-    // ── Sheet 1: Cover ────────────────────────────────────────────────────────
-    const now    = new Date();
-    const dateStr = now.toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"});
-    const coverAoa = [
-      [H("Document No / Project ID"), H(""), H("Rev"), H(""), H("Page")],
-      [C(project.projectId||""), C(""), C(1), C(""), C("1/5")],
-      [H("Document Title"), H(""), H(""), H(""), H("")],
-      [C(project.name||""), C(""), C(""), C(""), C("")],
-      [SH("EXTERNAL ENVIRONMENT EVALUATION SUMMARY — Compliance to ISO 14001"), SH(""), SH(""), SH(""), SH("")],
-      [H("Rev"), H("Rev. date"), H("Reason for Issue"), H("Prepared by"), H("Approved")],
-      [C(1), C(dateStr), C("Issued for Information"), C(""), C("")],
-      [C(""), C(""), C(""), C(""), C("")],
-      [H("Project name"),   H(""),H(""),H(""),H("")],
-      [C(project.name||""), C(""),C(""),C(""),C("")],
-      [H("Company"),     H("Phase"),  H("Contract"),  H("Type"), H("Project ID")],
-      [C(project.company||""), C(project.phase||""), C(project.contract||""), C(project.type||""), C(project.projectId||"")],
-    ];
-    const wsCov = XLSX.utils.aoa_to_sheet(coverAoa);
-    wsCov["!cols"] = [{wch:30},{wch:20},{wch:25},{wch:20},{wch:15}];
-    wsCov["!merges"] = [
-      {s:{r:0,c:0},e:{r:0,c:1}},{s:{r:1,c:0},e:{r:1,c:1}},
-      {s:{r:2,c:0},e:{r:2,c:4}},{s:{r:3,c:0},e:{r:3,c:4}},
-      {s:{r:4,c:0},e:{r:4,c:4}},{s:{r:8,c:0},e:{r:8,c:4}},{s:{r:9,c:0},e:{r:9,c:4}},
-    ];
-    XLSX.utils.book_append_sheet(wb, wsCov, "Cover");
+      const set = (ws, addr, val) => {
+        if (ws[addr]) ws[addr].v = val;          // update existing cell (keeps style)
+        else ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s" };  // new cell
+      };
 
-    // ── Sheet 2: Env Risk ─────────────────────────────────────────────────────
-    const riskHdr1 = [H("CATEGORY"),H("SUB CATEGORY"),H("GUIDE WORDS"),H("A/I"),H("COMMENT / DESCRIPTION"),H("MITIGATION"),H("P"),H("C"),H("R"),H("ABNORMAL CONDITION"),H("CLIENT REQ OR REGULATION"),H("SIGNIFICANT ASPECT"),H("ASPECT"),H("REGULATIONS"),H("ACTION PLAN"),H("RESPONSIBLE"),H("DEADLINE"),H("STATUS")];
-    const sortedAspects = [...aspects].sort((a,b)=>{
-      const ca = getCategoryLabel(a)||""; const cb = getCategoryLabel(b)||"";
-      return ca.localeCompare(cb) || (a.ref||"").localeCompare(b.ref||"");
-    });
-    const riskRows = sortedAspects.map(a => {
-      const cat = getCategoryLabel(a)||"";
-      const sig = calcSig(a);
-      return [
-        C(cat), C(a.area||""), C(a.activity||""), C("A"),
-        C(a.impact||a.aspect||""), C(a.control||""),
-        Cn(a.probability||""), Cn(a.severity||""), Cn(calcScore(a)||""),
-        C(a.condition==="Abnormal"||a.condition==="Emergency"?"X":""),
-        C(a.legalRef||""),
-        C(sig==="SIGNIFICANT"?"Yes":""),
-        C(a.aspect||""), C(a.legalRef||""),
-        C(""), C(""), C(""),
-        C(a.status||"")
-      ];
-    });
-    const wsRisk = XLSX.utils.aoa_to_sheet([riskHdr1, ...riskRows]);
-    wsRisk["!cols"] = [{wch:28},{wch:22},{wch:30},{wch:5},{wch:35},{wch:28},{wch:4},{wch:4},{wch:4},{wch:20},{wch:28},{wch:12},{wch:35},{wch:28},{wch:28},{wch:16},{wch:12},{wch:12}];
-    wsRisk["!rows"] = [{hpt:40}];
-    XLSX.utils.book_append_sheet(wb, wsRisk, "Env Risk");
+      // ── Frontpage ────────────────────────────────────────────────────────────
+      const fp = wb.Sheets["Frontpage"];
+      set(fp, "B5",  project.projectId || "");
+      set(fp, "B7",  project.name      || "");
+      set(fp, "C11", new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}));
 
-    // ── Sheet 3: Waste handling ───────────────────────────────────────────────
-    const wasteRows = initWasteRows(project.wasteRows);
-    const wasteHdr1 = [H("Waste Fractions"),H("Products"),H("Phase / Quantities"),C(""),C(""),H("Waste Hierarchy / Reduction Measures")];
-    const wasteHdr2 = [C(""),C(""),H("Construction / Installation"),H("Start up / Shut down"),H("Normal Operation"),C("")];
-    const wasteDataRows = [];
-    const wasteMerges = [
-      {s:{r:0,c:0},e:{r:1,c:0}},{s:{r:0,c:1},e:{r:1,c:1}},
-      {s:{r:0,c:2},e:{r:0,c:4}},{s:{r:0,c:5},e:{r:1,c:5}},
-    ];
-    let dataRowStart = 2;
-    WASTE_FRACTIONS.forEach(({fraction, products}) => {
-      const matchRows = wasteRows.filter(r => r.isStd && r.fraction === fraction);
-      matchRows.forEach((row, ri) => {
-        wasteDataRows.push([
-          ri===0 ? GH(fraction) : C(""),
-          C(row.product),
-          C(row.construction||""), C(row.startup||""), C(row.operation||""),
-          C(row.measures||"")
-        ]);
+      // ── Waste handling — fill C/D/E/F for each standard row ──────────────────
+      const wh = wb.Sheets["Waste handling"];
+      // Row index → waste row ID (matches initWasteRows IDs)
+      const WASTE_ROW_MAP = {
+        3:"std_packagin_0", 4:"std_packagin_1", 5:"std_packagin_2",
+        6:"std_cables_0",   7:"std_weee_0",    8:"std_metals_0",
+        9:"std_plastics_0", 10:"std_chemical_0",11:"std_chemical_1",
+        12:"std_chemical_2",13:"std_chemical_3",14:"std_chemical_4",
+        15:"std_chemical_5",16:"std_material_0",17:"std_pipes_an_0",
+        18:"std_hydrocar_0",19:"std_insulati_0",20:"std_insulati_1",
+      };
+      const wasteById = {};
+      initWasteRows(project.wasteRows).forEach(r => { wasteById[r.id] = r; });
+      Object.entries(WASTE_ROW_MAP).forEach(([rowNum, id]) => {
+        const r = wasteById[id];
+        if (!r) return;
+        const rn = Number(rowNum);
+        if (r.construction) set(wh, "C"+rn, r.construction);
+        if (r.startup)      set(wh, "D"+rn, r.startup);
+        if (r.operation)    set(wh, "E"+rn, r.operation);
+        if (r.measures)     set(wh, "F"+rn, r.measures);
       });
-      if (matchRows.length > 1) {
-        wasteMerges.push({s:{r:dataRowStart,c:0},e:{r:dataRowStart+matchRows.length-1,c:0}});
+      // Append custom rows after row 22
+      const customWaste = initWasteRows(project.wasteRows).filter(r => !r.isStd);
+      if (customWaste.length > 0) {
+        let rn = 23;
+        customWaste.forEach(r => {
+          set(wh, "A"+rn, r.fraction||"Other");
+          set(wh, "B"+rn, r.product||"");
+          if (r.construction) set(wh, "C"+rn, r.construction);
+          if (r.startup)      set(wh, "D"+rn, r.startup);
+          if (r.operation)    set(wh, "E"+rn, r.operation);
+          if (r.measures)     set(wh, "F"+rn, r.measures);
+          rn++;
+        });
+        // Update sheet range
+        const range = XLSX.utils.decode_range(wh["!ref"]||"A1:F48");
+        range.e.r = Math.max(range.e.r, rn - 1);
+        wh["!ref"] = XLSX.utils.encode_range(range);
       }
-      dataRowStart += matchRows.length;
-    });
-    wasteRows.filter(r=>!r.isStd).forEach(row => {
-      wasteDataRows.push([
-        C(row.fraction||"Other"), C(row.product||""),
-        C(row.construction||""), C(row.startup||""), C(row.operation||""),
-        C(row.measures||"")
-      ]);
-    });
-    const wsWaste = XLSX.utils.aoa_to_sheet([wasteHdr1,wasteHdr2,...wasteDataRows]);
-    wsWaste["!merges"] = wasteMerges;
-    wsWaste["!cols"] = [{wch:30},{wch:42},{wch:24},{wch:18},{wch:18},{wch:36}];
-    XLSX.utils.book_append_sheet(wb, wsWaste, "Waste Handling");
 
-    // ── Sheet 4: Attendees ────────────────────────────────────────────────────
-    const sessions = project.attendeeSessions||[];
-    const attHdr = [H("Session #"),H("Date"),H("Session Label"),H("Name"),H("Role / Title")];
-    const attRows = [];
-    sessions.forEach((sess, si) => {
-      sess.rows.forEach((row, ri) => {
-        attRows.push([
-          ri===0 ? C("Session "+(si+1)) : C(""),
-          ri===0 ? C(sess.date||"") : C(""),
-          ri===0 ? C(sess.label||"") : C(""),
-          C(row.name||""), C(row.role||"")
-        ]);
+      // ── Attendees — write sessions below the header ───────────────────────────
+      const wa = wb.Sheets["Attendees"];
+      const sessions = project.attendeeSessions || [];
+      // Add column headers to row 2
+      set(wa, "A2", "Date"); set(wa, "B2", "Session"); set(wa, "C2", "Name"); set(wa, "D2", "Role / Title");
+      let attRow = 3;
+      sessions.forEach(sess => {
+        sess.rows.filter(r => r.name||r.role).forEach((r, ri) => {
+          set(wa, "A"+attRow, ri===0 ? (sess.date||"") : "");
+          set(wa, "B"+attRow, ri===0 ? (sess.label||"") : "");
+          set(wa, "C"+attRow, r.name||"");
+          set(wa, "D"+attRow, r.role||"");
+          attRow++;
+        });
       });
-    });
-    if (attRows.length === 0) attRows.push([C(""),C(""),C(""),C(""),C("")]);
-    const wsAtt = XLSX.utils.aoa_to_sheet([attHdr,...attRows]);
-    wsAtt["!cols"] = [{wch:12},{wch:14},{wch:36},{wch:28},{wch:28}];
-    XLSX.utils.book_append_sheet(wb, wsAtt, "Attendees");
+      const attRange = XLSX.utils.decode_range(wa["!ref"]||"A1:B5");
+      attRange.e.r = Math.max(attRange.e.r, attRow-1);
+      attRange.e.c = Math.max(attRange.e.c, 3);
+      wa["!ref"] = XLSX.utils.encode_range(attRange);
 
-    // ── Sheet 5: Sustainability Opportunities ──────────────────────────────────
-    const oppHdr = [H("Ref"),H("Scope"),H("Type / Category"),H("Description"),H("Env Value (1-5)"),H("Business Value (1-5)"),H("Feasibility (1-5)"),H("Priority Score"),H("GHG Saving (kgCO2e)"),H("Status")];
-    const oppRows = [...opps]
-      .sort((a,b) => calcOppScore(b)-calcOppScore(a))
-      .map(o => [
-        C(o.ref||""), C(o.scope||""), C(o.type||""), C(o.description||""),
-        Cn(o.envValue||""), Cn(o.bizValue||""), Cn(o.feasibility||""),
-        Cn(calcOppScore(o)||""),
-        Cn(calcGhgTotal(o)||""),
-        C(o.status||"")
-      ]);
-    if (oppRows.length === 0) oppRows.push([C(""),C(""),C(""),C(""),C(""),C(""),C(""),C(""),C(""),C("")]);
-    const wsOpp = XLSX.utils.aoa_to_sheet([oppHdr,...oppRows]);
-    wsOpp["!cols"] = [{wch:10},{wch:12},{wch:20},{wch:45},{wch:14},{wch:16},{wch:14},{wch:14},{wch:18},{wch:12}];
-    XLSX.utils.book_append_sheet(wb, wsOpp, "Sustainability Opps");
+      // ── Sustainability opportunities — fill project info ──────────────────────
+      const so = wb.Sheets["Sustainability opportunities"];
+      set(so, "B2", "PROJECT ID: " + (project.projectId||"—") + "\nPROJECT NAME: " + (project.name||"—"));
+      set(so, "C3", new Date().toLocaleDateString("en-GB"));
 
-    const slug = (project.name||"project").replace(/[^a-z0-9]/gi,"_").toLowerCase();
-    XLSX.writeFile(wb, slug + "_env_screening_report.xlsx");
+      // ── Env Risk — append registered risks below the template guide words (after row 71) ──
+      const er = wb.Sheets["Env Risk"];
+      const sortedAsp = [...aspects].sort((a,b) => {
+        const ca = getCategoryLabel(a)||""; const cb = getCategoryLabel(b)||"";
+        return ca.localeCompare(cb)||(a.ref||"").localeCompare(b.ref||"");
+      });
+      if (sortedAsp.length > 0) {
+        // Section header
+        set(er, "A72", "— REGISTERED PROJECT RISKS —");
+        // Column headers  
+        const RISK_HDRS = ["CATEGORY","SUB CATEGORY / AREA","GUIDE WORDS / ACTIVITY","A/I","COMMENT / DESCRIPTION","MITIGATION","P","C","R","ABNORMAL","REGULATION","SIGNIFICANT?","ASPECT","LEGAL REF","ACTION PLAN","RESPONSIBLE","DEADLINE","STATUS"];
+        RISK_HDRS.forEach((h, ci) => {
+          const col = XLSX.utils.encode_col(ci);
+          set(er, col+"73", h);
+        });
+        let rn = 74;
+        sortedAsp.forEach(a => {
+          const sig = calcSig(a);
+          const rowData = [
+            getCategoryLabel(a)||"",  a.area||"",          a.activity||"",     "A",
+            a.impact||a.aspect||"",   a.control||"",        a.probability||"", a.severity||"",
+            calcScore(a)||"",          a.condition==="Abnormal"||a.condition==="Emergency"?"X":"",
+            a.legalRef||"",           sig==="SIGNIFICANT"?"Yes":"",
+            a.aspect||"",             a.legalRef||"",       a.control||"",     "","",  a.status||""
+          ];
+          rowData.forEach((v, ci) => {
+            const col = XLSX.utils.encode_col(ci);
+            if (v !== "") set(er, col+rn, v);
+          });
+          rn++;
+        });
+        const erRange = XLSX.utils.decode_range(er["!ref"]||"A1:Q71");
+        erRange.e.r = Math.max(erRange.e.r, rn-1);
+        er["!ref"] = XLSX.utils.encode_range(erRange);
+      }
+
+      // ── Write out ─────────────────────────────────────────────────────────────
+      const slug = (project.name||"project").replace(/[^a-z0-9]/gi,"_").toLowerCase();
+      XLSX.writeFile(wb, slug + "_env_screening.xlsx");
+
+    } catch(err) {
+      console.error("Export failed:", err);
+      alert("Export failed: " + err.message);
+    }
   };
 
   const importProjectFile = (file) => {
@@ -4031,29 +4025,29 @@ This cannot be undone.`)) return;
         };
         const addRow = () => {
           const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: [...cur, { id:"custom_"+Date.now(), fraction:"", product:"", isStd:false, construction:"", startup:"", operation:"", measures:"" }] });
+          onChange({ ...project, wasteRows: [...cur, {
+            id:"custom_"+Date.now(), fraction:"", product:"", isStd:false,
+            construction:"", startup:"", operation:"", measures:""
+          }]});
         };
         const delRow = (id) => {
           const cur = initWasteRows(project.wasteRows);
           onChange({ ...project, wasteRows: cur.filter(r => r.id!==id) });
         };
 
-        // Build groups for rowspan rendering
-        const groups = [];
-        WASTE_FRACTIONS.forEach(({fraction}) => {
-          const rows = wasteRows.filter(r => r.isStd && r.fraction===fraction);
-          if (rows.length) groups.push({ fraction, rows, isCustom:false });
-        });
-        wasteRows.filter(r => !r.isStd).forEach(r => groups.push({ fraction:r.fraction||"Other", rows:[r], isCustom:true }));
-
-        const iw = { padding:"4px 6px", fontSize:12, borderRadius:4,
+        const iw = { padding:"4px 7px", fontSize:11, borderRadius:4,
           border:"1px solid "+T.border, background:T.bg, color:T.text,
           fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
-        const TH = (props) => (
-          <th style={{ padding:"7px 10px", background:"#1E4D35", color:"#fff",
-            fontFamily:T.mono, fontSize:9, fontWeight:600, textTransform:"uppercase",
-            letterSpacing:"0.06em", whiteSpace:"nowrap", border:"1px solid #166534",
-            ...props.style }}>{props.children}</th>
+
+        const th = (label, w, align) => (
+          <th style={{
+            padding:"7px 10px", background:"#1E4D35", color:"#fff",
+            fontFamily:T.mono, fontSize:9, fontWeight:600,
+            textTransform:"uppercase", letterSpacing:"0.06em",
+            textAlign: align||"left", whiteSpace:"nowrap",
+            borderRight:"1px solid rgba(255,255,255,0.15)",
+            width: w || "auto"
+          }}>{label}</th>
         );
 
         return (
@@ -4062,91 +4056,85 @@ This cannot be undone.`)) return;
               <div>
                 <h2 style={{ margin:"0 0 3px", fontSize:15, fontWeight:700, color:T.text }}>Waste Handling Register</h2>
                 <p style={{ margin:0, fontSize:12, color:T.muted }}>
-                  Record quantities and reduction measures for each waste fraction across project phases.
+                  Enter quantities (or notes) for each waste stream across project phases. All data exports to the template Excel file.
                 </p>
               </div>
               <Btn onClick={addRow}>+ Add row</Btn>
             </div>
 
-            <div style={{ overflowX:"auto", marginBottom:"1.25rem", borderRadius:9, border:"1px solid "+T.border, overflow:"hidden" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, minWidth:900 }}>
+            <div style={{ borderRadius:9, overflow:"hidden", border:"1px solid "+T.border, marginBottom:"1.25rem" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                 <thead>
                   <tr>
-                    <TH style={{ width:140 }}>Waste Fractions</TH>
-                    <TH style={{ width:200 }}>Products</TH>
-                    <TH style={{ width:"3%", textAlign:"center", background:"#2D6E4E" }} colSpan={3}>
-                      Phase / Quantities
-                    </TH>
-                    <TH style={{ minWidth:220 }}>Waste Hierarchy / Reduction Measures</TH>
-                    <TH style={{ width:32, background:"#2D6E4E" }}></TH>
-                  </tr>
-                  <tr>
-                    <TH style={{ width:140, background:"#2D6E4E" }}></TH>
-                    <TH style={{ width:200, background:"#2D6E4E" }}></TH>
-                    <TH style={{ width:140 }}>Construction / Installation</TH>
-                    <TH style={{ width:120 }}>Start up / Shut down</TH>
-                    <TH style={{ width:120 }}>Normal Operation</TH>
-                    <TH style={{ minWidth:220, background:"#2D6E4E" }}></TH>
-                    <TH style={{ width:32, background:"#2D6E4E" }}></TH>
+                    {th("Waste Fraction", 148)}
+                    {th("Product / Material")}
+                    {th("Construction / Installation", 148, "center")}
+                    {th("Start-up / Shut-down", 122, "center")}
+                    {th("Normal Operation", 122, "center")}
+                    {th("Reduction Measures")}
+                    <th style={{ width:32, background:"#1E4D35", borderLeft:"1px solid rgba(255,255,255,0.15)" }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {groups.flatMap(group =>
-                    group.rows.map((row, ri) => (
+                  {wasteRows.map((row, i) => {
+                    const prevFraction = i > 0 ? wasteRows[i-1].fraction : null;
+                    const showLabel    = row.fraction !== prevFraction;
+                    const isNewGroup   = showLabel && i > 0;
+                    return (
                       <tr key={row.id}
-                        style={{ borderBottom:"1px solid "+T.rowBd }}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        {ri === 0 && (
-                          <td rowSpan={group.rows.length}
-                            style={{ padding:"7px 10px", fontWeight:600, fontSize:11,
-                              color:T.text, background:T.surface2, verticalAlign:"middle",
-                              borderRight:"2px solid "+T.border, borderBottom:"1px solid "+T.border }}>
-                            {group.isCustom
-                              ? <input value={row.fraction||""} onChange={e=>updateRow(row.id,"fraction",e.target.value)} placeholder="Fraction" style={iw}/>
-                              : group.fraction}
-                          </td>
-                        )}
-                        <td style={{ padding:"5px 8px", color:T.muted, fontSize:11, minWidth:140 }}>
+                        style={{ borderTop: isNewGroup ? "2px solid "+T.border : "1px solid "+T.rowBd }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                        <td style={{ padding:"6px 10px", fontWeight: showLabel ? 600 : 400,
+                          color: showLabel ? T.text : "transparent",
+                          fontSize:11, verticalAlign:"middle",
+                          background: T.surface, borderRight:"1px solid "+T.border,
+                          userSelect:"none" }}>
+                          {row.isStd
+                            ? (showLabel ? row.fraction : "·")
+                            : <input value={row.fraction||""} onChange={e=>updateRow(row.id,"fraction",e.target.value)}
+                                placeholder="Fraction" style={iw}/>}
+                        </td>
+                        <td style={{ padding:"6px 8px", color:T.muted, fontSize:11 }}>
                           {row.isStd
                             ? row.product
-                            : <input value={row.product||""} onChange={e=>updateRow(row.id,"product",e.target.value)} placeholder="Product description" style={iw}/>}
+                            : <input value={row.product||""} onChange={e=>updateRow(row.id,"product",e.target.value)}
+                                placeholder="Product description" style={iw}/>}
                         </td>
                         {["construction","startup","operation"].map(field => (
-                          <td key={field} style={{ padding:"5px 8px", width:120 }}>
+                          <td key={field} style={{ padding:"5px 8px", textAlign:"center" }}>
                             <input value={row[field]||""} onChange={e=>updateRow(row.id,field,e.target.value)}
-                              placeholder="—" style={{...iw, textAlign:"center"}}/>
+                              style={{...iw, textAlign:"center", width:100}}/>
                           </td>
                         ))}
                         <td style={{ padding:"5px 8px" }}>
                           <input value={row.measures||""} onChange={e=>updateRow(row.id,"measures",e.target.value)}
-                            placeholder="Describe reduction/handling measure…" style={iw}/>
+                            placeholder="Describe reduction / handling measure" style={iw}/>
                         </td>
-                        <td style={{ padding:"5px 8px", textAlign:"center", width:32 }}>
+                        <td style={{ padding:"5px 8px", textAlign:"center", verticalAlign:"middle" }}>
                           {!row.isStd && (
-                            <button onClick={()=>delRow(row.id)}
-                              style={{ fontSize:13, padding:"2px 7px", borderRadius:4,
-                                border:"1px solid "+T.border, background:"transparent",
-                                color:T.red, cursor:"pointer" }}>×</button>
+                            <button onClick={()=>delRow(row.id)} style={{
+                              fontSize:13, lineHeight:1, padding:"3px 7px", borderRadius:4,
+                              border:"1px solid "+T.border, background:"transparent",
+                              color:T.red, cursor:"pointer" }}>×</button>
                           )}
                         </td>
                       </tr>
-                    ))
-                  )}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* Waste Philosophy */}
             <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"14px 16px" }}>
               <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
                 textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>
-                Waste Philosophy — Reduction Principles
+                Waste philosophy — reduction principles
               </p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"4px 16px" }}>
+              <div style={{ columns:2, columnGap:24 }}>
                 {WASTE_PHILOSOPHY.map((item, i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:7 }}>
-                    <span style={{ color:T.green, fontSize:10, flexShrink:0, marginTop:1 }}>✓</span>
+                  <div key={i} style={{ display:"flex", gap:7, marginBottom:5, breakInside:"avoid" }}>
+                    <span style={{ color:T.green, fontSize:11, flexShrink:0 }}>✓</span>
                     <span style={{ fontSize:11, color:T.muted, lineHeight:1.5 }}>{item}</span>
                   </div>
                 ))}
@@ -4443,7 +4431,7 @@ This cannot be undone.`)) return;
             <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
               <Btn variant="primary" onClick={exportProject}>↓ Export project</Btn>
               <Btn onClick={exportPDF}>📄 Export PDF report</Btn>
-              <Btn onClick={exportTemplateExcel}>📊 Export full report (Excel)</Btn>
+              {/* 📊 Export full report (Excel) — hidden for now */}
               <label style={{ display:"inline-block", cursor:"pointer" }}>
                 <span style={{ fontSize:12, padding:"6px 14px", borderRadius:6,
                   border:"1px solid "+T.border, background:T.surface2,
@@ -5715,10 +5703,12 @@ function FootprintTab({ project, onChange }) {
 
   // Stamp the current footprint result to the project dashboard
   const addToProject = () => {
-    if (!displayResult || !displayResult.success) return;
+    if (!displayResult) { setToast("No result to save yet."); setTimeout(()=>setToast(""),2000); return; }
+    if (!displayResult.success) { setToast("Calculation has errors — cannot save."); setTimeout(()=>setToast(""),2500); return; }
+
     const vRows = (displayResult.allRows || []).filter(r => r.status === "VALID");
     const tot   = displayResult.combined;
-    // Category breakdown (only categories with > 0 tCO2e)
+
     const byCat = {};
     vRows.forEach(r => {
       const k = r.category || "Unknown";
@@ -5728,26 +5718,43 @@ function FootprintTab({ project, onChange }) {
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
       .map(([cat, v]) => ({ cat, tco2e: v }));
+
     const summary = {
-      scope: "Scope 3 Cat 1",            // value-chain upstream emissions
+      scope:    "Scope 3 Cat 1",
       combined: tot,
-      npTotal: vRows.filter(r=>r.mhc==="NP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
-      rpTotal: vRows.filter(r=>r.mhc==="RP").reduce((s,r)=>s+(r.emissionTco2e||0),0),
+      mtoTotal: displayResult.mtoTotal || 0,
+      melTotal: displayResult.melTotal || 0,
+      npTotal:  vRows.filter(r => r.mhc === "NP").reduce((s, r) => s + (r.emissionTco2e || 0), 0),
+      rpTotal:  vRows.filter(r => r.mhc === "RP").reduce((s, r) => s + (r.emissionTco2e || 0), 0),
       catBreakdown,
       date: new Date().toISOString(),
     };
-    const entry = { id: Date.now().toString(), ts: new Date().toISOString(),
+
+    const entry = {
+      id: Date.now().toString(), ts: new Date().toISOString(),
       action: "Updated Scope 3 Cat 1 emission footprint",
       detail: tot.toFixed(3) + " tCO₂e",
       fields: [
-        { k: "Scope", v: "Scope 3 Cat 1 — Purchased goods & services" },
-        { k: "NP", v: summary.npTotal.toFixed(3) + " tCO₂e" },
-        { k: "RP", v: summary.rpTotal.toFixed(3) + " tCO₂e" },
+        { k: "Scope",    v: "Scope 3 Cat 1 — Purchased goods & services" },
+        { k: "NP",       v: summary.npTotal.toFixed(3) + " tCO₂e" },
+        { k: "RP",       v: summary.rpTotal.toFixed(3) + " tCO₂e" },
         { k: "Combined", v: tot.toFixed(3) + " tCO₂e" },
       ]
     };
-    onChange({ ...project, footprintSummary: summary,
-               changelog: [...(project.changelog || []), entry] });
+
+    // Explicitly include ALL current footprint state so this save is fully
+    // self-contained — never relies on project prop being up-to-date
+    // (prevents stale-closure race with the worker's own onChange call)
+    onChange({
+      ...project,
+      footprint:             result,
+      footprintCorOverrides: corOverrides,
+      footprintMeta:         sheetMetas,
+      footprintFile:         fileName,
+      footprintSummary:      summary,
+      changelog: [...(project.changelog || []), entry],
+    });
+
     setToast("Scope 3 footprint saved to project dashboard ✓");
     setTimeout(() => setToast(""), 2500);
   };
