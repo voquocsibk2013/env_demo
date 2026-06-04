@@ -4,18 +4,6 @@ A browser-based environmental management toolkit for EPCIC and engineering proje
 
 ---
 
-## Quick start
-
-```bash
-npm install
-npm start        # development server at localhost:3000
-npm run build    # production build → /build
-```
-
-Place `template.xlsx` (the source screening template) in `/public` before building if you want the full Excel export to work.
-
----
-
 ## Project management
 
 ### Multi-project workspace
