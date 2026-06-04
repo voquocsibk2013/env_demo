@@ -2349,11 +2349,55 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       [5,4,3,2,1].forEach(fe=>{let cells="";[1,2,3,4,5].forEach(ev=>{const c=oQc(ev,fe);const items=oGrid[ev+","+fe]||[];const lbl=items.length===0&&oCr(ev,fe)?'<span style="font-size:7px;font-weight:bold;color:'+c+';opacity:0.5">'+oQL(ev,fe)+'</span>':"";const dots=items.map(o=>{const bv=Math.min(5,Math.max(1,parseInt(o.bizValue)||1));const sz=7+(bv-1)*2;return'<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+oQbg(ev,fe)+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'+lbl+dots+'</td>';});oRows+='<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:84px"><strong>'+fe+'</strong>&nbsp;'+fLbl2[fe]+'</td>'+cells+'</tr>';});
       let eHdr="";[1,2,3,4,5].forEach(ev=>{eHdr+='<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+ev+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+eLbl[ev]+'</span></td>';});
 
-      // table rows
+      // table rows — exact column order as the web app (score omitted)
+      const PHASE_ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
       let riskRows="";
-      aspects.forEach(a=>{const s=calcSig(a);const bg=s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";const co=s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";riskRows+='<tr><td style="font-family:monospace;font-size:10px;color:#475569">'+esc(a.ref)+'</td><td style="font-size:10px">'+esc((a.aspect||"").slice(0,90))+'</td><td style="font-size:10px;color:#64748b">'+esc(a.area)+'</td><td style="font-size:10px;color:#64748b">'+esc(a.phase)+'</td><td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+esc(s)+'</span></td><td style="text-align:center;font-size:10px;color:#64748b">'+esc(a.status)+'</td></tr>';});
+      aspects.forEach(a=>{
+        const s   = calcSig(a);
+        const bg  = s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";
+        const co  = s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";
+        const cat = getCategoryLabel(a);
+        const shortCat = cat ? (CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */,"")) : "";
+        const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
+        const phaseHtml = phases.length
+          ? phases.map(p=>'<span style="font-family:monospace;font-size:8px;padding:1px 4px;border-radius:3px;background:#f1f5f9;color:#475569;margin:1px;display:inline-block">'+(PHASE_ABBR[p]||p.slice(0,3))+'</span>').join("")
+          : '<span style="color:#94a3b8">&#8212;</span>';
+        const catHtml  = shortCat ? '<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#f1f5f9;color:#475569">'+esc(shortCat)+'</span>' : '<span style="color:#94a3b8">&#8212;</span>';
+        const isAbn    = a.condition==="Abnormal" || a.condition==="Emergency";
+        const abnHtml  = isAbn ? '<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#fefce8;color:#92400e">'+esc(a.condition)+'</span>' : '';
+        riskRows += '<tr>'
+          +'<td style="font-family:monospace;font-size:10px;color:#475569;white-space:nowrap">'+esc(a.ref)+'</td>'
+          +'<td style="white-space:nowrap">'+phaseHtml+'</td>'
+          +'<td style="white-space:nowrap">'+catHtml+'</td>'
+          +'<td style="font-size:10px">'
+            +(a.area?'<div style="font-family:monospace;font-size:9px;color:#64748b;margin-bottom:2px">'+esc(a.area)+'</div>':'')
+            +'<div style="font-weight:500">'+esc((a.aspect||"").slice(0,80))+'</div>'
+          +'</td>'
+          +'<td style="text-align:center">'+abnHtml+'</td>'
+          +'<td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+esc(s)+'</span></td>'
+          +'<td style="text-align:center;font-size:10px;color:#64748b">'+esc(a.status)+'</td>'
+          +'</tr>';
+      });
+
       let oppRows="";
-      opps.forEach(o=>{const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;const pr=hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";const co=hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";const ghg=calcGhgTotal(o);oppRows+='<tr><td style="font-family:monospace;font-size:10px;color:#475569">'+esc(o.ref)+'</td><td style="font-size:10px">'+esc((o.description||o.type||"").slice(0,90))+'</td><td style="font-size:10px;color:#64748b">'+esc(o.type)+'</td><td style="text-align:center;font-size:9px;font-weight:700;color:'+co+'">'+esc(pr)+'</td><td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg?fmtT(ghg):"&#8212;")+'</td></tr>';});
+      opps.forEach(o=>{
+        const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;
+        const pr  = hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";
+        const co  = hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";
+        const ghg = calcGhgTotal(o);
+        const matC = o.materiality&&o.materiality.startsWith("Inside")?"#0d9488":o.materiality&&o.materiality.startsWith("Outside")?"#2563eb":"#7c3aed";
+        oppRows += '<tr>'
+          +'<td style="font-family:monospace;font-size:10px;color:#475569;white-space:nowrap">'+esc(o.ref)+'</td>'
+          +'<td style="white-space:nowrap">'+(o.type?'<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#f5f3ff;color:#7c3aed">'+esc(o.type)+'</span>':'<span style="color:#94a3b8">&#8212;</span>')+'</td>'
+          +'<td style="font-size:10px">'
+            +'<div style="font-weight:500">'+esc((o.description||"").slice(0,80))+'</div>'
+            +(o.envBenefit?'<div style="font-size:9px;color:#0d9488;margin-top:2px">'+esc(o.envBenefit.slice(0,60))+'</div>':'')
+          +'</td>'
+          +'<td style="text-align:center"><span style="font-size:9px;font-weight:700;color:'+co+'">'+esc(pr)+'</span></td>'
+          +'<td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg?fmtT(ghg):"&#8212;")+'</td>'
+          +'<td style="text-align:center">'+(o.materiality?'<span style="font-size:9px;color:'+matC+'">'+esc(o.materiality)+'</span>':'<span style="color:#94a3b8">&#8212;</span>')+'</td>'
+          +'</tr>';
+      });
 
       // legend strings
       const zLgnd=[["#FEE2E2","#FCA5A5","#991B1B","SIGNIFICANT","Immediate action required"],["#FEFCE8","#FDE047","#A16207","MEDIUM","Active management required"],["#F0FDF4","#86EFAC","#15803D","Low","Standard controls sufficient"]].map(([bg,bd,c,z,d])=>'<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;background:'+bg+';border:1.5px solid '+bd+'"></div><div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> &#8212; <span style="font-size:9px;color:#475569">'+d+'</span></div></div>').join("");
@@ -2413,9 +2457,24 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #5eead4;background:#f0fdfa"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">Combined</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.combined||0).toFixed(3)+' tCO\u2082e</div></div>'
           +'</div>':'')
         +SEC("Risk Register ("+aspects.length+" aspects)")
-        +'<table><thead><tr><th style="width:70px">Ref</th><th>Aspect</th><th style="width:120px">Area</th><th style="width:90px">Phase</th><th style="width:100px;text-align:center">Significance</th><th style="width:80px;text-align:center">Status</th></tr></thead><tbody>'+riskRows+'</tbody></table>'
+        +'<table><thead><tr>'
+        +'<th style="width:65px">Ref</th>'
+        +'<th style="width:70px">Phase</th>'
+        +'<th style="width:110px">Category</th>'
+        +'<th>Risk</th>'
+        +'<th style="width:80px;text-align:center">Abnormal</th>'
+        +'<th style="width:100px;text-align:center">Significance</th>'
+        +'<th style="width:75px;text-align:center">Status</th>'
+        +'</tr></thead><tbody>'+riskRows+'</tbody></table>'
         +SEC("Opportunity Register ("+opps.length+" opportunities)")
-        +'<table><thead><tr><th style="width:70px">Ref</th><th>Description</th><th style="width:150px">Type</th><th style="width:100px;text-align:center">Priority</th><th style="width:120px;text-align:center">GHG saving</th></tr></thead><tbody>'+oppRows+'</tbody></table>'
+        +'<table><thead><tr>'
+        +'<th style="width:65px">Ref</th>'
+        +'<th style="width:130px">Type</th>'
+        +'<th>Description</th>'
+        +'<th style="width:95px;text-align:center">Priority</th>'
+        +'<th style="width:110px;text-align:center">GHG saving</th>'
+        +'<th style="width:100px;text-align:center">Materiality</th>'
+        +'</tr></thead><tbody>'+oppRows+'</tbody></table>'
         +'<div style="margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:9px">'
         +'<span>ENV&middot;ASPECTS TOOLKIT &mdash; Environmental Risk Assessment Report</span>'
         +'<span>'+esc(dateStr)+' &nbsp;&middot;&nbsp; '+pName+'</span></div>'
