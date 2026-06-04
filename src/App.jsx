@@ -2371,7 +2371,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           +'<td style="white-space:nowrap">'+catHtml+'</td>'
           +'<td style="font-size:10px">'
             +(a.area?'<div style="font-family:monospace;font-size:9px;color:#64748b;margin-bottom:2px">'+esc(a.area)+'</div>':'')
-            +'<div style="font-weight:500">'+esc((a.aspect||"").slice(0,80))+'</div>'
+            +'<div style="font-weight:500">'+esc(a.aspect||"")+'</div>'
           +'</td>'
           +'<td style="text-align:center">'+abnHtml+'</td>'
           +'<td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+esc(s)+'</span></td>'
@@ -2390,8 +2390,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           +'<td style="font-family:monospace;font-size:10px;color:#475569;white-space:nowrap">'+esc(o.ref)+'</td>'
           +'<td style="white-space:nowrap">'+(o.type?'<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#f5f3ff;color:#7c3aed">'+esc(o.type)+'</span>':'<span style="color:#94a3b8">&#8212;</span>')+'</td>'
           +'<td style="font-size:10px">'
-            +'<div style="font-weight:500">'+esc((o.description||"").slice(0,80))+'</div>'
-            +(o.envBenefit?'<div style="font-size:9px;color:#0d9488;margin-top:2px">'+esc(o.envBenefit.slice(0,60))+'</div>':'')
+            +'<div style="font-weight:500">'+esc(o.description||"")+'</div>'
+            +(o.envBenefit?'<div style="font-size:9px;color:#0d9488;margin-top:2px">'+esc(o.envBenefit)+'</div>':'')
           +'</td>'
           +'<td style="text-align:center"><span style="font-size:9px;font-weight:700;color:'+co+'">'+esc(pr)+'</span></td>'
           +'<td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg?fmtT(ghg):"&#8212;")+'</td>'
