@@ -2724,9 +2724,30 @@ ${footnotesHtml}
 
 </body></html>`;
 
-    const win = window.open("", "_blank");
-    win.document.write(html);
-    win.document.close();
+    try {
+      const blob = new Blob([html], { type:"text/html;charset=utf-8" });
+      const url  = URL.createObjectURL(blob);
+      const win  = window.open(url, "_blank");
+      if (win) {
+        // Revoke after a minute — long enough for the page to load
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        // Popup blocked — fall back to downloading the HTML file directly
+        URL.revokeObjectURL(url);
+        const blob2 = new Blob([html], { type:"text/html;charset=utf-8" });
+        const url2  = URL.createObjectURL(blob2);
+        const a     = document.createElement("a");
+        a.href      = url2;
+        a.download  = (project.name||"report").replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_report.html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url2), 5000);
+      }
+    } catch (err) {
+      console.error("PDF export error:", err);
+      alert("Could not open print preview: " + err.message);
+    }
   };
 
   const importProjectFile = (file) => {
