@@ -2369,83 +2369,165 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
   // ── PDF Report export ────────────────────────────────────────────────────────
   const exportPDF = () => {
-    const now        = new Date();
-    const dateStr    = now.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
-    const sig        = aspects.filter(a => calcSig(a) === "SIGNIFICANT");
-    const watch      = aspects.filter(a => calcSig(a) === "MEDIUM");
-    const low        = aspects.filter(a => calcSig(a) === "Low");
-    const highOpps   = opps.filter(o => calcOppScore(o) >= 75);
-    const openRisks  = aspects.filter(a => a.status !== "Closed");
-    const fp         = project.footprintSummary;
+    const now     = new Date();
+    const dateStr = now.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
+    const sigAsp  = aspects.filter(a => calcSig(a) === "SIGNIFICANT");
+    const actionAsp = aspects.filter(a => a.status === "Action");
+    const totalAll  = aspects.length + opps.length;
 
-    const pct = (n, total) => total > 0 ? Math.round((n / total) * 100) : 0;
-    const fmt6 = v => Number(v).toFixed(6);
     const fmtT = kg => kg >= 1000 ? (kg/1000).toFixed(3) + " tCO₂e" : Math.round(kg) + " kg CO₂e";
+    const fp   = project.footprintSummary;
 
+    // ── Risk matrix precompute ───────────────────────────────────────────────
+    const mGrid = {};
+    aspects.forEach(a => {
+      const sv = Math.min(5, Math.max(1, parseInt(a.severity)||0));
+      const pb = Math.min(5, Math.max(1, parseInt(a.probability)||0));
+      if (!sv || !pb) return;
+      const k = sv+","+pb;
+      if (!mGrid[k]) mGrid[k] = [];
+      mGrid[k].push(a);
+    });
+    const cellBg = (sv, pb) => {
+      const z = matrixZone(sv, pb);
+      return z==="SIGNIFICANT"?"#FEE2E2":z==="MEDIUM"?"#FEFCE8":"#F0FDF4";
+    };
+    const conLbls = {5:"Catastrophic",4:"Major",3:"Moderate",2:"Minor",1:"Negligible"};
+    const probLbls = {1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
+    const probRng  = {1:"0–1%",2:"1–5%",3:"5–25%",4:"25–50%",5:"50–100%"};
+
+    const matrixRowsHtml = [5,4,3,2,1].map(sv => {
+      const cells = [1,2,3,4,5].map(pb => {
+        const bg    = cellBg(sv, pb);
+        const items = mGrid[sv+","+pb]||[];
+        const dots  = items.map(a => {
+          const sig = calcSig(a);
+          const dc  = sig==="SIGNIFICANT"?"#DC2626":sig==="MEDIUM"?"#D97706":"#16A34A";
+          const op  = a.status==="Info"?"0.35":"1";
+          return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+dc+';opacity:'+op+';margin:1px"></span>';
+        }).join("");
+        return '<td style="width:46px;height:46px;background:'+bg+';border:1px solid #e5e7eb;padding:2px;vertical-align:top;position:relative">'
+          +'<span style="position:absolute;top:2px;left:3px;font-size:7px;color:#9ca3af;font-weight:bold">'+(sv*pb)+'</span>'
+          +'<div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:12px">'+dots+'</div>'
+          +'</td>';
+      }).join("");
+      return '<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:90px"><strong>'+sv+'</strong>&nbsp;'+conLbls[sv]+'</td>'+cells+'</tr>';
+    }).join("");
+    const probHdrCells = [1,2,3,4,5].map(pb =>
+      '<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+pb+'</strong>'
+      +'<br/><span style="font-size:7px;color:#94a3b8">'+probLbls[pb]+'</span>'
+      +'<br/><span style="font-size:7px;color:#cbd5e1">'+probRng[pb]+'</span></td>'
+    ).join("");
+    const matrixHtml =
+      '<div style="margin-bottom:20px">'
+      +'<p class="section-title">Environmental Risk Matrix</p>'
+      +'<div style="display:flex;align-items:flex-start">'
+      +'<div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap;letter-spacing:0.04em">CONSEQUENCE →</div>'
+      +'<div><table style="border-collapse:collapse"><tbody>'+matrixRowsHtml+'<tr><td></td>'+probHdrCells+'</tr></tbody></table>'
+      +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;letter-spacing:0.04em;margin-top:3px">PROBABILITY →</div></div>'
+      +'</div></div>';
+
+    // ── Risk rows (no score columns) ─────────────────────────────────────────
     const sigRow = a => {
-      const s = calcSig(a);
-      const sc = calcScore(a) || "—";
+      const s  = calcSig(a);
       const bg = s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";
       const co = s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";
-      return `<tr>
-        <td style="font-family:monospace;font-size:10px;color:#475569">${a.ref||""}</td>
-        <td style="font-size:10px">${(a.aspect||"").slice(0,80)}</td>
-        <td style="font-size:10px;color:#64748b">${a.area||""}</td>
-        <td style="font-size:10px;color:#64748b">${a.phase||""}</td>
-        <td style="text-align:center"><span style="background:${bg};color:${co};padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">${s||"—"}</span></td>
-        <td style="text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:${co}">${sc}</td>
-        <td style="text-align:center;font-size:10px;color:#64748b">${a.status||""}</td>
-      </tr>`;
+      return '<tr>'
+        +'<td style="font-family:monospace;font-size:10px;color:#475569">'+( a.ref||"")+'</td>'
+        +'<td style="font-size:10px">'+((a.aspect||"").slice(0,90))+'</td>'
+        +'<td style="font-size:10px;color:#64748b">'+(a.area||"")+'</td>'
+        +'<td style="font-size:10px;color:#64748b">'+(a.phase||"")+'</td>'
+        +'<td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+(s||"—")+'</span></td>'
+        +'<td style="text-align:center;font-size:10px;color:#64748b">'+(a.status||"")+'</td>'
+        +'</tr>';
     };
 
+    // ── Opp rows (no score column) ────────────────────────────────────────────
     const oppRow = o => {
-      const sc = calcOppScore(o);
-      const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;
+      const hEp=(o.envValue||1)>=4, hFp=(o.feasibility||1)>=4;
       const pr = hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";
       const co = hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";
       const ghg = calcGhgTotal(o);
-      return `<tr>
-        <td style="font-family:monospace;font-size:10px;color:#475569">${o.ref||""}</td>
-        <td style="font-size:10px">${(o.description||o.type||"").slice(0,80)}</td>
-        <td style="font-size:10px;color:#64748b">${o.type||""}</td>
-        <td style="text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:${co}">${sc}</td>
-        <td style="text-align:center"><span style="color:${co};font-size:9px;font-weight:700">${pr}</span></td>
-        <td style="text-align:center;font-size:10px;color:#0d9488">${ghg ? fmtT(ghg) : "—"}</td>
-        
-      </tr>`;
+      return '<tr>'
+        +'<td style="font-family:monospace;font-size:10px;color:#475569">'+(o.ref||"")+'</td>'
+        +'<td style="font-size:10px">'+((o.description||o.type||"").slice(0,90))+'</td>'
+        +'<td style="font-size:10px;color:#64748b">'+(o.type||"")+'</td>'
+        +'<td style="text-align:center"><span style="color:'+co+';font-size:9px;font-weight:700">'+pr+'</span></td>'
+        +'<td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg ? fmtT(ghg) : "—")+'</td>'
+        +'</tr>';
     };
 
+    // ── Footnotes / legend appendix ───────────────────────────────────────────
+    const zoneLegend = [
+      {bg:"#FEE2E2",bd:"#FCA5A5",c:"#991B1B",z:"SIGNIFICANT",d:"Immediate action & senior sign-off required"},
+      {bg:"#FEFCE8",bd:"#FDE047",c:"#A16207",z:"MEDIUM",      d:"Active management and monitoring required"},
+      {bg:"#F0FDF4",bd:"#86EFAC",c:"#15803D",z:"Low",         d:"Standard controls sufficient"},
+    ].map(({bg,bd,c,z,d}) =>
+      '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">'
+      +'<div style="width:13px;height:13px;border-radius:3px;background:'+bg+';border:1.5px solid '+bd+';flex-shrink:0;margin-top:1px"></div>'
+      +'<div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> — <span style="font-size:9px;color:#475569">'+d+'</span></div></div>'
+    ).join("");
+
+    const conLegend = [
+      {n:"5",l:"Catastrophic",d:"Irreversible damage or ecosystem collapse; prosecution / licence revocation risk."},
+      {n:"4",l:"Major",       d:"Significant lasting damage; likely regulatory breach; remediation required over years."},
+      {n:"3",l:"Moderate",    d:"Noticeable environmental harm; active management; recovery within 1–2 years."},
+      {n:"2",l:"Minor",       d:"Limited, localised impact; natural recovery within months; no regulatory breach."},
+      {n:"1",l:"Negligible",  d:"No lasting effect; fully recoverable within days or weeks."},
+    ].map(({n,l,d}) =>
+      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+'</strong>'
+      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
+    ).join("");
+
+    const probLegend = [
+      {n:"5",l:"Very likely",  r:"50–100%",d:"Will almost certainly occur without controls in place."},
+      {n:"4",l:"Likely",       r:"25–50%", d:"Expected to occur at some point during the project without controls."},
+      {n:"3",l:"Possible",     r:"5–25%",  d:"Has occurred under comparable conditions in similar projects."},
+      {n:"2",l:"Unlikely",     r:"1–5%",   d:"Could occur but is rare; no credible mechanism on this project."},
+      {n:"1",l:"Very unlikely",r:"0–1%",   d:"Theoretically possible; no realistic pathway without a major upset."},
+    ].map(({n,l,r,d}) =>
+      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+' ('+r+')</strong>'
+      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
+    ).join("");
+
+    const footnotesHtml =
+      '<div style="margin-top:40px;padding-top:14px;border-top:2px solid #e2e8f0">'
+      +'<p class="section-title" style="margin-bottom:14px">Appendix — Risk Matrix Legend</p>'
+      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Zone key</p>'+zoneLegend+'</div>'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Consequence levels</p>'+conLegend+'</div>'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Probability levels</p>'+probLegend+'</div>'
+      +'</div></div>';
+
+    // ── Build HTML ────────────────────────────────────────────────────────────
     const html = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"/>
 <title>Environmental Report — ${project.name||"Project"}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
   body { font-family:Arial,sans-serif; font-size:11px; color:#1e293b; background:#fff; }
-  @page { size:A4 landscape; margin:15mm 12mm; }
+  @page { size:A4 landscape; margin:14mm 12mm; }
   @media print { .no-print { display:none !important; } }
 
   .page-header { display:flex; justify-content:space-between; align-items:flex-start;
-    padding-bottom:12px; border-bottom:3px solid #1e4d35; margin-bottom:18px; }
+    padding-bottom:12px; border-bottom:3px solid #1e4d35; margin-bottom:16px; }
   .project-title { font-size:20px; font-weight:700; color:#1e4d35; }
   .project-meta  { font-size:10px; color:#475569; margin-top:4px; line-height:1.7; }
-  .report-label  { font-size:9px; text-transform:uppercase; letter-spacing:0.08em;
-    color:#64748b; font-weight:600; }
+  .report-label  { font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; font-weight:600; }
   .report-date   { font-size:10px; color:#475569; margin-top:2px; }
 
-  .kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:18px; }
+  .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px; }
   .kpi { padding:10px 8px; border-radius:6px; border:1px solid #e2e8f0; background:#f8fafc; text-align:center; }
-  .kpi-val { font-size:22px; font-weight:700; line-height:1; }
+  .kpi-val { font-size:24px; font-weight:700; line-height:1; }
   .kpi-lbl { font-size:9px; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:0.06em; }
+  .kpi-total  { background:#f8fafc; border-color:#e2e8f0; }
+  .kpi-total .kpi-val { color:#1e293b; }
   .kpi-sig  { background:#fee2e2; border-color:#fca5a5; }
   .kpi-sig  .kpi-val { color:#dc2626; }
-  .kpi-watch{ background:#fefce8; border-color:#fde047; }
-  .kpi-watch .kpi-val { color:#d97706; }
-  .kpi-low  { background:#f0fdf4; border-color:#86efac; }
-  .kpi-low  .kpi-val { color:#16a34a; }
+  .kpi-act  { background:#fefce8; border-color:#fde047; }
+  .kpi-act  .kpi-val { color:#d97706; }
   .kpi-opp  { background:#f5f3ff; border-color:#c4b5fd; }
   .kpi-opp  .kpi-val { color:#7c3aed; }
-  .kpi-fp   { background:#f0fdfa; border-color:#5eead4; }
-  .kpi-fp   .kpi-val { color:#0d9488; }
 
   .section-title { font-size:12px; font-weight:700; color:#1e4d35; margin:0 0 8px;
     padding:6px 10px; background:#f1f5f9; border-left:3px solid #1e4d35; border-radius:0 4px 4px 0; }
@@ -2460,17 +2542,12 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   .fp-card { padding:10px 14px; border-radius:6px; border:1px solid #e2e8f0; }
   .fp-card-title { font-size:9px; color:#64748b; text-transform:uppercase; letter-spacing:0.07em; }
   .fp-card-val   { font-size:16px; font-weight:700; color:#0d9488; margin-top:2px; font-family:monospace; }
-  .fp-card-sub   { font-size:9px; color:#94a3b8; margin-top:1px; }
 
   .footer { margin-top:24px; padding-top:10px; border-top:1px solid #e2e8f0;
     display:flex; justify-content:space-between; color:#94a3b8; font-size:9px; }
-
-  .no-print { position:fixed; top:16px; right:16px; z-index:100;
-    display:flex; gap:8px; }
-  .btn-print { padding:8px 18px; background:#1e4d35; color:#fff; border:none;
-    border-radius:6px; font-size:12px; cursor:pointer; }
-  .btn-close { padding:8px 18px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0;
-    border-radius:6px; font-size:12px; cursor:pointer; }
+  .no-print { position:fixed; top:16px; right:16px; z-index:100; display:flex; gap:8px; }
+  .btn-print { padding:8px 18px; background:#1e4d35; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; }
+  .btn-close { padding:8px 18px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; border-radius:6px; font-size:12px; cursor:pointer; }
 </style>
 </head><body>
 
@@ -2496,55 +2573,44 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   </div>
 </div>
 
-<!-- KPI strip -->
 <div class="kpi-grid">
-  <div class="kpi"><div class="kpi-val">${aspects.length}</div><div class="kpi-lbl">Total aspects</div></div>
-  <div class="kpi kpi-sig">  <div class="kpi-val">${sig.length}</div>  <div class="kpi-lbl">Significant</div></div>
-  <div class="kpi kpi-watch"><div class="kpi-val">${watch.length}</div><div class="kpi-lbl">Watch</div></div>
-  <div class="kpi kpi-low">  <div class="kpi-val">${low.length}</div>  <div class="kpi-lbl">Low</div></div>
-  <div class="kpi kpi-opp">  <div class="kpi-val">${opps.length}</div> <div class="kpi-lbl">Opportunities</div></div>
-  <div class="kpi kpi-fp">   <div class="kpi-val">${openRisks.length}</div><div class="kpi-lbl">Open risks</div></div>
+  <div class="kpi kpi-total"><div class="kpi-val">${totalAll}</div><div class="kpi-lbl">All aspects</div></div>
+  <div class="kpi kpi-sig">  <div class="kpi-val">${sigAsp.length}</div><div class="kpi-lbl">Significant</div></div>
+  <div class="kpi kpi-act">  <div class="kpi-val">${actionAsp.length}</div><div class="kpi-lbl">Action risks</div></div>
+  <div class="kpi kpi-opp">  <div class="kpi-val">${opps.length}</div><div class="kpi-lbl">Opportunities</div></div>
 </div>
 
+${matrixHtml}
+
 ${fp ? `
-<!-- Footprint summary -->
 <div class="section-title">Environmental Budget</div>
 <div class="fp-grid">
-  <div class="fp-card">
-    <div class="fp-card-title">MTO — Material Take-Off</div>
-    <div class="fp-card-val">${Number(fp.mtoTotal||0).toFixed(3)} tCO₂e</div>
-    <div class="fp-card-sub">Scope 3 Cat. 1 embodied carbon</div>
-  </div>
-  <div class="fp-card">
-    <div class="fp-card-title">MEL — Material Equipment List</div>
-    <div class="fp-card-val">${Number(fp.melTotal||0).toFixed(3)} tCO₂e</div>
-    <div class="fp-card-sub">Scope 3 Cat. 1 embodied carbon</div>
-  </div>
-  <div class="fp-card" style="border-color:#5eead4;background:#f0fdfa">
-    <div class="fp-card-title">Combined Total</div>
-    <div class="fp-card-val">${Number(fp.combined||0).toFixed(3)} tCO₂e</div>
-    <div class="fp-card-sub">As of ${fp.date ? new Date(fp.date).toLocaleDateString("en-GB") : dateStr}</div>
-  </div>
+  <div class="fp-card"><div class="fp-card-title">MTO — Material Take-Off</div><div class="fp-card-val">${Number(fp.mtoTotal||0).toFixed(3)} tCO₂e</div></div>
+  <div class="fp-card"><div class="fp-card-title">MEL — Material Equipment List</div><div class="fp-card-val">${Number(fp.melTotal||0).toFixed(3)} tCO₂e</div></div>
+  <div class="fp-card" style="border-color:#5eead4;background:#f0fdfa"><div class="fp-card-title">Combined Total</div><div class="fp-card-val">${Number(fp.combined||0).toFixed(3)} tCO₂e</div></div>
 </div>` : ""}
 
-<!-- Risk register -->
 <div class="section-title">Risk Register (${aspects.length} aspects)</div>
 <table>
   <thead><tr>
-    <th style="width:70px">Ref</th><th>Aspect</th><th style="width:120px">Area</th>
-    <th style="width:80px">Phase</th><th style="width:90px;text-align:center">Significance</th>
-    <th style="width:50px;text-align:center">Score</th><th style="width:70px;text-align:center">Status</th>
+    <th style="width:70px">Ref</th>
+    <th>Aspect</th>
+    <th style="width:120px">Area</th>
+    <th style="width:90px">Phase</th>
+    <th style="width:100px;text-align:center">Significance</th>
+    <th style="width:80px;text-align:center">Status</th>
   </tr></thead>
   <tbody>${aspects.map(sigRow).join("")}</tbody>
 </table>
 
-<!-- Opportunity register -->
 <div class="section-title">Opportunity Register (${opps.length} opportunities)</div>
 <table>
   <thead><tr>
-    <th style="width:70px">Ref</th><th>Description</th><th style="width:140px">Type</th>
-    <th style="width:50px;text-align:center">Score</th><th style="width:70px;text-align:center">Priority</th>
-    <th style="width:110px;text-align:center">GHG saving</th><th style="width:70px;text-align:center">Status</th>
+    <th style="width:70px">Ref</th>
+    <th>Description</th>
+    <th style="width:150px">Type</th>
+    <th style="width:100px;text-align:center">Priority</th>
+    <th style="width:120px;text-align:center">GHG saving</th>
   </tr></thead>
   <tbody>${opps.map(oppRow).join("")}</tbody>
 </table>
@@ -2554,144 +2620,13 @@ ${fp ? `
   <span>Generated ${dateStr} &nbsp;·&nbsp; ${project.name||"Untitled"} ${project.projectId ? "· " + project.projectId : ""}</span>
 </div>
 
+${footnotesHtml}
+
 </body></html>`;
 
     const win = window.open("", "_blank");
     win.document.write(html);
     win.document.close();
-  };
-
-
-  // ── Export full report — fills project data into the original template ──────────
-  const exportTemplateExcel = async () => {
-    try {
-      // 1. Fetch the blank template (preserves all original styles / merges / colors)
-      const resp = await fetch("/template.xlsx");
-      if (!resp.ok) { alert("Could not load template.xlsx from public folder."); return; }
-      const buf  = await resp.arrayBuffer();
-      const wb   = XLSX.read(new Uint8Array(buf), { type:"array", cellStyles:true, sheetStubs:true });
-
-      const set = (ws, addr, val) => {
-        if (ws[addr]) ws[addr].v = val;          // update existing cell (keeps style)
-        else ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s" };  // new cell
-      };
-
-      // ── Frontpage ────────────────────────────────────────────────────────────
-      const fp = wb.Sheets["Frontpage"];
-      set(fp, "B5",  project.projectId || "");
-      set(fp, "B7",  project.name      || "");
-      set(fp, "C11", new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}));
-
-      // ── Waste handling — fill C/D/E/F for each standard row ──────────────────
-      const wh = wb.Sheets["Waste handling"];
-      // Row index → waste row ID (matches initWasteRows IDs)
-      const WASTE_ROW_MAP = {
-        3:"std_packagin_0", 4:"std_packagin_1", 5:"std_packagin_2",
-        6:"std_cables_0",   7:"std_weee_0",    8:"std_metals_0",
-        9:"std_plastics_0", 10:"std_chemical_0",11:"std_chemical_1",
-        12:"std_chemical_2",13:"std_chemical_3",14:"std_chemical_4",
-        15:"std_chemical_5",16:"std_material_0",17:"std_pipes_an_0",
-        18:"std_hydrocar_0",19:"std_insulati_0",20:"std_insulati_1",
-      };
-      const wasteById = {};
-      initWasteRows(project.wasteRows).forEach(r => { wasteById[r.id] = r; });
-      Object.entries(WASTE_ROW_MAP).forEach(([rowNum, id]) => {
-        const r = wasteById[id];
-        if (!r) return;
-        const rn = Number(rowNum);
-        if (r.construction) set(wh, "C"+rn, r.construction);
-        if (r.startup)      set(wh, "D"+rn, r.startup);
-        if (r.operation)    set(wh, "E"+rn, r.operation);
-        if (r.measures)     set(wh, "F"+rn, r.measures);
-      });
-      // Append custom rows after row 22
-      const customWaste = initWasteRows(project.wasteRows).filter(r => !r.isStd);
-      if (customWaste.length > 0) {
-        let rn = 23;
-        customWaste.forEach(r => {
-          set(wh, "A"+rn, r.fraction||"Other");
-          set(wh, "B"+rn, r.product||"");
-          if (r.construction) set(wh, "C"+rn, r.construction);
-          if (r.startup)      set(wh, "D"+rn, r.startup);
-          if (r.operation)    set(wh, "E"+rn, r.operation);
-          if (r.measures)     set(wh, "F"+rn, r.measures);
-          rn++;
-        });
-        // Update sheet range
-        const range = XLSX.utils.decode_range(wh["!ref"]||"A1:F48");
-        range.e.r = Math.max(range.e.r, rn - 1);
-        wh["!ref"] = XLSX.utils.encode_range(range);
-      }
-
-      // ── Attendees — write sessions below the header ───────────────────────────
-      const wa = wb.Sheets["Attendees"];
-      const sessions = project.attendeeSessions || [];
-      // Add column headers to row 2
-      set(wa, "A2", "Date"); set(wa, "B2", "Session"); set(wa, "C2", "Name"); set(wa, "D2", "Role / Title");
-      let attRow = 3;
-      sessions.forEach(sess => {
-        sess.rows.filter(r => r.name||r.role).forEach((r, ri) => {
-          set(wa, "A"+attRow, ri===0 ? (sess.date||"") : "");
-          set(wa, "B"+attRow, ri===0 ? (sess.label||"") : "");
-          set(wa, "C"+attRow, r.name||"");
-          set(wa, "D"+attRow, r.role||"");
-          attRow++;
-        });
-      });
-      const attRange = XLSX.utils.decode_range(wa["!ref"]||"A1:B5");
-      attRange.e.r = Math.max(attRange.e.r, attRow-1);
-      attRange.e.c = Math.max(attRange.e.c, 3);
-      wa["!ref"] = XLSX.utils.encode_range(attRange);
-
-      // ── Sustainability opportunities — fill project info ──────────────────────
-      const so = wb.Sheets["Sustainability opportunities"];
-      set(so, "B2", "PROJECT ID: " + (project.projectId||"—") + "\nPROJECT NAME: " + (project.name||"—"));
-      set(so, "C3", new Date().toLocaleDateString("en-GB"));
-
-      // ── Env Risk — append registered risks below the template guide words (after row 71) ──
-      const er = wb.Sheets["Env Risk"];
-      const sortedAsp = [...aspects].sort((a,b) => {
-        const ca = getCategoryLabel(a)||""; const cb = getCategoryLabel(b)||"";
-        return ca.localeCompare(cb)||(a.ref||"").localeCompare(b.ref||"");
-      });
-      if (sortedAsp.length > 0) {
-        // Section header
-        set(er, "A72", "— REGISTERED PROJECT RISKS —");
-        // Column headers  
-        const RISK_HDRS = ["CATEGORY","SUB CATEGORY / AREA","GUIDE WORDS / ACTIVITY","A/I","COMMENT / DESCRIPTION","MITIGATION","P","C","R","ABNORMAL","REGULATION","SIGNIFICANT?","ASPECT","LEGAL REF","ACTION PLAN","RESPONSIBLE","DEADLINE","STATUS"];
-        RISK_HDRS.forEach((h, ci) => {
-          const col = XLSX.utils.encode_col(ci);
-          set(er, col+"73", h);
-        });
-        let rn = 74;
-        sortedAsp.forEach(a => {
-          const sig = calcSig(a);
-          const rowData = [
-            getCategoryLabel(a)||"",  a.area||"",          a.activity||"",     "A",
-            a.impact||a.aspect||"",   a.control||"",        a.probability||"", a.severity||"",
-            calcScore(a)||"",          a.condition==="Abnormal"||a.condition==="Emergency"?"X":"",
-            a.legalRef||"",           sig==="SIGNIFICANT"?"Yes":"",
-            a.aspect||"",             a.legalRef||"",       a.control||"",     "","",  a.status||""
-          ];
-          rowData.forEach((v, ci) => {
-            const col = XLSX.utils.encode_col(ci);
-            if (v !== "") set(er, col+rn, v);
-          });
-          rn++;
-        });
-        const erRange = XLSX.utils.decode_range(er["!ref"]||"A1:Q71");
-        erRange.e.r = Math.max(erRange.e.r, rn-1);
-        er["!ref"] = XLSX.utils.encode_range(erRange);
-      }
-
-      // ── Write out ─────────────────────────────────────────────────────────────
-      const slug = (project.name||"project").replace(/[^a-z0-9]/gi,"_").toLowerCase();
-      XLSX.writeFile(wb, slug + "_env_screening.xlsx");
-
-    } catch(err) {
-      console.error("Export failed:", err);
-      alert("Export failed: " + err.message);
-    }
   };
 
   const importProjectFile = (file) => {
@@ -3249,13 +3184,11 @@ This cannot be undone.`)) return;
         <div>
 
           {/* ── KPI strip ── */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
-            <StatCard label="All aspects"   value={aspects.length}  filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
-            <StatCard label="Significant"   value={sigCount}        filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
-            <StatCard label="Medium"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
-            <StatCard label="Low"           value={lowCount}        filterId="low"   color={T.green}  border={T.greenBd}  bg={T.greenBg}/>
-            <StatCard label="Opportunities" value={opps.length}     filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
-            <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:"1.25rem" }}>
+            <StatCard label="All aspects"   value={aspects.length + opps.length}                         filterId="all"  color={T.text}   border={T.border}   bg={T.surface}/>
+            <StatCard label="Significant"   value={sigCount}                                              filterId="sig"  color={T.red}    border={T.redBd}    bg={T.redBg}/>
+            <StatCard label="Action risks"  value={aspects.filter(a=>a.status==="Action").length}         filterId="all"  color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Opportunities" value={opps.length}                                           filterId="opps" color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
           </div>
 
           {/* ── Footprint card (if pinned) ── */}
@@ -3631,18 +3564,18 @@ This cannot be undone.`)) return;
             const unplotted = aspects.filter(a => !a.severity || !a.probability);
 
             const CON_ROWS = [
-              {v:5,code:"C5",lbl:"Catastrophic"},
-              {v:4,code:"C4",lbl:"Major"},
-              {v:3,code:"C3",lbl:"Moderate"},
-              {v:2,code:"C2",lbl:"Minor"},
-              {v:1,code:"C1",lbl:"Negligible"},
+              {v:5,lbl:"Catastrophic"},
+              {v:4,lbl:"Major"},
+              {v:3,lbl:"Moderate"},
+              {v:2,lbl:"Minor"},
+              {v:1,lbl:"Negligible"},
             ];
             const PROB_COLS = [
-              {v:1,code:"P1",lbl:"Very unlikely",pct:"0–1%"},
-              {v:2,code:"P2",lbl:"Unlikely",     pct:"1–5%"},
-              {v:3,code:"P3",lbl:"Possible",      pct:"5–25%"},
-              {v:4,code:"P4",lbl:"Likely",         pct:"25–50%"},
-              {v:5,code:"P5",lbl:"Very likely",    pct:"50–100%"},
+              {v:1,lbl:"Very unlikely",pct:"0–1%"},
+              {v:2,lbl:"Unlikely",     pct:"1–5%"},
+              {v:3,lbl:"Possible",     pct:"5–25%"},
+              {v:4,lbl:"Likely",       pct:"25–50%"},
+              {v:5,lbl:"Very likely",  pct:"50–100%"},
             ];
 
             return (
@@ -3657,12 +3590,12 @@ This cannot be undone.`)) return;
                       </span>
                     </div>
                     <div style={{ width:82, flexShrink:0 }}>
-                      {CON_ROWS.map(({v,code,lbl}) => (
+                      {CON_ROWS.map(({v,lbl}) => (
                         <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
                           justifyContent:"flex-end", paddingRight:10 }}>
                           <div style={{ textAlign:"right" }}>
-                            <div style={{ fontSize:10, fontWeight:700, color:T.text, lineHeight:1.25 }}>{code}</div>
-                            <div style={{ fontSize:9, color:T.muted, lineHeight:1.25 }}>{lbl}</div>
+                            <div style={{ fontSize:12, fontWeight:700, color:T.muted, lineHeight:1.25 }}>{v}</div>
+                            <div style={{ fontSize:9, color:T.faint, lineHeight:1.25 }}>{lbl}</div>
                           </div>
                         </div>
                       ))}
@@ -3673,10 +3606,10 @@ This cannot be undone.`)) return;
                   <div style={{ flexShrink:0 }}>
                     {/* X-axis header */}
                     <div style={{ display:"flex", height:62, alignItems:"flex-end", paddingBottom:5 }}>
-                      {PROB_COLS.map(({v,code,lbl,pct}) => (
+                      {PROB_COLS.map(({v,lbl,pct}) => (
                         <div key={v} style={{ width:CELL, textAlign:"center", flexShrink:0, paddingBottom:2 }}>
-                          <div style={{ fontSize:11, fontWeight:700, color:T.text,   lineHeight:1.3 }}>{code}</div>
-                          <div style={{ fontSize:9,  fontWeight:400, color:T.muted,  lineHeight:1.3 }}>{lbl}</div>
+                          <div style={{ fontSize:12, fontWeight:700, color:T.muted,  lineHeight:1.3 }}>{v}</div>
+                          <div style={{ fontSize:9,  fontWeight:400, color:T.faint,  lineHeight:1.3 }}>{lbl}</div>
                           <div style={{ fontSize:8,  fontWeight:400, color:T.faint,  lineHeight:1.3 }}>{pct}</div>
                         </div>
                       ))}
@@ -3748,10 +3681,10 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dots</p>
                     {[
-                      {c:"#DC2626",l:"Significant — Open"},
-                      {c:"#D97706",l:"Watch — Open"},
-                      {c:"#16A34A",l:"Low — Open"},
-                      {c:"#9CA3AF",l:"Any — Closed"},
+                      {c:"#DC2626",l:"Significant — Action"},
+                      {c:"#D97706",l:"Medium — Action"},
+                      {c:"#16A34A",l:"Low — Action"},
+                      {c:"#9CA3AF",l:"Any — Info"},
                     ].map(({c,l})=>(
                       <div key={l} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
                         <div style={{ width:12, height:12, borderRadius:"50%", background:c, flexShrink:0 }}/>
@@ -3765,11 +3698,11 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Consequence levels</p>
                     {[
-                      {code:"C5",label:"Catastrophic",desc:"Irreversible damage or ecosystem collapse; prosecution and/or licence revocation risk."},
-                      {code:"C4",label:"Major",       desc:"Significant lasting damage; likely regulatory breach; remediation required over years."},
-                      {code:"C3",label:"Moderate",    desc:"Noticeable environmental harm; active management required; recovery within 1–2 years."},
-                      {code:"C2",label:"Minor",       desc:"Limited, localised impact; natural recovery within months; no regulatory breach."},
-                      {code:"C1",label:"Negligible",  desc:"No lasting effect; fully recoverable within days or weeks."},
+                      {code:"5",label:"Catastrophic",desc:"Irreversible damage or ecosystem collapse; prosecution and/or licence revocation risk."},
+                      {code:"4",label:"Major",       desc:"Significant lasting damage; likely regulatory breach; remediation required over years."},
+                      {code:"3",label:"Moderate",    desc:"Noticeable environmental harm; active management required; recovery within 1–2 years."},
+                      {code:"2",label:"Minor",       desc:"Limited, localised impact; natural recovery within months; no regulatory breach."},
+                      {code:"1",label:"Negligible",  desc:"No lasting effect; fully recoverable within days or weeks."},
                     ].map(({code,label,desc})=>(
                       <div key={code} style={{ marginBottom:9 }}>
                         <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
@@ -3786,11 +3719,11 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Probability levels</p>
                     {[
-                      {code:"P5",label:"Very likely",   range:"50–100%",desc:"Will almost certainly occur without controls in place."},
-                      {code:"P4",label:"Likely",         range:"25–50%", desc:"Expected to occur at some point during this project without controls."},
-                      {code:"P3",label:"Possible",       range:"5–25%",  desc:"Has occurred under comparable conditions in similar projects."},
-                      {code:"P2",label:"Unlikely",       range:"1–5%",   desc:"Could occur but is rare; no credible mechanism on this project."},
-                      {code:"P1",label:"Very unlikely",  range:"0–1%",   desc:"Theoretically possible; no realistic pathway without a major unforeseen upset."},
+                      {code:"5",label:"Very likely",   range:"50–100%",desc:"Will almost certainly occur without controls in place."},
+                      {code:"4",label:"Likely",         range:"25–50%", desc:"Expected to occur at some point during this project without controls."},
+                      {code:"3",label:"Possible",       range:"5–25%",  desc:"Has occurred under comparable conditions in similar projects."},
+                      {code:"2",label:"Unlikely",       range:"1–5%",   desc:"Could occur but is rare; no credible mechanism on this project."},
+                      {code:"1",label:"Very unlikely",  range:"0–1%",   desc:"Theoretically possible; no realistic pathway without a major unforeseen upset."},
                     ].map(({code,label,range,desc})=>(
                       <div key={code} style={{ marginBottom:9 }}>
                         <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
