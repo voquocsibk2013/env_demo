@@ -1697,10 +1697,21 @@ function AIPanel({ project, onAdd }) {
   const [error, setError] = useState("");
   const run = async () => {
     if (!query.trim()) return;
+    const apiKey = localStorage.getItem("env-toolkit-apikey") || "";
+    if (!apiKey) {
+      setError("No API key configured. Add your Anthropic API key in Settings → AI Suggestions.");
+      return;
+    }
     setLoading(true); setError(""); setResults([]);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:1200,
           system:`You are an expert environmental consultant for Norwegian engineering projects. Return ONLY a valid JSON array. Each object: phase (one of: ${PHASES.join(", ")}), area (max 60 chars), activity (max 80 chars), aspect (max 80 chars), condition (Normal|Abnormal|Emergency), impact (max 120 chars), receptors (max 80 chars), recSensitivity (High|Medium|Low), scale (Global|Regional|Local), severity (int 1-5), probability (int 1-5), duration (one of: ${DURATIONS.join(", ")}), legalThreshold (Y|N), control (max 120 chars), legalRef (max 80 chars). Return 4-6 aspects.`,
@@ -2369,6 +2380,11 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
   // ── PDF Report export ────────────────────────────────────────────────────────
   const exportPDF = () => {
+    // HTML-escape user content to prevent broken layout or injection
+    const esc = v => String(v == null ? "" : v)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
     const now     = new Date();
     const dateStr = now.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
     const sigAsp  = aspects.filter(a => calcSig(a) === "SIGNIFICANT");
@@ -2543,11 +2559,11 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       const co = s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";
       return '<tr>'
         +'<td style="font-family:monospace;font-size:10px;color:#475569">'+( a.ref||"")+'</td>'
-        +'<td style="font-size:10px">'+((a.aspect||"").slice(0,90))+'</td>'
+        +'<td style="font-size:10px">'+esc((a.aspect||"").slice(0,90))+'</td>'
         +'<td style="font-size:10px;color:#64748b">'+(a.area||"")+'</td>'
         +'<td style="font-size:10px;color:#64748b">'+(a.phase||"")+'</td>'
         +'<td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+(s||"—")+'</span></td>'
-        +'<td style="text-align:center;font-size:10px;color:#64748b">'+(a.status||"")+'</td>'
+        +'<td style="text-align:center;font-size:10px;color:#64748b">'+esc(a.status)+'</td>'
         +'</tr>';
     };
 
@@ -2558,9 +2574,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       const co = hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";
       const ghg = calcGhgTotal(o);
       return '<tr>'
-        +'<td style="font-family:monospace;font-size:10px;color:#475569">'+(o.ref||"")+'</td>'
-        +'<td style="font-size:10px">'+((o.description||o.type||"").slice(0,90))+'</td>'
-        +'<td style="font-size:10px;color:#64748b">'+(o.type||"")+'</td>'
+        +'<td style="font-family:monospace;font-size:10px;color:#475569">'+esc(o.ref)+'</td>'
+        +'<td style="font-size:10px">'+esc((o.description||o.type||"").slice(0,90))+'</td>'
+        +'<td style="font-size:10px;color:#64748b">'+esc(o.type)+'</td>'
         +'<td style="text-align:center"><span style="color:'+co+';font-size:9px;font-weight:700">'+pr+'</span></td>'
         +'<td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg ? fmtT(ghg) : "—")+'</td>'
         +'</tr>';
@@ -2659,13 +2675,13 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
 <div class="page-header">
   <div>
-    <div class="project-title">${project.name||"Untitled Project"}</div>
+    <div class="project-title">${esc(project.name||"Untitled Project")}</div>
     <div class="project-meta">
-      ${project.projectId ? `<strong>ID:</strong> ${project.projectId} &nbsp;·&nbsp; ` : ""}
-      ${project.company  ? `<strong>Company:</strong> ${project.company} &nbsp;·&nbsp; ` : ""}
-      ${project.contract ? `<strong>Contract:</strong> ${project.contract} &nbsp;·&nbsp; ` : ""}
-      ${project.type     ? `<strong>Type:</strong> ${project.type} &nbsp;·&nbsp; ` : ""}
-      ${project.phase    ? `<strong>Phase:</strong> ${project.phase}` : ""}
+      ${project.projectId ? `<strong>ID:</strong> ${esc(project.projectId)} &nbsp;·&nbsp; ` : ""}
+      ${project.company  ? `<strong>Company:</strong> ${esc(project.company)} &nbsp;·&nbsp; ` : ""}
+      ${project.contract ? `<strong>Contract:</strong> ${esc(project.contract)} &nbsp;·&nbsp; ` : ""}
+      ${project.type     ? `<strong>Type:</strong> ${esc(project.type)} &nbsp;·&nbsp; ` : ""}
+      ${project.phase    ? `<strong>Phase:</strong> ${esc(project.phase)}` : ""}
     </div>
   </div>
   <div style="text-align:right">
@@ -2718,7 +2734,7 @@ ${fp ? `
 
 <div class="footer">
   <span>ENV·ASPECTS TOOLKIT — Environmental Risk Assessment Report</span>
-  <span>Generated ${dateStr} &nbsp;·&nbsp; ${project.name||"Untitled"} ${project.projectId ? "· " + project.projectId : ""}</span>
+  <span>Generated ${dateStr} &nbsp;·&nbsp; ${esc(project.name||"Untitled")} ${project.projectId ? "· " + esc(project.projectId) : ""}</span>
 </div>
 
 ${footnotesHtml}
@@ -2754,19 +2770,47 @@ ${footnotesHtml}
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
-        if (!parsed._envToolkitVersion || !parsed.project) {
+
+        // ── Structure validation ───────────────────────────────────────────
+        if (!parsed._envToolkitVersion || !parsed.project ||
+            typeof parsed.project !== "object" || Array.isArray(parsed.project)) {
           alert("Invalid file — this does not look like an exported ENV·ASPECTS project file.");
           return;
         }
+
+        const src = parsed.project;
+
+        // ── Sanitise every field we'll consume ────────────────────────────
+        const ensureArr = (v) => Array.isArray(v) ? v.filter(x => x && typeof x === "object") : [];
+
         const imported = {
-          ...parsed.project,
-          id: project.id,          // keep current slot id
+          // Safe spread of primitive / object fields
+          ...src,
+          // Slot identity stays the same
+          id: project.id,
           _importedAt: new Date().toISOString(),
+          // Arrays — coerce to [] if missing or wrong type
+          aspects:           ensureArr(src.aspects),
+          opportunities:     ensureArr(src.opportunities),
+          changelog:         ensureArr(src.changelog),
+          wasteRows:         Array.isArray(src.wasteRows)         ? src.wasteRows         : undefined,
+          attendeeSessions:  ensureArr(src.attendeeSessions),
+          // Objects — coerce to {} if missing or wrong type
+          footprintCorOverrides: (src.footprintCorOverrides && typeof src.footprintCorOverrides === "object"
+            && !Array.isArray(src.footprintCorOverrides)) ? src.footprintCorOverrides : {},
+          footprintMeta: Array.isArray(src.footprintMeta) ? src.footprintMeta : [],
+          // Footprint result — strip row arrays (they're large and session-only)
+          footprint: src.footprint ? stripForSave(src.footprint) : null,
         };
+
         onChange(imported);
-        alert(`✓ Project "${imported.name || "Untitled"}" imported successfully.`);
-      } catch {
-        alert("Could not read file. Make sure it is a valid .envproject JSON file.");
+        alert(
+          `✓ Project "${imported.name || "Untitled"}" imported.\n` +
+          `${imported.aspects.length} risks · ${imported.opportunities.length} opportunities · ` +
+          `${imported.attendeeSessions.length} attendee sessions.`
+        );
+      } catch (err) {
+        alert("Could not read file:\n" + err.message + "\n\nMake sure it is a valid .envproject JSON file.");
       }
     };
     reader.readAsText(file);
@@ -4512,6 +4556,37 @@ This cannot be undone.`)) return;
             </div>
           </Card>
           <Card style={{ marginBottom:"1rem" }}>
+          <Card style={{ marginBottom:"1rem" }}>
+            <SectionLabel>AI Suggestions</SectionLabel>
+            <p style={{ fontSize:12, color:T.muted, margin:"0 0 12px", lineHeight:1.65 }}>
+              The AI aspect suggestion feature calls the Anthropic API directly from your browser.
+              Enter your own API key — it is stored only in <em>this browser</em> and sent only to
+              {" "}<code style={{ fontFamily:T.mono, fontSize:11 }}>api.anthropic.com</code>.
+              Never share or commit this key.
+            </p>
+            <Fld label="Anthropic API key">
+              <input
+                type="password"
+                value={localStorage.getItem("env-toolkit-apikey")||""}
+                onChange={e => {
+                  const v = e.target.value.trim();
+                  if (v) localStorage.setItem("env-toolkit-apikey", v);
+                  else   localStorage.removeItem("env-toolkit-apikey");
+                  e.target.value = v; // reflect trim
+                }}
+                placeholder="sk-ant-api03-…"
+                style={{ padding:"6px 10px", fontSize:12, borderRadius:6, width:"100%",
+                  border:"1px solid "+T.border, background:T.bg, color:T.text,
+                  fontFamily:T.mono }}
+              />
+            </Fld>
+            {!(localStorage.getItem("env-toolkit-apikey")) && (
+              <p style={{ fontSize:11, color:T.amber, margin:"8px 0 0" }}>
+                ⚠ No key set — AI suggestions are disabled until a key is entered.
+              </p>
+            )}
+          </Card>
+
             <SectionLabel>Export &amp; Import</SectionLabel>
             <p style={{ fontSize:12, color:T.muted, margin:"0 0 14px", lineHeight:1.65 }}>
               Export this project to a <code style={{ fontFamily:T.mono, fontSize:11 }}>.envproject</code> file you can
@@ -5456,6 +5531,11 @@ function applyOverrides(calcResult, overrides) {
 }
 
 // ── FootprintTab ──────────────────────────────────────────────────────────────
+// ── Strip large row arrays before persisting footprint to project ──────────────
+// allRows/mtoRows/melRows can be 100k+ items; keep them in session memory only.
+// The summary, overrides, and meta are enough to show dashboard & mapping UI.
+const stripForSave = r => !r ? null : (({ allRows:_, mtoRows:__, melRows:___, ...rest }) => rest)(r);
+
 function FootprintTab({ project, onChange }) {
   const [step, setStep]           = useState("upload");
   const [fileName, setFileName]   = useState(project.footprintFile || "");
@@ -5713,7 +5793,7 @@ function FootprintTab({ project, onChange }) {
         setWorkerBusy(false);
         setResult(cal); setView("summary"); setStep("result");
         setCorOverrides({});
-        onChange({ ...project, footprint: cal, footprintFile: fileName,
+        onChange({ ...project, footprint: stripForSave(cal), footprintFile: fileName,
                    footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
         setSuggestions({});
       } else if (type === "ERROR") {
@@ -5735,7 +5815,7 @@ function FootprintTab({ project, onChange }) {
     const newHist = [...overrideHistory.slice(0, historyIdx + 1), upd];
     setOverrideHistory(newHist);
     setHistoryIdx(newHist.length - 1);
-    onChange({ ...project, footprint: result, footprintCorOverrides: upd });
+    onChange({ ...project, footprint: stripForSave(result), footprintCorOverrides: upd });
     if (msg) { setToast(msg); setTimeout(() => setToast(""), 2500); }
   };
   const doUndo = () => {
@@ -5743,7 +5823,7 @@ function FootprintTab({ project, onChange }) {
     const prev = overrideHistory[historyIdx - 1];
     setHistoryIdx(historyIdx - 1);
     setCorOverrides(prev);
-    onChange({ ...project, footprint: result, footprintCorOverrides: prev });
+    onChange({ ...project, footprint: stripForSave(result), footprintCorOverrides: prev });
     setToast("Undo (" + (historyIdx - 1) + " steps back)");
     setTimeout(() => setToast(""), 1800);
   };
@@ -5752,7 +5832,7 @@ function FootprintTab({ project, onChange }) {
     const next = overrideHistory[historyIdx + 1];
     setHistoryIdx(historyIdx + 1);
     setCorOverrides(next);
-    onChange({ ...project, footprint: result, footprintCorOverrides: next });
+    onChange({ ...project, footprint: stripForSave(result), footprintCorOverrides: next });
     setToast("Redo");
     setTimeout(() => setToast(""), 1800);
   };
@@ -5836,7 +5916,7 @@ function FootprintTab({ project, onChange }) {
     // (prevents stale-closure race with the worker's own onChange call)
     onChange({
       ...project,
-      footprint:             result,
+      footprint:             stripForSave(result),
       footprintCorOverrides: corOverrides,
       footprintMeta:         sheetMetas,
       footprintFile:         fileName,
@@ -5847,6 +5927,10 @@ function FootprintTab({ project, onChange }) {
     setToast("Scope 3 footprint saved to project dashboard ✓");
     setTimeout(() => setToast(""), 2500);
   };
+
+  // ── Session-only notice for row table ──────────────────────────────────────────
+  // If result was loaded from persisted project.footprint it won't have allRows.
+  const hasRows = displayResult && displayResult.allRows && displayResult.allRows.length > 0;
 
   // ── AI COR suggestion ────────────────────────────────────────────────────────
 
