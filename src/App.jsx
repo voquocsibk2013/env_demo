@@ -953,8 +953,20 @@ function AspectForm({ aspect, onSave, onCancel }) {
       <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
         <SectionLabel>Significance scoring</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
-          <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={f.severity} onChange={e=>set("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
-          <Fld label="Probability (P1–P5)"><input type="number" min={1} max={5} value={f.probability} onChange={e=>set("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+          <Fld label="Consequence (C1–C5)">
+            <select value={f.severity} onChange={e=>set("severity",+e.target.value)} style={iw}>
+              {[{v:1,l:"C1 — Negligible"},{v:2,l:"C2 — Minor"},{v:3,l:"C3 — Moderate"},{v:4,l:"C4 — Major"},{v:5,l:"C5 — Catastrophic"}].map(o=>(
+                <option key={o.v} value={o.v}>{o.l}</option>
+              ))}
+            </select>
+          </Fld>
+          <Fld label="Probability (P1–P5)">
+            <select value={f.probability} onChange={e=>set("probability",+e.target.value)} style={iw}>
+              {[{v:1,l:"P1 — Very unlikely (0–1%)"},{v:2,l:"P2 — Unlikely (1–5%)"},{v:3,l:"P3 — Possible (5–25%)"},{v:4,l:"P4 — Likely (25–50%)"},{v:5,l:"P5 — Very likely (50–100%)"}].map(o=>(
+                <option key={o.v} value={o.v}>{o.l}</option>
+              ))}
+            </select>
+          </Fld>
           <Fld label="Legal threshold"><select value={f.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
           <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
         </div>
@@ -1282,8 +1294,12 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   );
 
   const score = calcOppScore(f);
-  const prioLabel = score>=75?"High priority":score>=30?"Medium priority":"Low priority";
-  const sc = score>=75?{bg:T.tealBg,c:T.tealDark}:score>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
+  const hEf = (f.envValue||1) >= 4, hFf = (f.feasibility||1) >= 4;
+  const prioLabel = hEf&&hFf ? "Quick win" : (!hEf&&hFf) ? "Pursue" : (hEf&&!hFf) ? "Plan" : "Deprioritize";
+  const sc = hEf&&hFf ? {bg:T.greenBg, c:T.green}
+           : (!hEf&&hFf) ? {bg:T.purpleBg, c:T.purple}
+           : (hEf&&!hFf) ? {bg:T.blueBg,   c:T.blue}
+           :                {bg:T.slateBg,  c:T.slate};
 
   // Keep activeSnapIdx in bounds
   const snaps = f.ghgPhases||[];
@@ -1456,8 +1472,15 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           ].map(({k,l,bk,bl})=>(
             <div key={k}>
               <Fld label={l}>
-                <input type="number" min={1} max={5} value={f[k]}
-                  onChange={e=>set(k,Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/>
+                <select value={f[k]} onChange={e=>set(k,+e.target.value)} style={iw}>
+                  {({
+                    envValue:   [{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Significant"},{v:5,l:"5 — Major"}],
+                    bizValue:   [{v:1,l:"1 — No benefit"},{v:2,l:"2 — Low"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — High"},{v:5,l:"5 — Strategic"}],
+                    feasibility:[{v:1,l:"1 — Very difficult"},{v:2,l:"2 — Difficult"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Achievable"},{v:5,l:"5 — Easy"}],
+                  }[k]||[]).map(o=>(
+                    <option key={o.v} value={o.v}>{o.l}</option>
+                  ))}
+                </select>
               </Fld>
               <div style={{marginTop:6}}>
                 <p style={{margin:"0 0 3px",fontSize:10,fontWeight:600,color:T.faint,
@@ -1941,7 +1964,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
                                                marginRight:8 }}>{item.sub}</span>
-                                {!isAdded&&!isSkipped&&<span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>}
+                                <span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>
                               </div>
                               {/* Reference badge or actions */}
                               {isAdded&&addedItems[item.id]&&(
@@ -2052,7 +2075,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                               textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
                               {btn.label.replace("\n"," ")}
                             </span>
-                            {!isAdded&&!isSkipped&&<span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>}
+                            <span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>
                           </div>
                           {isAdded&&addedOpp2&&(
                             <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
@@ -2178,8 +2201,20 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                 <Fld label="Duration"><select value={riskForm.duration} onChange={e=>setRF("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
-                <Fld label="Consequence (C1–C5)"><input type="number" min={1} max={5} value={riskForm.severity} onChange={e=>setRF("severity",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
-                <Fld label="Probability (1-5)"><input type="number" min={1} max={5} value={riskForm.probability} onChange={e=>setRF("probability",Math.min(5,Math.max(1,+e.target.value||1)))} style={iw}/></Fld>
+                <Fld label="Consequence (C1–C5)">
+                  <select value={riskForm.severity} onChange={e=>setRF("severity",+e.target.value)} style={iw}>
+                    {[{v:1,l:"C1 — Negligible"},{v:2,l:"C2 — Minor"},{v:3,l:"C3 — Moderate"},{v:4,l:"C4 — Major"},{v:5,l:"C5 — Catastrophic"}].map(o=>(
+                      <option key={o.v} value={o.v}>{o.l}</option>
+                    ))}
+                  </select>
+                </Fld>
+                <Fld label="Probability (P1–P5)">
+                  <select value={riskForm.probability} onChange={e=>setRF("probability",+e.target.value)} style={iw}>
+                    {[{v:1,l:"P1 — Very unlikely (0–1%)"},{v:2,l:"P2 — Unlikely (1–5%)"},{v:3,l:"P3 — Possible (5–25%)"},{v:4,l:"P4 — Likely (25–50%)"},{v:5,l:"P5 — Very likely (50–100%)"}].map(o=>(
+                      <option key={o.v} value={o.v}>{o.l}</option>
+                    ))}
+                  </select>
+                </Fld>
                 <Fld label="Legal threshold"><select value={riskForm.legalThreshold} onChange={e=>setRF("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
                 <Fld label="Stakeholder concern"><select value={riskForm.stakeholderConcern} onChange={e=>setRF("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
               </div>
