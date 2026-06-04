@@ -9,9 +9,9 @@ const SENSITIVITIES = ["High","Medium","Low"];
 const SCALES        = ["Global","Regional","Local"];
 const DURATIONS     = ["Permanent (>10yr)","Long-term (1-10yr)","Temporary (<1yr)"];
 const PROJ_TYPES    = ["Offshore O&G","Onshore Infrastructure","Industrial / Process"];
-const STATUSES      = ["Open","Closed"];
+const STATUSES      = ["Action","Info"];
 const OPP_TYPES     = ["Resource Efficiency","Circular Economy","Low-Carbon Technology","Nature-Based Solutions","Green Finance & Taxonomy","New Business / Market","Reputational / SLO","Climate Resilience","Regulatory Incentive","Biodiversity Net Gain"];
-const OPP_STATUSES  = ["Open","Closed"];
+const OPP_STATUSES  = [];
 const STORAGE_KEY   = "env-toolkit-v4";
 
 // ── EPCIC stages ──────────────────────────────────────────────────────────────
@@ -617,7 +617,7 @@ function matrixZone(c, p) {
   if (c === 1) return "Low";
   if (c === 2 && p <= 2) return "Low";
   if (c === 3 && p === 1) return "Low";
-  return "WATCH";
+  return "MEDIUM";
 }
 function calcSig(a) {
   const score = calcScore(a);
@@ -680,9 +680,9 @@ const emptyAspect = () => ({
   phase:"", area:"", activity:"", aspect:"", condition:"Normal",
   isAbnormal:false, abnormalType:"", abnormalDesc:"",
   impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
-  severity:3, probability:3, duration:"Temporary (<1yr)",
+  severity:1, probability:1, duration:"Temporary (<1yr)",
   legalThreshold:"N", stakeholderConcern:"N",
-  control:"", legalRef:"", owner:"", status:"Open", _color:"",
+  control:"", legalRef:"", owner:"", status:"Action", _color:"",
   createdAt:"", updatedAt:""
 });
 // ── GHG saving calculation lines (based on Norwegian EPCIC calculation framework) ─
@@ -710,8 +710,8 @@ const GHG_LINES = [
 const emptyOpp = () => ({
   type:"", materiality:"Both",
   description:"", envBenefit:"", bizBenefit:"", techBenefit:"",
-  envValue:3, bizValue:3, feasibility:3,
-  owner:"", status:"Open", _color:"",
+  envValue:1, bizValue:1, feasibility:1,
+  owner:"", _color:"",
   createdAt:"", updatedAt:"",
   // Savings — two separate tracks with independent phases
   qualPhases: [],   // [{id, label, date, note}]
@@ -815,7 +815,7 @@ const iw = { width:"100%", boxSizing:"border-box" };
 
 function sigStyle(sig) {
   const c = sig==="SIGNIFICANT" ? {bg:T.redBg,   c:T.red,   bd:T.redBd}
-           : sig==="WATCH"      ? {bg:T.amberBg, c:T.amber, bd:T.amberBd}
+           : sig==="MEDIUM"      ? {bg:T.amberBg, c:T.amber, bd:T.amberBd}
            :                      {bg:T.greenBg, c:T.green, bd:T.greenBd};
   return { fontFamily:T.mono, fontSize:10, fontWeight:500, padding:"2px 7px", borderRadius:3,
            display:"inline-block", background:c.bg, color:c.c, border:"1px solid "+c.bd, letterSpacing:"0.03em" };
@@ -963,7 +963,7 @@ function AspectForm({ aspect, onSave, onCancel }) {
                         display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
             <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
               Risk score:{" "}
-              <strong style={{ fontSize:22, color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>
+              <strong style={{ fontSize:22, color: sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green }}>
                 {score}
               </strong>
             </span>
@@ -1756,7 +1756,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   // prefillRisk now inlined in button onClick — kept for legacy compatibility
   const prefillRisk = (code, item, sectionColor) => {
     setRiskForm({ ...emptyAspect(), area:item.area||item.sub||"",
-                  aspect:item.aspect||"", _color:sectionColor||"" });
+                  aspect:item.aspect||"", activity:item.hint||"", _color:sectionColor||"" });
     setView("form");
   };
 
@@ -1963,6 +1963,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                                   {!isSkipped&&<button
                                     onClick={()=>{
                                       setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub,
+                                                   activity:item.hint||"",
                                                    _color:cat.color, _screeningId:item.id});
                                       setView("form");
                                     }}
@@ -2188,7 +2189,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                   <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
                     Risk score:{" "}
                     <strong style={{ fontSize:22,
-                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="WATCH" ? T.amber : T.green }}>
+                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="MEDIUM" ? T.amber : T.green }}>
                       {riskScore}
                     </strong>
 
@@ -2336,7 +2337,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const now        = new Date();
     const dateStr    = now.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
     const sig        = aspects.filter(a => calcSig(a) === "SIGNIFICANT");
-    const watch      = aspects.filter(a => calcSig(a) === "WATCH");
+    const watch      = aspects.filter(a => calcSig(a) === "MEDIUM");
     const low        = aspects.filter(a => calcSig(a) === "Low");
     const highOpps   = opps.filter(o => calcOppScore(o) >= 75);
     const openRisks  = aspects.filter(a => a.status !== "Closed");
@@ -2349,8 +2350,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const sigRow = a => {
       const s = calcSig(a);
       const sc = calcScore(a) || "—";
-      const bg = s==="SIGNIFICANT"?"#fee2e2":s==="WATCH"?"#fefce8":"#f0fdf4";
-      const co = s==="SIGNIFICANT"?"#991b1b":s==="WATCH"?"#92400e":"#166534";
+      const bg = s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";
+      const co = s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";
       return `<tr>
         <td style="font-family:monospace;font-size:10px;color:#475569">${a.ref||""}</td>
         <td style="font-size:10px">${(a.aspect||"").slice(0,80)}</td>
@@ -2364,8 +2365,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
     const oppRow = o => {
       const sc = calcOppScore(o);
-      const pr = sc>=75?"High":sc>=30?"Medium":"Low";
-      const co = sc>=75?"#7c3aed":sc>=30?"#2563eb":"#64748b";
+      const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;
+      const pr = hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";
+      const co = hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";
       const ghg = calcGhgTotal(o);
       return `<tr>
         <td style="font-family:monospace;font-size:10px;color:#475569">${o.ref||""}</td>
@@ -2374,7 +2376,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         <td style="text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:${co}">${sc}</td>
         <td style="text-align:center"><span style="color:${co};font-size:9px;font-weight:700">${pr}</span></td>
         <td style="text-align:center;font-size:10px;color:#0d9488">${ghg ? fmtT(ghg) : "—"}</td>
-        <td style="text-align:center;font-size:10px;color:#64748b">${o.status||""}</td>
+        
       </tr>`;
     };
 
@@ -2816,7 +2818,7 @@ This cannot be undone.`)) return;
   const toggleAllOpp = (rows) => setSelectedOpp(prev => prev.size===rows.length ? new Set() : new Set(rows.map(o=>o.id)));
 
   const sigCount   = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
-  const watchCount = aspects.filter(a=>calcSig(a)==="WATCH").length;
+  const watchCount = aspects.filter(a=>calcSig(a)==="MEDIUM").length;
   const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
   const highOpps   = opps.filter(o=>calcOppScore(o)>=75).length;
   const totalGhgSaving = opps.reduce((s,o)=>{ const g=calcGhgTotal(o); return s+(g||0); }, 0);
@@ -2824,13 +2826,13 @@ This cannot be undone.`)) return;
   const statusCounts = STATUSES.reduce((acc,s) => {
     acc[s] = aspects.filter(a=>a.status===s).length; return acc;
   }, {});
-  const statusColors = { "Open":T.redBd, "Closed":T.greenBd };
-  const statusBg    = { "Open":T.redBg, "Closed":T.greenBg };
+  const statusColors = { "Action":T.redBd, "Info":T.slateBd };
+  const statusBg    = { "Action":T.redBg, "Info":T.slateBg };
 
   // Dashboard filter drives which aspects show
   const dashAspects = dashFilter==="all"     ? aspects
                     : dashFilter==="sig"     ? aspects.filter(a=>calcSig(a)==="SIGNIFICANT")
-                    : dashFilter==="watch"   ? aspects.filter(a=>calcSig(a)==="WATCH")
+                    : dashFilter==="watch"   ? aspects.filter(a=>calcSig(a)==="MEDIUM")
                     : dashFilter==="low"     ? aspects.filter(a=>calcSig(a)==="Low")
                     : dashFilter==="opps"    ? aspects
                     : aspects;
@@ -2840,7 +2842,7 @@ This cannot be undone.`)) return;
     if (aspSearch) { const q=aspSearch.toLowerCase(); r=r.filter(a=>(a.aspect||"").toLowerCase().includes(q)||(a.area||"").toLowerCase().includes(q)||(a.phase||"").toLowerCase().includes(q)); }
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
-      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"MEDIUM":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
       else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
@@ -2850,7 +2852,7 @@ This cannot be undone.`)) return;
     if (!aspSort.col) return dashAspects;
     return [...dashAspects].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
-      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"WATCH":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
+      else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"MEDIUM":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
       else if(aspSort.col==="category"){va=CAT_SHORT[getCategoryLabel(a)]||(getCategoryLabel(a)||"").replace(/^[0-9]+\. */,"");vb=CAT_SHORT[getCategoryLabel(b)]||(getCategoryLabel(b)||"").replace(/^[0-9]+\. */,"");}
       else{va=(a[aspSort.col]||"").toLowerCase();vb=(b[aspSort.col]||"").toLowerCase();}
       return aspSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
@@ -3056,7 +3058,7 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px", textAlign:"center" }}>
                   {score !== null
                     ? <span style={{ fontFamily:T.mono, fontWeight:700, fontSize:13,
-                        color: sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green }}>{score}</span>
+                        color: sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green }}>{score}</span>
                     : <span style={{ color:T.faint }}>—</span>}
                 </td>
                 <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
@@ -3152,7 +3154,7 @@ This cannot be undone.`)) return;
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
-                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{score>=75?"High":score>=30?"Medium":"Low"}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{(()=>{const hEt=(o.envValue||1)>=4,hFt=(o.feasibility||1)>=4;return hEt&&hFt?"Quick win":(!hEt&&hFt)?"Pursue":(hEt&&!hFt)?"Plan":"Deprioritize";})()}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
@@ -3215,7 +3217,7 @@ This cannot be undone.`)) return;
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:"1.25rem" }}>
             <StatCard label="All aspects"   value={aspects.length}  filterId="all"   color={T.text}   border={T.border}   bg={T.surface}/>
             <StatCard label="Significant"   value={sigCount}        filterId="sig"   color={T.red}    border={T.redBd}    bg={T.redBg}/>
-            <StatCard label="Watch"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Medium"         value={watchCount}      filterId="watch" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
             <StatCard label="Low"           value={lowCount}        filterId="low"   color={T.green}  border={T.greenBd}  bg={T.greenBg}/>
             <StatCard label="Opportunities" value={opps.length}     filterId="opps"  color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
             <StatCard label="High priority" value={highOpps}        filterId="opps"  color={T.teal}   border={T.tealBd}   bg={T.tealBg}/>
@@ -3340,7 +3342,7 @@ This cannot be undone.`)) return;
                     </p>
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", gap:3, alignItems:"flex-end" }}>
-                    {[{l:"Sig",bg:T.redBg,c:T.red,bd:T.redBd},{l:"Watch",bg:T.amberBg,c:T.amber,bd:T.amberBd},{l:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd}].map(({l,bg,c,bd})=>(
+                    {[{l:"Sig",bg:T.redBg,c:T.red,bd:T.redBd},{l:"Medium",bg:T.amberBg,c:T.amber,bd:T.amberBd},{l:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd}].map(({l,bg,c,bd})=>(
                       <span key={l} style={{ fontSize:9, padding:"1px 7px", borderRadius:3,
                         background:bg, color:c, border:"1px solid "+bd, whiteSpace:"nowrap" }}>{l}</span>
                     ))}
@@ -3352,7 +3354,7 @@ This cannot be undone.`)) return;
                     const catAsps   = aspects.filter(a => getCategoryLabel(a) === rc.cat);
                     if (catAsps.length === 0) return null;
                     const sig   = catAsps.filter(a => calcSig(a)==="SIGNIFICANT").length;
-                    const watch = catAsps.filter(a => calcSig(a)==="WATCH").length;
+                    const watch = catAsps.filter(a => calcSig(a)==="MEDIUM").length;
                     const low   = catAsps.filter(a => calcSig(a)==="Low").length;
                     const unsc  = catAsps.length - sig - watch - low;
                     const short = CAT_SHORT[rc.cat] || rc.cat.replace(/^\d+\. */,"");
@@ -3412,7 +3414,7 @@ This cannot be undone.`)) return;
                     );
                     return topRisks.map((a, i) => {
                       const score = calcScore(a); const sig = calcSig(a);
-                      const sigC  = sig==="SIGNIFICANT" ? T.red : sig==="WATCH" ? T.amber : T.green;
+                      const sigC  = sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green;
                       return (
                         <div key={a.id} onClick={()=>setEditAspect(a)}
                           style={{ padding:"9px 14px 9px 12px",
@@ -3435,9 +3437,9 @@ This cannot be undone.`)) return;
                             {a.area && <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"2px 0 0" }}>{a.area}</p>}
                           </div>
                           <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3,
-                            background:a.status==="Open"?T.redBg:T.amberBg,
-                            color:a.status==="Open"?T.red:T.amber,
-                            border:"1px solid "+(a.status==="Open"?T.redBd:T.amberBd), flexShrink:0 }}>{a.status}</span>
+                            background:a.status==="Action"?T.redBg:T.slateBg,
+                            color:a.status==="Action"?T.red:T.slate,
+                            border:"1px solid "+(a.status==="Action"?T.redBd:T.slateBd), flexShrink:0 }}>{a.status}</span>
                         </div>
                       );
                     });
@@ -3460,7 +3462,7 @@ This cannot be undone.`)) return;
                   </div>
                   {(() => {
                     const topOpps = opps
-                      .filter(o => o.status !== "Closed" && calcOppScore(o) > 0)
+                      .filter(o => calcOppScore(o) > 0)
                       .sort((a,b) => calcOppScore(b) - calcOppScore(a))
                       .slice(0, 3);
                     if (topOpps.length === 0) return (
@@ -3468,7 +3470,8 @@ This cannot be undone.`)) return;
                     );
                     return topOpps.map((o, i) => {
                       const score  = calcOppScore(o);
-                      const pLabel = score>=75?"High":score>=30?"Medium":"Low";
+                      const hE = (o.envValue||1)>=4, hF = (o.feasibility||1)>=4;
+            const pLabel = hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";
                       const pC     = score>=75?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}
                                     :score>=30?{bg:T.tealBg,c:T.teal,bd:T.tealBd}
                                     :           {bg:T.slateBg,c:T.slate,bd:T.slateBd};
@@ -3500,8 +3503,7 @@ This cannot be undone.`)) return;
                               {ghg>=1000?(ghg/1000).toFixed(1)+"t":Math.round(ghg)+"kg"} CO₂e identified
                             </span>}
                           </div>
-                          <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3,
-                            background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, flexShrink:0 }}>{o.status}</span>
+
                         </div>
                       );
                     });
@@ -3532,7 +3534,7 @@ This cannot be undone.`)) return;
               <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
               placeholder="Search aspects..." style={{ width:180, padding:"5px 10px", fontSize:12 }}/>
             <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
-              {["All","SIGNIFICANT","WATCH","Low"].map(f => (
+              {["All","SIGNIFICANT","MEDIUM","Low"].map(f => (
                 <button key={f} onClick={()=>setAspFilter(f)}
                   style={{ fontFamily:T.mono, padding:"4px 9px", fontSize:10, borderRadius:4, cursor:"pointer",
                            fontWeight:aspFilter===f?500:400, letterSpacing:"0.03em",
@@ -3663,8 +3665,8 @@ This cannot be undone.`)) return;
                                 gap:3, alignContent:"center", justifyContent:"center", padding:"18px 4px 4px" }}>
                                 {items.map((a, i) => {
                                   const sig      = calcSig(a);
-                                  const dotColor = a.status==="Closed" ? "#9CA3AF"
-                                    : sig==="SIGNIFICANT"?"#DC2626":sig==="WATCH"?"#D97706":"#16A34A";
+                                  const dotColor = a.status==="Info" ? "#9CA3AF"
+                                    : sig==="SIGNIFICANT"?"#DC2626":sig==="MEDIUM"?"#D97706":"#16A34A";
                                   return (
                                     <div key={i} onClick={()=>setEditAspect(a)}
                                       title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+sv+" × P"+pb+" = "+sv*pb}
@@ -3696,7 +3698,7 @@ This cannot be undone.`)) return;
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Zone key</p>
                     {[
                       {bg:"#FEE2E2",bd:"#FCA5A5",c:"#991B1B",z:"SIGNIFICANT",d:"Immediate action & senior sign-off"},
-                      {bg:"#FEFCE8",bd:"#FDE047",c:"#A16207",z:"WATCH",       d:"Active management & monitoring"},
+                      {bg:"#FEFCE8",bd:"#FDE047",c:"#A16207",z:"MEDIUM",       d:"Active management & monitoring"},
                       {bg:"#F0FDF4",bd:"#86EFAC",c:"#15803D",z:"Low",         d:"Standard controls sufficient"},
                     ].map(({bg,bd,c,z,d})=>(
                       <div key={z} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:7 }}>
@@ -3800,7 +3802,7 @@ This cannot be undone.`)) return;
               {selectedOpp.size > 0 && (
                 <BulkBar count={selectedOpp.size}
                   accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
-                  statusOptions={OPP_STATUSES}
+                  statusOptions={[]}
                   onDelete={bulkDeleteOpps}
                   onStatusChange={s => s ? bulkSetOppStatus(s) : setSelectedOpp(new Set())}/>
               )}
@@ -3908,7 +3910,7 @@ This cannot be undone.`)) return;
                                         title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
                                         style={{ width:sz, height:sz, borderRadius:"50%",
                                           background:q.c,
-                                          opacity:o.status==="Closed"?0.25:0.85,
+                                          opacity:0.85,
                                           cursor:"pointer", flexShrink:0 }}/>
                                     );
                                   })}
@@ -4516,11 +4518,11 @@ function PortfolioView({ projects, onClose, onSelect }) {
   const ProjectCard = ({ p }) => {
     const asp=p.aspects||[]; const opp=p.opportunities||p.opps||[];
     const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
-    const watch=asp.filter(a=>calcSig(a)==="WATCH").length;
+    const watch=asp.filter(a=>calcSig(a)==="MEDIUM").length;
     const low=asp.filter(a=>calcSig(a)==="Low").length;
-    const openN=asp.filter(a=>a.status==="Open").length;
+    const openN=asp.filter(a=>a.status==="Action").length;
     const inProg=0;
-    const closed=asp.filter(a=>a.status==="Closed").length;
+    const closed=asp.filter(a=>a.status==="Info").length;
     const hi=opp.filter(o=>calcOppScore(o)>=75).length;
     const tot=asp.length;
     return (
@@ -4552,7 +4554,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
             </div>:<div style={{ height:7,borderRadius:4,background:"var(--border)" }}/>}
             <div style={{ display:"flex",gap:8,marginTop:5 }}>
               {[{l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
-                {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                {l:"Medium",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
                 {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].map(({l,v,bg,c,bd})=>(
                 <span key={l} style={{ fontSize:10,display:"inline-flex",alignItems:"center",gap:3,
                                        padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
@@ -4622,11 +4624,11 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const asp=ps.flatMap(p=>p.aspects||[]);
     const opp=ps.flatMap(p=>p.opportunities||p.opps||[]);
     const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
-    const watch=asp.filter(a=>calcSig(a)==="WATCH").length;
+    const watch=asp.filter(a=>calcSig(a)==="MEDIUM").length;
     const low=asp.filter(a=>calcSig(a)==="Low").length;
-    const openN=asp.filter(a=>a.status==="Open").length;
+    const openN=asp.filter(a=>a.status==="Action").length;
     const inP=0;
-    const cls=asp.filter(a=>a.status==="Closed").length;
+    const cls=asp.filter(a=>a.status==="Info").length;
     const hiOpp=opp.filter(o=>calcOppScore(o)>=75).length;
     const medOpp=opp.filter(o=>{const s=calcOppScore(o);return s>=30&&s<75;}).length;
     const ghg=opp.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
@@ -4667,7 +4669,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
               </div>
               <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
                 {[{l:"Significant",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
-                  {l:"Watch",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
+                  {l:"Medium",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
                   {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
                   <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                     {l} <strong>{v}</strong>
