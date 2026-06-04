@@ -2420,14 +2420,123 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     ).join("");
     const matrixHtml =
       '<div style="margin-bottom:20px">'
-      +'<p class="section-title">Environmental Risk Matrix</p>'
+      +'<p class="section-title">Matrices</p>'
+      +'<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">'
+
+      // ── Risk matrix ─────────────────────────────────────────────────────
+      +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Environmental Risk Matrix</p>'
       +'<div style="display:flex;align-items:flex-start">'
       +'<div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap;letter-spacing:0.04em">CONSEQUENCE →</div>'
       +'<div><table style="border-collapse:collapse"><tbody>'+matrixRowsHtml+'<tr><td></td>'+probHdrCells+'</tr></tbody></table>'
       +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;letter-spacing:0.04em;margin-top:3px">PROBABILITY →</div></div>'
+      +'</div></div>'
+
+      // ── Opp matrix ──────────────────────────────────────────────────────
+      +(()=>{
+        const oGrid = {};
+        opps.forEach(o => {
+          const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+          const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
+          const k = ev+","+feas;
+          if (!oGrid[k]) oGrid[k] = [];
+          oGrid[k].push(o);
+        });
+        const oppQbg = (ev, feas) => {
+          const hE=ev>=4,hF=feas>=4;
+          if (!hE&&hF)  return {bg:"#f5f3ff",c:"#7c3aed"};  // Pursue
+          if (hE&&hF)   return {bg:"#f0fdf4",c:"#16a34a"};   // Quick win
+          if (!hE&&!hF) return {bg:"#f8fafc",c:"#94a3b8"};   // Deprioritize
+          return            {bg:"#eff6ff",c:"#2563eb"};       // Plan
+        };
+        const oRows = [5,4,3,2,1].map(feas => {
+          const cells = [1,2,3,4,5].map(ev => {
+            const {bg,c} = oppQbg(ev,feas);
+            const items = oGrid[ev+","+feas]||[];
+            const dots = items.map(o => {
+              const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
+              const sz = 7 + (bv-1)*2;
+              return '<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';
+            }).join("");
+            const hE=ev>=4,hF=feas>=4;
+            const isCorner=(hE&&hF&&ev===5&&feas===5)||(!hE&&hF&&ev===3&&feas===5)||(hE&&!hF&&ev===5&&feas===3)||(!hE&&!hF&&ev===3&&feas===3);
+            const qLabel = hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";
+            return '<td style="width:46px;height:46px;background:'+bg+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'
+              +(items.length===0&&isCorner?'<span style="font-size:7px;font-weight:700;color:'+c+';opacity:0.5">'+qLabel+'</span>':'')
+              +dots+'</td>';
+          }).join("");
+          const fLbl = {5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"V.difficult"}[feas];
+          return '<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:80px"><strong>'+feas+'</strong>&nbsp;'+fLbl+'</td>'+cells+'</tr>';
+        }).join("");
+        const envHdrCells = [1,2,3,4,5].map(ev=>{
+          const l={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"}[ev];
+          return '<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+ev+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+l+'</span></td>';
+        }).join("");
+        return '<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Opportunity Priority Matrix</p>'
+          +'<div style="display:flex;align-items:flex-start">'
+          +'<div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap;letter-spacing:0.04em">FEASIBILITY →</div>'
+          +'<div><table style="border-collapse:collapse"><tbody>'+oRows+'<tr><td></td>'+envHdrCells+'</tr></tbody></table>'
+          +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;letter-spacing:0.04em;margin-top:3px">ENVIRONMENTAL VALUE →</div>'
+          +'<div style="font-size:8px;color:#64748b;margin-top:6px">Dot size = Business Value (small=1–2, med=3, large=4–5)</div>'
+          +'</div></div></div>';
+      })()
+
       +'</div></div>';
 
-    // ── Risk rows (no score columns) ─────────────────────────────────────────
+    // ── Opp matrix footnotes ─────────────────────────────────────────────────
+    const oppQlegend = [
+      {bg:"#f5f3ff",bd:"#c4b5fd",c:"#7c3aed",z:"Pursue",      d:"Low env value + high feasibility — easy to capture"},
+      {bg:"#f0fdf4",bd:"#86efac",c:"#16a34a",z:"Quick win",   d:"High env value + high feasibility — act now"},
+      {bg:"#eff6ff",bd:"#bfdbfe",c:"#2563eb",z:"Plan",         d:"High env value + low feasibility — plan resources"},
+      {bg:"#f8fafc",bd:"#e2e8f0",c:"#64748b",z:"Deprioritize",d:"Low env value + low feasibility — defer"},
+    ].map(({bg,bd,c,z,d}) =>
+      '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">'
+      +'<div style="width:13px;height:13px;border-radius:3px;background:'+bg+';border:1.5px solid '+bd+';flex-shrink:0;margin-top:1px"></div>'
+      +'<div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> — <span style="font-size:9px;color:#475569">'+d+'</span></div></div>'
+    ).join("");
+
+    const envValLegend = [
+      {n:"5",l:"Major",        d:"Transformational benefit; measurable improvement at portfolio or regional scale."},
+      {n:"4",l:"Significant",  d:"Clear, quantifiable benefit; materially reduces environmental impact or footprint."},
+      {n:"3",l:"Moderate",     d:"Meaningful improvement; reduces impact in a targeted area."},
+      {n:"2",l:"Minor",        d:"Small marginal gain; limited contribution to overall environmental performance."},
+      {n:"1",l:"Negligible",   d:"Negligible direct benefit; primarily internal or administrative gain."},
+    ].map(({n,l,d}) =>
+      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+'</strong>'
+      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
+    ).join("");
+
+    const feasLegend = [
+      {n:"5",l:"Easy",          d:"Implementable with existing resources; no regulatory hurdles."},
+      {n:"4",l:"Achievable",    d:"Feasible within normal constraints; modest investment required."},
+      {n:"3",l:"Moderate",      d:"Requires dedicated effort, some investment, or cross-team coordination."},
+      {n:"2",l:"Difficult",     d:"Significant barriers: cost, technology maturity, or regulatory complexity."},
+      {n:"1",l:"Very difficult",d:"Not currently feasible without major breakthroughs in technology or funding."},
+    ].map(({n,l,d}) =>
+      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+'</strong>'
+      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
+    ).join("");
+
+    const footnotesHtml =
+      '<div style="margin-top:40px;padding-top:14px;border-top:2px solid #e2e8f0">'
+      +'<p class="section-title" style="margin-bottom:14px">Appendix — Matrix Legends</p>'
+
+      // Risk matrix legends
+      +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Risk Matrix</p>'
+      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px;margin-bottom:20px">'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Zone key</p>'+zoneLegend+'</div>'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Consequence levels</p>'+conLegend+'</div>'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Probability levels</p>'+probLegend+'</div>'
+      +'</div>'
+
+      // Opp matrix legends
+      +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Opportunity Priority Matrix</p>'
+      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Quadrant guide</p>'+oppQlegend+'</div>'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Environmental Value (x-axis)</p>'+envValLegend+'</div>'
+      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Implementation Feasibility (y-axis)</p>'+feasLegend+'</div>'
+      +'</div>'
+
+      +'</div>';
     const sigRow = a => {
       const s  = calcSig(a);
       const bg = s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";
@@ -2490,21 +2599,12 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
     ).join("");
 
-    const footnotesHtml =
-      '<div style="margin-top:40px;padding-top:14px;border-top:2px solid #e2e8f0">'
-      +'<p class="section-title" style="margin-bottom:14px">Appendix — Risk Matrix Legend</p>'
-      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Zone key</p>'+zoneLegend+'</div>'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Consequence levels</p>'+conLegend+'</div>'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Probability levels</p>'+probLegend+'</div>'
-      +'</div></div>';
-
     // ── Build HTML ────────────────────────────────────────────────────────────
     const html = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"/>
 <title>Environmental Report — ${project.name||"Project"}</title>
 <style>
-  * { box-sizing:border-box; margin:0; padding:0; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
   body { font-family:Arial,sans-serif; font-size:11px; color:#1e293b; background:#fff; }
   @page { size:A4 landscape; margin:14mm 12mm; }
   @media print { .no-print { display:none !important; } }
