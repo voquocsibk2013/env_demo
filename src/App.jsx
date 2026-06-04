@@ -2654,6 +2654,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 <div class="no-print">
   <button class="btn-print" onclick="window.print()">🖨 Print / Save as PDF</button>
   <button class="btn-close" onclick="window.close()">✕ Close</button>
+  <span style="font-size:11px;color:#94a3b8;margin-left:8px">Tip: choose "Save as PDF" as the printer destination</span>
 </div>
 
 <div class="page-header">
@@ -2725,28 +2726,25 @@ ${footnotesHtml}
 </body></html>`;
 
     try {
+      const slug = (project.name||"report").replace(/[^a-z0-9]/gi,"_").toLowerCase();
       const blob = new Blob([html], { type:"text/html;charset=utf-8" });
       const url  = URL.createObjectURL(blob);
-      const win  = window.open(url, "_blank");
-      if (win) {
-        // Revoke after a minute — long enough for the page to load
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } else {
-        // Popup blocked — fall back to downloading the HTML file directly
-        URL.revokeObjectURL(url);
-        const blob2 = new Blob([html], { type:"text/html;charset=utf-8" });
-        const url2  = URL.createObjectURL(blob2);
-        const a     = document.createElement("a");
-        a.href      = url2;
-        a.download  = (project.name||"report").replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_report.html";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url2), 5000);
-      }
+
+      // Always trigger the download — works in every browser, no popup permission needed
+      const a = document.createElement("a");
+      a.href     = url;
+      a.download = slug + "_env_report.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Also try to open a preview tab (best-effort; may be blocked)
+      window.open(url, "_blank");
+
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (err) {
       console.error("PDF export error:", err);
-      alert("Could not open print preview: " + err.message);
+      alert("PDF export failed: " + err.message);
     }
   };
 
