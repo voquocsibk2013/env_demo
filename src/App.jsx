@@ -1689,71 +1689,6 @@ function OppForm({ opp, onSave, onCancel }) {
   );
 }
 
-// ── AI Suggest ────────────────────────────────────────────────────────────────
-function AIPanel({ project, onAdd }) {
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState([]);
-  const [error, setError] = useState("");
-  const run = async () => {
-    if (!query.trim()) return;
-    const apiKey = localStorage.getItem("env-toolkit-apikey") || "";
-    if (!apiKey) {
-      setError("No API key configured. Add your Anthropic API key in Settings → AI Suggestions.");
-      return;
-    }
-    setLoading(true); setError(""); setResults([]);
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:1200,
-          system:`You are an expert environmental consultant for Norwegian engineering projects. Return ONLY a valid JSON array. Each object: phase (one of: ${PHASES.join(", ")}), area (max 60 chars), activity (max 80 chars), aspect (max 80 chars), condition (Normal|Abnormal|Emergency), impact (max 120 chars), receptors (max 80 chars), recSensitivity (High|Medium|Low), scale (Global|Regional|Local), severity (int 1-5), probability (int 1-5), duration (one of: ${DURATIONS.join(", ")}), legalThreshold (Y|N), control (max 120 chars), legalRef (max 80 chars). Return 4-6 aspects.`,
-          messages:[{ role:"user", content:`Project type: ${project.type||"not specified"}. Phase: ${project.phase||"not specified"}. Scenario: ${query}` }]
-        })
-      });
-      const d = await res.json();
-      const parsed = JSON.parse((d.content?.[0]?.text || "").trim());
-      setResults(Array.isArray(parsed) ? parsed : []);
-    } catch { setError("Could not fetch suggestions - check your connection."); }
-    setLoading(false);
-  };
-  return (
-    <div style={{ background:T.purpleBg, border:"1px solid "+T.purpleBd, borderRadius:8, padding:"1rem", marginBottom:"1rem" }}>
-      <p style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:T.purple, margin:"0 0 4px", letterSpacing:"0.03em" }}>AI aspect suggestion</p>
-      <p style={{ fontSize:12, color:T.muted, margin:"0 0 10px" }}>Describe a project activity or scenario, e.g. "diesel pile driving near a coral reef during spring spawning season"</p>
-      <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-        <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&run()} placeholder="Describe the activity or scenario..." style={{ flex:1 }}/>
-        <Btn variant="purple" onClick={run} disabled={loading||!query.trim()}>{loading?"Thinking...":"Suggest"}</Btn>
-      </div>
-      {error && <p style={{ color:T.red, fontSize:12, margin:"0 0 8px" }}>{error}</p>}
-      {results.map((s, i) => {
-        const sig = calcSig(s);
-        return (
-          <div key={i} style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:6, padding:"10px 12px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:4, alignItems:"center" }}>
-                <span style={{ fontWeight:500, fontSize:13, fontFamily:T.sans }}>{s.aspect}</span>
-                <span style={condStyle(s.condition)}>{s.condition}</span>
-                {sig && <span style={sigStyle(sig)}>{sig}</span>}
-              </div>
-              <p style={{ fontFamily:T.mono, fontSize:10, color:T.muted, margin:"0 0 2px" }}>{s.phase}{s.area?" / "+s.area:""}</p>
-              <p style={{ fontSize:12, color:T.muted, margin:0 }}>{s.impact}</p>
-            </div>
-            <Btn size="sm" variant="primary" onClick={()=>{ onAdd(s); setResults(p=>p.filter(x=>x!==s)); }}>Add</Btn>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Shared table ─────────────────────────────────────────────────────────────
 const TH = ({ children }) => (
   <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:"'IBM Plex Mono',monospace",
@@ -2338,7 +2273,6 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
-  const [aiOpen, setAiOpen]               = useState(false);
   const [dashFilter, setDashFilter]       = useState("all");
   const [aspFilter, setAspFilter]         = useState("All");
   const [aspSort,   setAspSort]           = useState({ col:null, dir:"asc" });
@@ -2380,387 +2314,137 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
   // ── PDF Report export ────────────────────────────────────────────────────────
   const exportPDF = () => {
-    // HTML-escape user content to prevent broken layout or injection
-    const esc = v => String(v == null ? "" : v)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-
-    const now     = new Date();
-    const dateStr = now.toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" });
-    const sigAsp  = aspects.filter(a => calcSig(a) === "SIGNIFICANT");
-    const actionAsp = aspects.filter(a => a.status === "Action");
-    const totalAll  = aspects.length + opps.length;
-
-    const fmtT = kg => kg >= 1000 ? (kg/1000).toFixed(3) + " tCO₂e" : Math.round(kg) + " kg CO₂e";
-    const fp   = project.footprintSummary;
-
-    // ── Risk matrix precompute ───────────────────────────────────────────────
-    const mGrid = {};
-    aspects.forEach(a => {
-      const sv = Math.min(5, Math.max(1, parseInt(a.severity)||0));
-      const pb = Math.min(5, Math.max(1, parseInt(a.probability)||0));
-      if (!sv || !pb) return;
-      const k = sv+","+pb;
-      if (!mGrid[k]) mGrid[k] = [];
-      mGrid[k].push(a);
-    });
-    const cellBg = (sv, pb) => {
-      const z = matrixZone(sv, pb);
-      return z==="SIGNIFICANT"?"#FEE2E2":z==="MEDIUM"?"#FEFCE8":"#F0FDF4";
-    };
-    const conLbls = {5:"Catastrophic",4:"Major",3:"Moderate",2:"Minor",1:"Negligible"};
-    const probLbls = {1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
-    const probRng  = {1:"0–1%",2:"1–5%",3:"5–25%",4:"25–50%",5:"50–100%"};
-
-    const matrixRowsHtml = [5,4,3,2,1].map(sv => {
-      const cells = [1,2,3,4,5].map(pb => {
-        const bg    = cellBg(sv, pb);
-        const items = mGrid[sv+","+pb]||[];
-        const dots  = items.map(a => {
-          const sig = calcSig(a);
-          const dc  = sig==="SIGNIFICANT"?"#DC2626":sig==="MEDIUM"?"#D97706":"#16A34A";
-          const op  = a.status==="Info"?"0.35":"1";
-          return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+dc+';opacity:'+op+';margin:1px"></span>';
-        }).join("");
-        return '<td style="width:46px;height:46px;background:'+bg+';border:1px solid #e5e7eb;padding:2px;vertical-align:top;position:relative">'
-          +'<span style="position:absolute;top:2px;left:3px;font-size:7px;color:#9ca3af;font-weight:bold">'+(sv*pb)+'</span>'
-          +'<div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:12px">'+dots+'</div>'
-          +'</td>';
-      }).join("");
-      return '<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:90px"><strong>'+sv+'</strong>&nbsp;'+conLbls[sv]+'</td>'+cells+'</tr>';
-    }).join("");
-    const probHdrCells = [1,2,3,4,5].map(pb =>
-      '<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+pb+'</strong>'
-      +'<br/><span style="font-size:7px;color:#94a3b8">'+probLbls[pb]+'</span>'
-      +'<br/><span style="font-size:7px;color:#cbd5e1">'+probRng[pb]+'</span></td>'
-    ).join("");
-    const matrixHtml =
-      '<div style="margin-bottom:20px">'
-      +'<p class="section-title">Matrices</p>'
-      +'<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">'
-
-      // ── Risk matrix ─────────────────────────────────────────────────────
-      +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Environmental Risk Matrix</p>'
-      +'<div style="display:flex;align-items:flex-start">'
-      +'<div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap;letter-spacing:0.04em">CONSEQUENCE →</div>'
-      +'<div><table style="border-collapse:collapse"><tbody>'+matrixRowsHtml+'<tr><td></td>'+probHdrCells+'</tr></tbody></table>'
-      +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;letter-spacing:0.04em;margin-top:3px">PROBABILITY →</div></div>'
-      +'</div></div>'
-
-      // ── Opp matrix ──────────────────────────────────────────────────────
-      +(()=>{
-        const oGrid = {};
-        opps.forEach(o => {
-          const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
-          const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
-          const k = ev+","+feas;
-          if (!oGrid[k]) oGrid[k] = [];
-          oGrid[k].push(o);
-        });
-        const oppQbg = (ev, feas) => {
-          const hE=ev>=4,hF=feas>=4;
-          if (!hE&&hF)  return {bg:"#f5f3ff",c:"#7c3aed"};  // Pursue
-          if (hE&&hF)   return {bg:"#f0fdf4",c:"#16a34a"};   // Quick win
-          if (!hE&&!hF) return {bg:"#f8fafc",c:"#94a3b8"};   // Deprioritize
-          return            {bg:"#eff6ff",c:"#2563eb"};       // Plan
-        };
-        const oRows = [5,4,3,2,1].map(feas => {
-          const cells = [1,2,3,4,5].map(ev => {
-            const {bg,c} = oppQbg(ev,feas);
-            const items = oGrid[ev+","+feas]||[];
-            const dots = items.map(o => {
-              const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
-              const sz = 7 + (bv-1)*2;
-              return '<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';
-            }).join("");
-            const hE=ev>=4,hF=feas>=4;
-            const isCorner=(hE&&hF&&ev===5&&feas===5)||(!hE&&hF&&ev===3&&feas===5)||(hE&&!hF&&ev===5&&feas===3)||(!hE&&!hF&&ev===3&&feas===3);
-            const qLabel = hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";
-            return '<td style="width:46px;height:46px;background:'+bg+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'
-              +(items.length===0&&isCorner?'<span style="font-size:7px;font-weight:700;color:'+c+';opacity:0.5">'+qLabel+'</span>':'')
-              +dots+'</td>';
-          }).join("");
-          const fLbl = {5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"V.difficult"}[feas];
-          return '<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:80px"><strong>'+feas+'</strong>&nbsp;'+fLbl+'</td>'+cells+'</tr>';
-        }).join("");
-        const envHdrCells = [1,2,3,4,5].map(ev=>{
-          const l={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"}[ev];
-          return '<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+ev+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+l+'</span></td>';
-        }).join("");
-        return '<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Opportunity Priority Matrix</p>'
-          +'<div style="display:flex;align-items:flex-start">'
-          +'<div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap;letter-spacing:0.04em">FEASIBILITY →</div>'
-          +'<div><table style="border-collapse:collapse"><tbody>'+oRows+'<tr><td></td>'+envHdrCells+'</tr></tbody></table>'
-          +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;letter-spacing:0.04em;margin-top:3px">ENVIRONMENTAL VALUE →</div>'
-          +'<div style="font-size:8px;color:#64748b;margin-top:6px">Dot size = Business Value (small=1–2, med=3, large=4–5)</div>'
-          +'</div></div></div>';
-      })()
-
-      +'</div></div>';
-
-    // ── Opp matrix footnotes ─────────────────────────────────────────────────
-    const oppQlegend = [
-      {bg:"#f5f3ff",bd:"#c4b5fd",c:"#7c3aed",z:"Pursue",      d:"Low env value + high feasibility — easy to capture"},
-      {bg:"#f0fdf4",bd:"#86efac",c:"#16a34a",z:"Quick win",   d:"High env value + high feasibility — act now"},
-      {bg:"#eff6ff",bd:"#bfdbfe",c:"#2563eb",z:"Plan",         d:"High env value + low feasibility — plan resources"},
-      {bg:"#f8fafc",bd:"#e2e8f0",c:"#64748b",z:"Deprioritize",d:"Low env value + low feasibility — defer"},
-    ].map(({bg,bd,c,z,d}) =>
-      '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">'
-      +'<div style="width:13px;height:13px;border-radius:3px;background:'+bg+';border:1.5px solid '+bd+';flex-shrink:0;margin-top:1px"></div>'
-      +'<div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> — <span style="font-size:9px;color:#475569">'+d+'</span></div></div>'
-    ).join("");
-
-    const envValLegend = [
-      {n:"5",l:"Major",        d:"Transformational benefit; measurable improvement at portfolio or regional scale."},
-      {n:"4",l:"Significant",  d:"Clear, quantifiable benefit; materially reduces environmental impact or footprint."},
-      {n:"3",l:"Moderate",     d:"Meaningful improvement; reduces impact in a targeted area."},
-      {n:"2",l:"Minor",        d:"Small marginal gain; limited contribution to overall environmental performance."},
-      {n:"1",l:"Negligible",   d:"Negligible direct benefit; primarily internal or administrative gain."},
-    ].map(({n,l,d}) =>
-      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+'</strong>'
-      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
-    ).join("");
-
-    const feasLegend = [
-      {n:"5",l:"Easy",          d:"Implementable with existing resources; no regulatory hurdles."},
-      {n:"4",l:"Achievable",    d:"Feasible within normal constraints; modest investment required."},
-      {n:"3",l:"Moderate",      d:"Requires dedicated effort, some investment, or cross-team coordination."},
-      {n:"2",l:"Difficult",     d:"Significant barriers: cost, technology maturity, or regulatory complexity."},
-      {n:"1",l:"Very difficult",d:"Not currently feasible without major breakthroughs in technology or funding."},
-    ].map(({n,l,d}) =>
-      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+'</strong>'
-      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
-    ).join("");
-
-    const footnotesHtml =
-      '<div style="margin-top:40px;padding-top:14px;border-top:2px solid #e2e8f0">'
-      +'<p class="section-title" style="margin-bottom:14px">Appendix — Matrix Legends</p>'
-
-      // Risk matrix legends
-      +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Risk Matrix</p>'
-      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px;margin-bottom:20px">'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Zone key</p>'+zoneLegend+'</div>'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Consequence levels</p>'+conLegend+'</div>'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Probability levels</p>'+probLegend+'</div>'
-      +'</div>'
-
-      // Opp matrix legends
-      +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Opportunity Priority Matrix</p>'
-      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Quadrant guide</p>'+oppQlegend+'</div>'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Environmental Value (x-axis)</p>'+envValLegend+'</div>'
-      +'<div><p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px">Implementation Feasibility (y-axis)</p>'+feasLegend+'</div>'
-      +'</div>'
-
-      +'</div>';
-    const sigRow = a => {
-      const s  = calcSig(a);
-      const bg = s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";
-      const co = s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";
-      return '<tr>'
-        +'<td style="font-family:monospace;font-size:10px;color:#475569">'+( a.ref||"")+'</td>'
-        +'<td style="font-size:10px">'+esc((a.aspect||"").slice(0,90))+'</td>'
-        +'<td style="font-size:10px;color:#64748b">'+(a.area||"")+'</td>'
-        +'<td style="font-size:10px;color:#64748b">'+(a.phase||"")+'</td>'
-        +'<td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+(s||"—")+'</span></td>'
-        +'<td style="text-align:center;font-size:10px;color:#64748b">'+esc(a.status)+'</td>'
-        +'</tr>';
-    };
-
-    // ── Opp rows (no score column) ────────────────────────────────────────────
-    const oppRow = o => {
-      const hEp=(o.envValue||1)>=4, hFp=(o.feasibility||1)>=4;
-      const pr = hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";
-      const co = hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";
-      const ghg = calcGhgTotal(o);
-      return '<tr>'
-        +'<td style="font-family:monospace;font-size:10px;color:#475569">'+esc(o.ref)+'</td>'
-        +'<td style="font-size:10px">'+esc((o.description||o.type||"").slice(0,90))+'</td>'
-        +'<td style="font-size:10px;color:#64748b">'+esc(o.type)+'</td>'
-        +'<td style="text-align:center"><span style="color:'+co+';font-size:9px;font-weight:700">'+pr+'</span></td>'
-        +'<td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg ? fmtT(ghg) : "—")+'</td>'
-        +'</tr>';
-    };
-
-    // ── Footnotes / legend appendix ───────────────────────────────────────────
-    const zoneLegend = [
-      {bg:"#FEE2E2",bd:"#FCA5A5",c:"#991B1B",z:"SIGNIFICANT",d:"Immediate action & senior sign-off required"},
-      {bg:"#FEFCE8",bd:"#FDE047",c:"#A16207",z:"MEDIUM",      d:"Active management and monitoring required"},
-      {bg:"#F0FDF4",bd:"#86EFAC",c:"#15803D",z:"Low",         d:"Standard controls sufficient"},
-    ].map(({bg,bd,c,z,d}) =>
-      '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">'
-      +'<div style="width:13px;height:13px;border-radius:3px;background:'+bg+';border:1.5px solid '+bd+';flex-shrink:0;margin-top:1px"></div>'
-      +'<div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> — <span style="font-size:9px;color:#475569">'+d+'</span></div></div>'
-    ).join("");
-
-    const conLegend = [
-      {n:"5",l:"Catastrophic",d:"Irreversible damage or ecosystem collapse; prosecution / licence revocation risk."},
-      {n:"4",l:"Major",       d:"Significant lasting damage; likely regulatory breach; remediation required over years."},
-      {n:"3",l:"Moderate",    d:"Noticeable environmental harm; active management; recovery within 1–2 years."},
-      {n:"2",l:"Minor",       d:"Limited, localised impact; natural recovery within months; no regulatory breach."},
-      {n:"1",l:"Negligible",  d:"No lasting effect; fully recoverable within days or weeks."},
-    ].map(({n,l,d}) =>
-      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+'</strong>'
-      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
-    ).join("");
-
-    const probLegend = [
-      {n:"5",l:"Very likely",  r:"50–100%",d:"Will almost certainly occur without controls in place."},
-      {n:"4",l:"Likely",       r:"25–50%", d:"Expected to occur at some point during the project without controls."},
-      {n:"3",l:"Possible",     r:"5–25%",  d:"Has occurred under comparable conditions in similar projects."},
-      {n:"2",l:"Unlikely",     r:"1–5%",   d:"Could occur but is rare; no credible mechanism on this project."},
-      {n:"1",l:"Very unlikely",r:"0–1%",   d:"Theoretically possible; no realistic pathway without a major upset."},
-    ].map(({n,l,r,d}) =>
-      '<div style="margin-bottom:5px"><strong style="font-size:9px;color:#1e293b">'+n+' — '+l+' ('+r+')</strong>'
-      +'<span style="font-size:9px;color:#64748b"> — '+d+'</span></div>'
-    ).join("");
-
-    // ── Build HTML ────────────────────────────────────────────────────────────
-    const html = `<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8"/>
-<title>Environmental Report — ${project.name||"Project"}</title>
-<style>
-  * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
-  body { font-family:Arial,sans-serif; font-size:11px; color:#1e293b; background:#fff; }
-  @page { size:A4 landscape; margin:14mm 12mm; }
-  @media print { .no-print { display:none !important; } }
-
-  .page-header { display:flex; justify-content:space-between; align-items:flex-start;
-    padding-bottom:12px; border-bottom:3px solid #1e4d35; margin-bottom:16px; }
-  .project-title { font-size:20px; font-weight:700; color:#1e4d35; }
-  .project-meta  { font-size:10px; color:#475569; margin-top:4px; line-height:1.7; }
-  .report-label  { font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; font-weight:600; }
-  .report-date   { font-size:10px; color:#475569; margin-top:2px; }
-
-  .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px; }
-  .kpi { padding:10px 8px; border-radius:6px; border:1px solid #e2e8f0; background:#f8fafc; text-align:center; }
-  .kpi-val { font-size:24px; font-weight:700; line-height:1; }
-  .kpi-lbl { font-size:9px; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:0.06em; }
-  .kpi-total  { background:#f8fafc; border-color:#e2e8f0; }
-  .kpi-total .kpi-val { color:#1e293b; }
-  .kpi-sig  { background:#fee2e2; border-color:#fca5a5; }
-  .kpi-sig  .kpi-val { color:#dc2626; }
-  .kpi-act  { background:#fefce8; border-color:#fde047; }
-  .kpi-act  .kpi-val { color:#d97706; }
-  .kpi-opp  { background:#f5f3ff; border-color:#c4b5fd; }
-  .kpi-opp  .kpi-val { color:#7c3aed; }
-
-  .section-title { font-size:12px; font-weight:700; color:#1e4d35; margin:0 0 8px;
-    padding:6px 10px; background:#f1f5f9; border-left:3px solid #1e4d35; border-radius:0 4px 4px 0; }
-
-  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
-  th { background:#1e4d35; color:#fff; padding:6px 8px; text-align:left;
-       font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; }
-  td { padding:5px 8px; border-bottom:1px solid #e2e8f0; vertical-align:middle; }
-  tr:nth-child(even) td { background:#f8fafc; }
-
-  .fp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
-  .fp-card { padding:10px 14px; border-radius:6px; border:1px solid #e2e8f0; }
-  .fp-card-title { font-size:9px; color:#64748b; text-transform:uppercase; letter-spacing:0.07em; }
-  .fp-card-val   { font-size:16px; font-weight:700; color:#0d9488; margin-top:2px; font-family:monospace; }
-
-  .footer { margin-top:24px; padding-top:10px; border-top:1px solid #e2e8f0;
-    display:flex; justify-content:space-between; color:#94a3b8; font-size:9px; }
-  .no-print { position:fixed; top:16px; right:16px; z-index:100; display:flex; gap:8px; }
-  .btn-print { padding:8px 18px; background:#1e4d35; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; }
-  .btn-close { padding:8px 18px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; border-radius:6px; font-size:12px; cursor:pointer; }
-</style>
-</head><body>
-
-<div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖨 Print / Save as PDF</button>
-  <button class="btn-close" onclick="window.close()">✕ Close</button>
-  <span style="font-size:11px;color:#94a3b8;margin-left:8px">Tip: choose "Save as PDF" as the printer destination</span>
-</div>
-
-<div class="page-header">
-  <div>
-    <div class="project-title">${esc(project.name||"Untitled Project")}</div>
-    <div class="project-meta">
-      ${project.projectId ? `<strong>ID:</strong> ${esc(project.projectId)} &nbsp;·&nbsp; ` : ""}
-      ${project.company  ? `<strong>Company:</strong> ${esc(project.company)} &nbsp;·&nbsp; ` : ""}
-      ${project.contract ? `<strong>Contract:</strong> ${esc(project.contract)} &nbsp;·&nbsp; ` : ""}
-      ${project.type     ? `<strong>Type:</strong> ${esc(project.type)} &nbsp;·&nbsp; ` : ""}
-      ${project.phase    ? `<strong>Phase:</strong> ${esc(project.phase)}` : ""}
-    </div>
-  </div>
-  <div style="text-align:right">
-    <div class="report-label">Environmental Risk Assessment Report</div>
-    <div class="report-date">${dateStr}</div>
-  </div>
-</div>
-
-<div class="kpi-grid">
-  <div class="kpi kpi-total"><div class="kpi-val">${totalAll}</div><div class="kpi-lbl">All aspects</div></div>
-  <div class="kpi kpi-sig">  <div class="kpi-val">${sigAsp.length}</div><div class="kpi-lbl">Significant</div></div>
-  <div class="kpi kpi-act">  <div class="kpi-val">${actionAsp.length}</div><div class="kpi-lbl">Action risks</div></div>
-  <div class="kpi kpi-opp">  <div class="kpi-val">${opps.length}</div><div class="kpi-lbl">Opportunities</div></div>
-</div>
-
-${matrixHtml}
-
-${fp ? `
-<div class="section-title">Environmental Budget</div>
-<div class="fp-grid">
-  <div class="fp-card"><div class="fp-card-title">MTO — Material Take-Off</div><div class="fp-card-val">${Number(fp.mtoTotal||0).toFixed(3)} tCO₂e</div></div>
-  <div class="fp-card"><div class="fp-card-title">MEL — Material Equipment List</div><div class="fp-card-val">${Number(fp.melTotal||0).toFixed(3)} tCO₂e</div></div>
-  <div class="fp-card" style="border-color:#5eead4;background:#f0fdfa"><div class="fp-card-title">Combined Total</div><div class="fp-card-val">${Number(fp.combined||0).toFixed(3)} tCO₂e</div></div>
-</div>` : ""}
-
-<div class="section-title">Risk Register (${aspects.length} aspects)</div>
-<table>
-  <thead><tr>
-    <th style="width:70px">Ref</th>
-    <th>Aspect</th>
-    <th style="width:120px">Area</th>
-    <th style="width:90px">Phase</th>
-    <th style="width:100px;text-align:center">Significance</th>
-    <th style="width:80px;text-align:center">Status</th>
-  </tr></thead>
-  <tbody>${aspects.map(sigRow).join("")}</tbody>
-</table>
-
-<div class="section-title">Opportunity Register (${opps.length} opportunities)</div>
-<table>
-  <thead><tr>
-    <th style="width:70px">Ref</th>
-    <th>Description</th>
-    <th style="width:150px">Type</th>
-    <th style="width:100px;text-align:center">Priority</th>
-    <th style="width:120px;text-align:center">GHG saving</th>
-  </tr></thead>
-  <tbody>${opps.map(oppRow).join("")}</tbody>
-</table>
-
-<div class="footer">
-  <span>ENV·ASPECTS TOOLKIT — Environmental Risk Assessment Report</span>
-  <span>Generated ${dateStr} &nbsp;·&nbsp; ${esc(project.name||"Untitled")} ${project.projectId ? "· " + esc(project.projectId) : ""}</span>
-</div>
-
-${footnotesHtml}
-
-</body></html>`;
-
     try {
-      const slug = (project.name||"report").replace(/[^a-z0-9]/gi,"_").toLowerCase();
-      const blob = new Blob([html], { type:"text/html;charset=utf-8" });
+      const esc = v => String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+      const dateStr = new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"});
+      const fmtT = kg => kg>=1000?(kg/1000).toFixed(3)+" tCO\u2082e":Math.round(kg)+" kg CO\u2082e";
+      const fp = project.footprintSummary;
+      const sigCnt    = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
+      const actionCnt = aspects.filter(a=>a.status==="Action").length;
+      const totalAll  = aspects.length + opps.length;
+      const SEC = t=>'<div style="font-size:12px;font-weight:700;color:#1e4d35;margin:0 0 8px;padding:6px 10px;background:#f1f5f9;border-left:3px solid #1e4d35;border-radius:0 4px 4px 0">'+t+'</div>';
+      const LBL = t=>'<p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px">'+t+'</p>';
+
+      // risk matrix cells
+      const mGrid={};
+      aspects.forEach(a=>{const sv=Math.min(5,Math.max(1,parseInt(a.severity)||0));const pb=Math.min(5,Math.max(1,parseInt(a.probability)||0));if(sv&&pb){const k=sv+","+pb;if(!mGrid[k])mGrid[k]=[];mGrid[k].push(a);}});
+      const zBg=(sv,pb)=>{const z=matrixZone(sv,pb);return z==="SIGNIFICANT"?"#FEE2E2":z==="MEDIUM"?"#FEFCE8":"#F0FDF4";};
+      const cLbl={5:"Catastrophic",4:"Major",3:"Moderate",2:"Minor",1:"Negligible"};
+      const pLbl={1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
+      const pRng={1:"0\u20131%",2:"1\u20135%",3:"5\u201325%",4:"25\u201350%",5:"50\u2013100%"};
+      let rRows="";
+      [5,4,3,2,1].forEach(sv=>{let cells="";[1,2,3,4,5].forEach(pb=>{const items=mGrid[sv+","+pb]||[];const dots=items.map(a=>{const s=calcSig(a);const dc=s==="SIGNIFICANT"?"#DC2626":s==="MEDIUM"?"#D97706":"#16A34A";const op=a.status==="Info"?"0.35":"1";return'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+dc+';opacity:'+op+';margin:1px"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+zBg(sv,pb)+';border:1px solid #e5e7eb;padding:2px;vertical-align:top;position:relative"><span style="position:absolute;top:2px;left:3px;font-size:7px;color:#9ca3af;font-weight:bold">'+(sv*pb)+'</span><div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:12px">'+dots+'</div></td>';});rRows+='<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:90px"><strong>'+sv+'</strong>&nbsp;'+cLbl[sv]+'</td>'+cells+'</tr>';});
+      let pHdr="";[1,2,3,4,5].forEach(pb=>{pHdr+='<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+pb+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+pLbl[pb]+'</span><br/><span style="font-size:7px;color:#cbd5e1">'+pRng[pb]+'</span></td>';});
+
+      // opp matrix cells
+      const oGrid={};
+      opps.forEach(o=>{const ev=Math.min(5,Math.max(1,parseInt(o.envValue)||1));const fe=Math.min(5,Math.max(1,parseInt(o.feasibility)||1));const k=ev+","+fe;if(!oGrid[k])oGrid[k]=[];oGrid[k].push(o);});
+      const oQbg=(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"#f0fdf4":(!hE&&hF)?"#f5f3ff":(hE&&!hF)?"#eff6ff":"#f8fafc";};
+      const oQc =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"#16a34a":(!hE&&hF)?"#7c3aed":(hE&&!hF)?"#2563eb":"#94a3b8";};
+      const oQL =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";};
+      const oCr =(ev,fe)=>(ev===5&&fe===5)||(ev===3&&fe===5)||(ev===5&&fe===3)||(ev===3&&fe===3);
+      const eLbl={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"};
+      const fLbl2={5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"V.difficult"};
+      let oRows="";
+      [5,4,3,2,1].forEach(fe=>{let cells="";[1,2,3,4,5].forEach(ev=>{const c=oQc(ev,fe);const items=oGrid[ev+","+fe]||[];const lbl=items.length===0&&oCr(ev,fe)?'<span style="font-size:7px;font-weight:bold;color:'+c+';opacity:0.5">'+oQL(ev,fe)+'</span>':"";const dots=items.map(o=>{const bv=Math.min(5,Math.max(1,parseInt(o.bizValue)||1));const sz=7+(bv-1)*2;return'<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+oQbg(ev,fe)+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'+lbl+dots+'</td>';});oRows+='<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:84px"><strong>'+fe+'</strong>&nbsp;'+fLbl2[fe]+'</td>'+cells+'</tr>';});
+      let eHdr="";[1,2,3,4,5].forEach(ev=>{eHdr+='<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+ev+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+eLbl[ev]+'</span></td>';});
+
+      // table rows
+      let riskRows="";
+      aspects.forEach(a=>{const s=calcSig(a);const bg=s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";const co=s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";riskRows+='<tr><td style="font-family:monospace;font-size:10px;color:#475569">'+esc(a.ref)+'</td><td style="font-size:10px">'+esc((a.aspect||"").slice(0,90))+'</td><td style="font-size:10px;color:#64748b">'+esc(a.area)+'</td><td style="font-size:10px;color:#64748b">'+esc(a.phase)+'</td><td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+esc(s)+'</span></td><td style="text-align:center;font-size:10px;color:#64748b">'+esc(a.status)+'</td></tr>';});
+      let oppRows="";
+      opps.forEach(o=>{const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;const pr=hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";const co=hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";const ghg=calcGhgTotal(o);oppRows+='<tr><td style="font-family:monospace;font-size:10px;color:#475569">'+esc(o.ref)+'</td><td style="font-size:10px">'+esc((o.description||o.type||"").slice(0,90))+'</td><td style="font-size:10px;color:#64748b">'+esc(o.type)+'</td><td style="text-align:center;font-size:9px;font-weight:700;color:'+co+'">'+esc(pr)+'</td><td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg?fmtT(ghg):"&#8212;")+'</td></tr>';});
+
+      // legend strings
+      const zLgnd=[["#FEE2E2","#FCA5A5","#991B1B","SIGNIFICANT","Immediate action required"],["#FEFCE8","#FDE047","#A16207","MEDIUM","Active management required"],["#F0FDF4","#86EFAC","#15803D","Low","Standard controls sufficient"]].map(([bg,bd,c,z,d])=>'<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;background:'+bg+';border:1.5px solid '+bd+'"></div><div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> &#8212; <span style="font-size:9px;color:#475569">'+d+'</span></div></div>').join("");
+      const cLgnd=[["5","Catastrophic","Irreversible damage; prosecution risk."],["4","Major","Lasting damage; regulatory breach."],["3","Moderate","Noticeable harm; 1&#8211;2 year recovery."],["2","Minor","Localised; months recovery."],["1","Negligible","No lasting effect."]].map(([n,l,d])=>'<div style="margin-bottom:4px"><strong style="font-size:9px">'+n+' &#8212; '+l+'</strong><span style="font-size:9px;color:#64748b"> &#8212; '+d+'</span></div>').join("");
+      const pLgnd=[["5","Very likely","50&#8211;100%","Will occur without controls."],["4","Likely","25&#8211;50%","Expected at some point."],["3","Possible","5&#8211;25%","Occurred in similar projects."],["2","Unlikely","1&#8211;5%","Rare; no credible mechanism."],["1","Very unlikely","0&#8211;1%","No realistic pathway."]].map(([n,l,r,d])=>'<div style="margin-bottom:4px"><strong style="font-size:9px">'+n+' &#8212; '+l+' ('+r+')</strong><span style="font-size:9px;color:#64748b"> &#8212; '+d+'</span></div>').join("");
+      const oQLgnd=[["#f5f3ff","#c4b5fd","#7c3aed","Pursue","Low env + high feasibility"],["#f0fdf4","#86efac","#16a34a","Quick win","High env + high feasibility"],["#eff6ff","#bfdbfe","#2563eb","Plan","High env + low feasibility"],["#f8fafc","#e2e8f0","#94a3b8","Deprioritize","Low env + low feasibility"]].map(([bg,bd,c,z,d])=>'<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;background:'+bg+';border:1.5px solid '+bd+'"></div><div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> &#8212; <span style="font-size:9px;color:#475569">'+d+'</span></div></div>').join("");
+      const eLgnd=["5 &#8212; Major","4 &#8212; Significant","3 &#8212; Moderate","2 &#8212; Minor","1 &#8212; Negligible"].map(t=>'<div style="margin-bottom:4px;font-size:9px"><strong>'+t+'</strong></div>').join("");
+      const fLgnd=["5 &#8212; Easy","4 &#8212; Achievable","3 &#8212; Moderate","2 &#8212; Difficult","1 &#8212; Very difficult"].map(t=>'<div style="margin-bottom:4px;font-size:9px"><strong>'+t+'</strong></div>').join("");
+
+      const pName = esc(project.name||"Untitled Project");
+      const html =
+        '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>'+pName+'</title>'
+        +'<style>* { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }'
+        +'body { font-family:Arial,sans-serif; font-size:11px; color:#1e293b; background:#fff; }'
+        +'@page { size:A4 landscape; margin:14mm 12mm; }'
+        +'@media print { .np { display:none !important; } }'
+        +'.np { position:fixed; top:16px; right:16px; z-index:100; display:flex; gap:8px; align-items:center; background:rgba(255,255,255,.95); padding:8px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.15); }'
+        +'table { width:100%; border-collapse:collapse; margin-bottom:20px; }'
+        +'th { background:#1e4d35; color:#fff; padding:6px 8px; text-align:left; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }'
+        +'td { padding:5px 8px; border-bottom:1px solid #e2e8f0; vertical-align:middle; }'
+        +'tr:nth-child(even) td { background:#f8fafc; }'
+        +'</style></head><body>'
+        +'<div class="np"><button onclick="window.print()" style="padding:8px 18px;background:#1e4d35;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer">&#128424; Print / Save as PDF</button>'
+        +'<button onclick="window.close()" style="padding:8px 18px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer">&#x2715; Close</button>'
+        +'<span style="font-size:10px;color:#94a3b8">Choose &ldquo;Save as PDF&rdquo; as printer</span></div>'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:3px solid #1e4d35;margin-bottom:16px">'
+        +'<div><div style="font-size:20px;font-weight:700;color:#1e4d35">'+pName+'</div>'
+        +'<div style="font-size:10px;color:#475569;margin-top:4px;line-height:1.7">'
+        +(project.projectId?'<strong>ID:</strong> '+esc(project.projectId)+' &nbsp;&middot;&nbsp; ':'')
+        +(project.company?'<strong>Company:</strong> '+esc(project.company)+' &nbsp;&middot;&nbsp; ':'')
+        +(project.contract?'<strong>Contract:</strong> '+esc(project.contract)+' &nbsp;&middot;&nbsp; ':'')
+        +(project.type?'<strong>Type:</strong> '+esc(project.type)+' &nbsp;&middot;&nbsp; ':'')
+        +(project.phase?'<strong>Phase:</strong> '+esc(project.phase):'')
+        +'</div></div>'
+        +'<div style="text-align:right"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-weight:600">Environmental Risk Assessment Report</div>'
+        +'<div style="font-size:10px;color:#475569;margin-top:2px">'+esc(dateStr)+'</div></div></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">'
+        +'<div style="padding:10px;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc;text-align:center"><div style="font-size:24px;font-weight:700;color:#1e293b">'+totalAll+'</div><div style="font-size:9px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">All aspects</div></div>'
+        +'<div style="padding:10px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;text-align:center"><div style="font-size:24px;font-weight:700;color:#dc2626">'+sigCnt+'</div><div style="font-size:9px;color:#991b1b;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Significant</div></div>'
+        +'<div style="padding:10px;border-radius:6px;border:1px solid #fde047;background:#fefce8;text-align:center"><div style="font-size:24px;font-weight:700;color:#d97706">'+actionCnt+'</div><div style="font-size:9px;color:#92400e;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Action risks</div></div>'
+        +'<div style="padding:10px;border-radius:6px;border:1px solid #c4b5fd;background:#f5f3ff;text-align:center"><div style="font-size:24px;font-weight:700;color:#7c3aed">'+opps.length+'</div><div style="font-size:9px;color:#5b21b6;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Opportunities</div></div>'
+        +'</div>'
+        +SEC("Matrices")
+        +'<div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap">'
+        +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Environmental Risk Matrix</p>'
+        +'<div style="display:flex;align-items:flex-start"><div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap">CONSEQUENCE &rarr;</div>'
+        +'<div><table style="border-collapse:collapse"><tbody>'+rRows+'<tr><td></td>'+pHdr+'</tr></tbody></table>'
+        +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;margin-top:3px">PROBABILITY &rarr;</div></div></div></div>'
+        +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Opportunity Priority Matrix</p>'
+        +'<div style="display:flex;align-items:flex-start"><div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap">FEASIBILITY &rarr;</div>'
+        +'<div><table style="border-collapse:collapse"><tbody>'+oRows+'<tr><td></td>'+eHdr+'</tr></tbody></table>'
+        +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;margin-top:3px">ENVIRONMENTAL VALUE &rarr;</div>'
+        +'<div style="font-size:8px;color:#64748b;margin-top:4px">Dot size = Business Value</div></div></div></div></div>'
+        +(fp?SEC("Environmental Budget")+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">'
+          +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">MTO</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.mtoTotal||0).toFixed(3)+' tCO\u2082e</div></div>'
+          +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">MEL</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.melTotal||0).toFixed(3)+' tCO\u2082e</div></div>'
+          +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #5eead4;background:#f0fdfa"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">Combined</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.combined||0).toFixed(3)+' tCO\u2082e</div></div>'
+          +'</div>':'')
+        +SEC("Risk Register ("+aspects.length+" aspects)")
+        +'<table><thead><tr><th style="width:70px">Ref</th><th>Aspect</th><th style="width:120px">Area</th><th style="width:90px">Phase</th><th style="width:100px;text-align:center">Significance</th><th style="width:80px;text-align:center">Status</th></tr></thead><tbody>'+riskRows+'</tbody></table>'
+        +SEC("Opportunity Register ("+opps.length+" opportunities)")
+        +'<table><thead><tr><th style="width:70px">Ref</th><th>Description</th><th style="width:150px">Type</th><th style="width:100px;text-align:center">Priority</th><th style="width:120px;text-align:center">GHG saving</th></tr></thead><tbody>'+oppRows+'</tbody></table>'
+        +'<div style="margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:9px">'
+        +'<span>ENV&middot;ASPECTS TOOLKIT &mdash; Environmental Risk Assessment Report</span>'
+        +'<span>'+esc(dateStr)+' &nbsp;&middot;&nbsp; '+pName+'</span></div>'
+        +'<div style="margin-top:36px;padding-top:14px;border-top:2px solid #e2e8f0">'
+        +SEC("Appendix &mdash; Matrix Legends")
+        +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Risk Matrix</p>'
+        +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px;margin-bottom:20px">'
+        +'<div>'+LBL("Zone key")+zLgnd+'</div><div>'+LBL("Consequence levels")+cLgnd+'</div><div>'+LBL("Probability levels")+pLgnd+'</div></div>'
+        +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Opportunity Matrix</p>'
+        +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
+        +'<div>'+LBL("Quadrant guide")+oQLgnd+'</div><div>'+LBL("Environmental Value")+eLgnd+'</div><div>'+LBL("Feasibility")+fLgnd+'</div></div></div>'
+        +'</body></html>';
+
+      // window.open is called synchronously inside a click handler — browsers allow it
+      const blob = new Blob([html], {type:"text/html;charset=utf-8"});
       const url  = URL.createObjectURL(blob);
+      const win  = window.open(url, "_blank");
+      if (!win) {
+        // Popup blocked — download instead
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = (project.name||"report").replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_env_report.html";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      }
+      setTimeout(()=>URL.revokeObjectURL(url), 60000);
 
-      // Always trigger the download — works in every browser, no popup permission needed
-      const a = document.createElement("a");
-      a.href     = url;
-      a.download = slug + "_env_report.html";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      // Also try to open a preview tab (best-effort; may be blocked)
-      window.open(url, "_blank");
-
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (err) {
+    } catch(err) {
       console.error("PDF export error:", err);
-      alert("PDF export failed: " + err.message);
+      alert("PDF export failed:\n"+err.message);
     }
   };
 
@@ -3656,12 +3340,6 @@ This cannot be undone.`)) return;
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
-            <button onClick={()=>setAiOpen(v=>!v)}
-              style={{ padding:"7px 13px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans,
-                       fontWeight:500, border:"1px solid "+T.purpleBd,
-                       background:aiOpen?T.purpleBg:"transparent", color:T.purple }}>
-              AI suggest
-            </button>
               <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
               placeholder="Search aspects..." style={{ width:180, padding:"5px 10px", fontSize:12 }}/>
             <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
@@ -3677,7 +3355,6 @@ This cannot be undone.`)) return;
               ))}
             </div>
           </div>
-          {aiOpen && <AIPanel project={project} onAdd={s=>saveAspect({...emptyAspect(),...s,stakeholderConcern:"N"})}/>}
           {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
               {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
@@ -4555,38 +4232,8 @@ This cannot be undone.`)) return;
               </Fld>
             </div>
           </Card>
-          <Card style={{ marginBottom:"1rem" }}>
-          <Card style={{ marginBottom:"1rem" }}>
-            <SectionLabel>AI Suggestions</SectionLabel>
-            <p style={{ fontSize:12, color:T.muted, margin:"0 0 12px", lineHeight:1.65 }}>
-              The AI aspect suggestion feature calls the Anthropic API directly from your browser.
-              Enter your own API key — it is stored only in <em>this browser</em> and sent only to
-              {" "}<code style={{ fontFamily:T.mono, fontSize:11 }}>api.anthropic.com</code>.
-              Never share or commit this key.
-            </p>
-            <Fld label="Anthropic API key">
-              <input
-                type="password"
-                value={localStorage.getItem("env-toolkit-apikey")||""}
-                onChange={e => {
-                  const v = e.target.value.trim();
-                  if (v) localStorage.setItem("env-toolkit-apikey", v);
-                  else   localStorage.removeItem("env-toolkit-apikey");
-                  e.target.value = v; // reflect trim
-                }}
-                placeholder="sk-ant-api03-…"
-                style={{ padding:"6px 10px", fontSize:12, borderRadius:6, width:"100%",
-                  border:"1px solid "+T.border, background:T.bg, color:T.text,
-                  fontFamily:T.mono }}
-              />
-            </Fld>
-            {!(localStorage.getItem("env-toolkit-apikey")) && (
-              <p style={{ fontSize:11, color:T.amber, margin:"8px 0 0" }}>
-                ⚠ No key set — AI suggestions are disabled until a key is entered.
-              </p>
-            )}
-          </Card>
 
+          <Card style={{ marginBottom:"1rem" }}>
             <SectionLabel>Export &amp; Import</SectionLabel>
             <p style={{ fontSize:12, color:T.muted, margin:"0 0 14px", lineHeight:1.65 }}>
               Export this project to a <code style={{ fontFamily:T.mono, fontSize:11 }}>.envproject</code> file you can
