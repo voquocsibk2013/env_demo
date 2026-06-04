@@ -955,14 +955,14 @@ function AspectForm({ aspect, onSave, onCancel }) {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
           <Fld label="Consequence (C1–C5)">
             <select value={f.severity} onChange={e=>set("severity",+e.target.value)} style={iw}>
-              {[{v:1,l:"C1 — Negligible"},{v:2,l:"C2 — Minor"},{v:3,l:"C3 — Moderate"},{v:4,l:"C4 — Major"},{v:5,l:"C5 — Catastrophic"}].map(o=>(
+              {[{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Major"},{v:5,l:"5 — Catastrophic"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
           </Fld>
           <Fld label="Probability (P1–P5)">
             <select value={f.probability} onChange={e=>set("probability",+e.target.value)} style={iw}>
-              {[{v:1,l:"P1 — Very unlikely (0–1%)"},{v:2,l:"P2 — Unlikely (1–5%)"},{v:3,l:"P3 — Possible (5–25%)"},{v:4,l:"P4 — Likely (25–50%)"},{v:5,l:"P5 — Very likely (50–100%)"}].map(o=>(
+              {[{v:1,l:"1 — Very unlikely (0–1%)"},{v:2,l:"2 — Unlikely (1–5%)"},{v:3,l:"3 — Possible (5–25%)"},{v:4,l:"4 — Likely (25–50%)"},{v:5,l:"5 — Very likely (50–100%)"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
@@ -2203,14 +2203,14 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
                 <Fld label="Consequence (C1–C5)">
                   <select value={riskForm.severity} onChange={e=>setRF("severity",+e.target.value)} style={iw}>
-                    {[{v:1,l:"C1 — Negligible"},{v:2,l:"C2 — Minor"},{v:3,l:"C3 — Moderate"},{v:4,l:"C4 — Major"},{v:5,l:"C5 — Catastrophic"}].map(o=>(
+                    {[{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Major"},{v:5,l:"5 — Catastrophic"}].map(o=>(
                       <option key={o.v} value={o.v}>{o.l}</option>
                     ))}
                   </select>
                 </Fld>
                 <Fld label="Probability (P1–P5)">
                   <select value={riskForm.probability} onChange={e=>setRF("probability",+e.target.value)} style={iw}>
-                    {[{v:1,l:"P1 — Very unlikely (0–1%)"},{v:2,l:"P2 — Unlikely (1–5%)"},{v:3,l:"P3 — Possible (5–25%)"},{v:4,l:"P4 — Likely (25–50%)"},{v:5,l:"P5 — Very likely (50–100%)"}].map(o=>(
+                    {[{v:1,l:"1 — Very unlikely (0–1%)"},{v:2,l:"2 — Unlikely (1–5%)"},{v:3,l:"3 — Possible (5–25%)"},{v:4,l:"4 — Likely (25–50%)"},{v:5,l:"5 — Very likely (50–100%)"}].map(o=>(
                       <option key={o.v} value={o.v}>{o.l}</option>
                     ))}
                   </select>
