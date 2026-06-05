@@ -2333,7 +2333,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       const pLbl={1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
       const pRng={1:"0\u20131%",2:"1\u20135%",3:"5\u201325%",4:"25\u201350%",5:"50\u2013100%"};
       let rRows="";
-      [5,4,3,2,1].forEach(sv=>{let cells="";[1,2,3,4,5].forEach(pb=>{const items=mGrid[sv+","+pb]||[];const dots=items.map(a=>{const s=calcSig(a);const dc=s==="SIGNIFICANT"?"#DC2626":s==="MEDIUM"?"#D97706":"#16A34A";const op=a.status==="Info"?"0.35":"1";return'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+dc+';opacity:'+op+';margin:1px"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+zBg(sv,pb)+';border:1px solid #e5e7eb;padding:2px;vertical-align:top;position:relative"><span style="position:absolute;top:2px;left:3px;font-size:7px;color:#9ca3af;font-weight:bold">'+(sv*pb)+'</span><div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:12px">'+dots+'</div></td>';});rRows+='<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:90px"><strong>'+sv+'</strong>&nbsp;'+cLbl[sv]+'</td>'+cells+'</tr>';});
+      [5,4,3,2,1].forEach(sv=>{let cells="";[1,2,3,4,5].forEach(pb=>{const items=mGrid[sv+","+pb]||[];const dots=items.map(a=>{const s=calcSig(a);const dc=s==="SIGNIFICANT"?"#DC2626":s==="MEDIUM"?"#D97706":"#16A34A";const op=a.status==="Info"?"0.35":"1";return'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+dc+';opacity:'+op+';margin:1px"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+zBg(sv,pb)+';border:1px solid #e5e7eb;padding:2px;vertical-align:top;position:relative"><span style="position:absolute;top:2px;left:3px;font-size:7px;color:#9ca3af;font-weight:bold">'+(sv*pb)+'</span><div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:12px">'+dots+'</div></td>';});rRows+='<tr><td style="text-align:left;padding-right:8px;padding-left:4px;font-size:9px;white-space:nowrap;vertical-align:middle;width:90px"><strong>'+sv+'</strong>&nbsp;'+cLbl[sv]+'</td>'+cells+'</tr>';});
       let pHdr="";[1,2,3,4,5].forEach(pb=>{pHdr+='<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+pb+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+pLbl[pb]+'</span><br/><span style="font-size:7px;color:#cbd5e1">'+pRng[pb]+'</span></td>';});
 
       // opp matrix cells
@@ -2346,7 +2346,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       const eLbl={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"};
       const fLbl2={5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"V.difficult"};
       let oRows="";
-      [5,4,3,2,1].forEach(fe=>{let cells="";[1,2,3,4,5].forEach(ev=>{const c=oQc(ev,fe);const items=oGrid[ev+","+fe]||[];const lbl=items.length===0&&oCr(ev,fe)?'<span style="font-size:7px;font-weight:bold;color:'+c+';opacity:0.5">'+oQL(ev,fe)+'</span>':"";const dots=items.map(o=>{const bv=Math.min(5,Math.max(1,parseInt(o.bizValue)||1));const sz=7+(bv-1)*2;return'<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+oQbg(ev,fe)+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'+lbl+dots+'</td>';});oRows+='<tr><td style="text-align:right;padding-right:8px;font-size:9px;white-space:nowrap;vertical-align:middle;width:84px"><strong>'+fe+'</strong>&nbsp;'+fLbl2[fe]+'</td>'+cells+'</tr>';});
+      [5,4,3,2,1].forEach(fe=>{let cells="";[1,2,3,4,5].forEach(ev=>{const c=oQc(ev,fe);const items=oGrid[ev+","+fe]||[];const lbl=items.length===0&&oCr(ev,fe)?'<span style="font-size:7px;font-weight:bold;color:'+c+';opacity:0.5">'+oQL(ev,fe)+'</span>':"";const dots=items.map(o=>{const bv=Math.min(5,Math.max(1,parseInt(o.bizValue)||1));const sz=7+(bv-1)*2;return'<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+oQbg(ev,fe)+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'+lbl+dots+'</td>';});oRows+='<tr><td style="text-align:left;padding-right:8px;padding-left:4px;font-size:9px;white-space:nowrap;vertical-align:middle;width:84px"><strong>'+fe+'</strong>&nbsp;'+fLbl2[fe]+'</td>'+cells+'</tr>';});
       let eHdr="";[1,2,3,4,5].forEach(ev=>{eHdr+='<td style="text-align:center;font-size:8px;padding-top:5px;color:#475569"><strong>'+ev+'</strong><br/><span style="font-size:7px;color:#94a3b8">'+eLbl[ev]+'</span></td>';});
 
       // table rows — exact column order as the web app (score omitted)
@@ -2441,7 +2441,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'<div style="padding:10px;border-radius:6px;border:1px solid #c4b5fd;background:#f5f3ff;text-align:center"><div style="font-size:24px;font-weight:700;color:#7c3aed">'+opps.length+'</div><div style="font-size:9px;color:#5b21b6;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Opportunities</div></div>'
         +'</div>'
         +SEC("Matrices")
-        +'<div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap">'
+        +'<div style="display:flex;gap:48px;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap">'
         +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Environmental Risk Matrix</p>'
         +'<div style="display:flex;align-items:flex-start"><div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap">CONSEQUENCE &rarr;</div>'
         +'<div><table style="border-collapse:collapse"><tbody>'+rRows+'<tr><td></td>'+pHdr+'</tr></tbody></table>'
@@ -2450,7 +2450,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'<div style="display:flex;align-items:flex-start"><div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap">FEASIBILITY &rarr;</div>'
         +'<div><table style="border-collapse:collapse"><tbody>'+oRows+'<tr><td></td>'+eHdr+'</tr></tbody></table>'
         +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;margin-top:3px">ENVIRONMENTAL VALUE &rarr;</div>'
-        +'<div style="font-size:8px;color:#64748b;margin-top:4px">Dot size = Business Value</div></div></div></div></div>'
+        +'</div></div></div>'
+        +'</div>'
         +(fp?SEC("Environmental Budget")+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">'
           +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">MTO</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.mtoTotal||0).toFixed(3)+' tCO\u2082e</div></div>'
           +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">MEL</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.melTotal||0).toFixed(3)+' tCO\u2082e</div></div>'
@@ -2485,7 +2486,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'<div>'+LBL("Zone key")+zLgnd+'</div><div>'+LBL("Consequence levels")+cLgnd+'</div><div>'+LBL("Probability levels")+pLgnd+'</div></div>'
         +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Opportunity Matrix</p>'
         +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
-        +'<div>'+LBL("Quadrant guide")+oQLgnd+'</div><div>'+LBL("Environmental Value")+eLgnd+'</div><div>'+LBL("Feasibility")+fLgnd+'</div></div></div>'
+        +'<div>'+LBL("Quadrant guide")+oQLgnd+'<p style="font-size:9px;color:#64748b;margin-top:10px"><strong>Dot size</strong> = Business Value &mdash; small&nbsp;(1&ndash;2) &middot; medium&nbsp;(3) &middot; large&nbsp;(4&ndash;5)</p></div><div>'+LBL("Environmental Value")+eLgnd+'</div><div>'+LBL("Feasibility")+fLgnd+'</div></div></div>'
         +'</body></html>';
 
       // window.open is called synchronously inside a click handler — browsers allow it
