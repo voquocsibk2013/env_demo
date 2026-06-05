@@ -3978,6 +3978,213 @@ This cannot be undone.`)) return;
       </div>
     )}
 
+      {tab === "opportunities" && (
+        <div>
+          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
+            <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
+            <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
+              placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
+            <span style={{ marginLeft:"auto", fontSize:12, color:T.muted }}>
+              {opps.length} opportunit{opps.length!==1?"ies":"y"}
+            </span>
+          </div>
+
+          {filteredOpps.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              {opps.length===0?"No opportunities yet. Use the Screening tab or add one manually.":"No opportunities match your search."}
+            </div>
+          ) : (
+            <div>
+              {selectedOpp.size > 0 && (
+                <BulkBar count={selectedOpp.size}
+                  accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
+                  statusOptions={[]}
+                  onDelete={bulkDeleteOpps}
+                  onStatusChange={s => setSelectedOpp(new Set())}/>
+              )}
+              <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
+            </div>
+          )}
+
+          {/* ── Opportunity Priority Matrix ── */}
+          <div style={{ marginTop:"2.5rem" }}>
+            <div style={{ marginBottom:"0.75rem" }}>
+              <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:700, color:T.text }}>Opportunity Priority Matrix</h3>
+              <p style={{ margin:0, fontSize:12, color:T.muted }}>Environmental Value × Feasibility — click any dot to open and edit</p>
+            </div>
+
+            {opps.length === 0 ? (
+              <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+                No opportunities registered yet.
+              </div>
+            ) : (() => {
+              const CELL = 70;
+              const oppQ = (ev, feas) => {
+                const hE = ev >= 4, hF = feas >= 4;
+                if  (!hE && hF)  return { bg:T.purpleBg, bd:T.purpleBd, label:"Pursue",       c:T.purple };
+                if  (hE  && hF)  return { bg:T.greenBg,  bd:T.greenBd,  label:"Quick win",    c:T.green  };
+                if  (!hE && !hF) return { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritize", c:T.slate  };
+                return                   { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",         c:T.blue   };
+              };
+              const isQCorner = (ev, feas) =>
+                (ev===1&&feas===5)||(ev===5&&feas===5)||(ev===1&&feas===1)||(ev===5&&feas===1);
+              const oGrid = {};
+              opps.forEach(o => {
+                const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
+                const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
+                const k = ev+","+feas;
+                if (!oGrid[k]) oGrid[k] = [];
+                oGrid[k].push(o);
+              });
+              const FEAS_ROWS = [
+                {v:5,code:"5",lbl:"Easy"},{v:4,code:"4",lbl:"Achievable"},{v:3,code:"3",lbl:"Moderate"},
+                {v:2,code:"2",lbl:"Difficult"},{v:1,code:"1",lbl:"Very difficult"},
+              ];
+              const ENV_COLS = [
+                {v:1,code:"1",lbl:"Negligible"},{v:2,code:"2",lbl:"Minor"},{v:3,code:"3",lbl:"Moderate"},
+                {v:4,code:"4",lbl:"Significant"},{v:5,code:"5",lbl:"Major"},
+              ];
+              return (
+                <div>
+                  <div style={{ overflowX:"auto" }}>
+                    <div style={{ display:"flex", flexDirection:"column", width:"fit-content" }}>
+                      <div style={{ display:"flex", flexDirection:"column", marginLeft:50 }}>
+                        <div style={{ width:CELL*5, textAlign:"center", paddingBottom:4 }}>
+                          <span style={{ fontSize:9, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                            ENVIRONMENTAL VALUE →
+                          </span>
+                        </div>
+                        <div style={{ display:"flex", marginBottom:2 }}>
+                          {ENV_COLS.map(c => (
+                            <div key={c.v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
+                              <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>{c.code}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display:"flex" }}>
+                        <div style={{ width:50, flexShrink:0, display:"flex" }}>
+                          <div style={{ width:20, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <span style={{ fontSize:9, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                              whiteSpace:"nowrap", textTransform:"uppercase", letterSpacing:"0.07em" }}>FEASIBILITY →</span>
+                          </div>
+                          <div style={{ width:30 }}>
+                            {FEAS_ROWS.map(r => (
+                              <div key={r.v} style={{ height:CELL, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:6 }}>
+                                <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>{r.code}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          {FEAS_ROWS.map(({v:feas}) => (
+                            <div key={feas} style={{ display:"flex" }}>
+                              {ENV_COLS.map(({v:ev}) => {
+                                const q = oppQ(ev, feas);
+                                const items = oGrid[ev+","+feas]||[];
+                                const isC = isQCorner(ev, feas);
+                                return (
+                                  <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
+                                    background:q.bg, border:"1px solid "+q.bd,
+                                    display:"flex", flexWrap:"wrap", alignContent:"center", justifyContent:"center",
+                                    gap:4, padding:5, boxSizing:"border-box" }}>
+                                    {items.length===0 && isC && (
+                                      <span style={{ fontSize:9, fontWeight:700, color:q.c, opacity:0.5, textAlign:"center", lineHeight:1.3, pointerEvents:"none" }}>{q.label}</span>
+                                    )}
+                                    {items.map((o, i) => {
+                                      const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
+                                      const sz = 10 + (bv-1)*3;
+                                      return (
+                                        <div key={i} onClick={()=>setEditOpp(o)}
+                                          title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
+                                          style={{ width:sz, height:sz, borderRadius:"50%", background:q.c,
+                                            opacity:0.85, cursor:"pointer", flexShrink:0 }}/>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Legend panels */}
+                  <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 1fr", gap:12, marginTop:"1.25rem" }}>
+                    <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px", minWidth:180 }}>
+                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Quadrant guide</p>
+                      {[
+                        {l:"Pursue",      c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"Low environmental effort, high feasibility"},
+                        {l:"Quick win",   c:T.green, bd:T.greenBd, bg:T.greenBg, d:"High value and achievable"},
+                        {l:"Plan",        c:T.blue,  bd:T.blueBd,  bg:T.blueBg,  d:"High value but low feasibility"},
+                        {l:"Deprioritize",c:T.slate, bd:T.slateBd, bg:T.slateBg, d:"Low value and low feasibility"},
+                      ].map(({l,c,bd,bg,d})=>(
+                        <div key={l} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:8 }}>
+                          <div style={{ width:14, height:14, borderRadius:3, background:bg, border:"2px solid "+bd, flexShrink:0, marginTop:1 }}/>
+                          <div>
+                            <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:c }}>{l}</div>
+                            <div style={{ fontSize:9, color:T.faint, lineHeight:1.4 }}>{d}</div>
+                          </div>
+                        </div>
+                      ))}
+                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dot size = Business Value</p>
+                      {[{bv:1,sz:10,l:"Low (1–2)"},{bv:3,sz:16,l:"Moderate (3)"},{bv:5,sz:22,l:"High (4–5)"}].map(({bv,sz,l})=>(
+                        <div key={bv} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
+                          <div style={{ width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <div style={{ width:sz, height:sz, borderRadius:"50%", background:T.purple, opacity:0.85 }}/>
+                          </div>
+                          <span style={{ fontSize:9, color:T.muted }}>{l}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
+                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Environmental Value (x-axis)</p>
+                      {[
+                        {v:5,l:"Major",      d:"Transformational environmental benefit; measurable at portfolio or regional scale."},
+                        {v:4,l:"Significant",d:"Clear, quantifiable benefit; materially reduces impact or footprint."},
+                        {v:3,l:"Moderate",   d:"Meaningful improvement; reduces environmental impact in a targeted area."},
+                        {v:2,l:"Minor",      d:"Small marginal improvement; limited contribution overall."},
+                        {v:1,l:"Negligible", d:"Negligible direct benefit; primarily internal or administrative gain."},
+                      ].map(({v,l,d})=>(
+                        <div key={v} style={{ marginBottom:9 }}>
+                          <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
+                            <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
+                            <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
+                          </div>
+                          <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
+                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Implementation Feasibility (y-axis)</p>
+                      {[
+                        {v:5,l:"Easy",         d:"Implementable with existing resources; no regulatory hurdles; quick payback."},
+                        {v:4,l:"Achievable",   d:"Feasible within normal constraints; modest investment or process change."},
+                        {v:3,l:"Moderate",     d:"Requires dedicated effort, some investment, or cross-team coordination."},
+                        {v:2,l:"Difficult",    d:"Significant barriers: cost, technology maturity, or regulatory complexity."},
+                        {v:1,l:"Very difficult",d:"Not feasible without major breakthroughs in technology, funding, or regulation."},
+                      ].map(({v,l,d})=>(
+                        <div key={v} style={{ marginBottom:9 }}>
+                          <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
+                            <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
+                            <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
+                          </div>
+                          <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {tab === "footprint" && (
         <FootprintTab project={project} onChange={onChange}/>
       )}
