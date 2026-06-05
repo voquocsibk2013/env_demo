@@ -2253,6 +2253,15 @@ const WASTE_PHILOSOPHY = [
   "For supplier contracts, make contractual demands of return schemes and reusable packaging",
   "Reduce the use of disposable items",
 ];
+const WASTE_HIERARCHY = [
+  { key:"Prevention", label:"Prevention",           rank:1, color:"#15803D", bg:"#dcfce7", bd:"#86efac", desc:"Avoid generating the waste in the first place" },
+  { key:"Reuse",      label:"Preparing for re-use", rank:2, color:"#0d9488", bg:"#ccfbf1", bd:"#5eead4", desc:"Reuse the material with little or no processing" },
+  { key:"Recycling",  label:"Recycling",            rank:3, color:"#2563eb", bg:"#dbeafe", bd:"#93c5fd", desc:"Reprocess into new materials or products" },
+  { key:"Recovery",   label:"Recovery",             rank:4, color:"#d97706", bg:"#fef3c7", bd:"#fcd34d", desc:"Energy recovery / incineration with energy capture" },
+  { key:"Disposal",   label:"Disposal",             rank:5, color:"#dc2626", bg:"#fee2e2", bd:"#fca5a5", desc:"Landfill or other final disposal (least preferred)" },
+];
+const WASTE_UNITS = ["kg","tonne","m³","L","pcs"];
+
 function initWasteRows(existing) {
   const byId = {};
   (existing||[]).forEach(r => { byId[r.id] = r; });
@@ -2261,7 +2270,8 @@ function initWasteRows(existing) {
     products.forEach((product, pi) => {
       const id = "std_" + fraction.slice(0,8).replace(/\s+/g,"_").toLowerCase() + "_" + pi;
       rows.push({ id, fraction, product, isStd:true,
-        construction:"", startup:"", operation:"", measures:"",
+        construction:"", startup:"", operation:"", unit:"kg",
+        hazardous:false, treatment:"", methods:[], measures:"",
         ...(byId[id] || {}) });
     });
   });
@@ -2271,271 +2281,320 @@ function initWasteRows(existing) {
 
 // ── WasteTab component (needs useState, must be a real component not an IIFE) ──
 function WasteTab({ project, onChange }) {
-  const [expanded, setExpanded] = React.useState(() => new Set(WASTE_FRACTIONS.map(f => f.fraction)));
-  const [philoOpen, setPhiloOpen] = React.useState(false);
-        const wasteRows     = initWasteRows(project.wasteRows);
-        const fracMeasures  = project.wasteFractionMeasures || {};
+  const [editId, setEditId]   = React.useState(null);
+  const [refOpen, setRefOpen] = React.useState(false);
+  const [fracFilter, setFracFilter] = React.useState("All");
 
-        const updateRow = (id, field, value) => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: cur.map(r => r.id === id ? {...r, [field]: value} : r) });
-        };
-        const updateMeasures = (fraction, value) => {
-          onChange({ ...project, wasteFractionMeasures: { ...fracMeasures, [fraction]: value } });
-        };
-        const addCustom = () => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: [...cur, {
-            id: "custom_" + Date.now(), fraction: "", product: "", isStd: false,
-            construction: "", startup: "", operation: "", measures: ""
-          }]});
-        };
-        const delCustom = id => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: cur.filter(r => r.id !== id) });
-        };
-        const updateCustom = (id, field, value) => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: cur.map(r => r.id === id ? {...r, [field]: value} : r) });
-        };
-        const toggleFraction = f => setExpanded(prev => {
-          const next = new Set(prev);
-          next.has(f) ? next.delete(f) : next.add(f);
-          return next;
-        });
+  const rows = initWasteRows(project.wasteRows);
 
-        const customRows = wasteRows.filter(r => !r.isStd);
-        const filledCount = WASTE_FRACTIONS.filter(({fraction}) => {
-          const rows = wasteRows.filter(r => r.isStd && r.fraction === fraction);
-          return rows.some(r => r.construction || r.startup || r.operation) || fracMeasures[fraction];
-        }).length;
+  const save = (next) => onChange({ ...project, wasteRows: next });
+  const updateRow = (id, patch) => save(rows.map(r => r.id === id ? { ...r, ...patch } : r));
+  const addStream = () => {
+    const id = "custom_" + Date.now();
+    save([...rows, { id, fraction:"", product:"", isStd:false,
+      construction:"", startup:"", operation:"", unit:"kg",
+      hazardous:false, treatment:"", methods:[], measures:"" }]);
+    setEditId(id);
+  };
+  const delStream = (id) => { save(rows.filter(r => r.id !== id)); setEditId(null); };
 
-        const iw = { padding:"5px 8px", fontSize:11, borderRadius:5, border:"1px solid "+T.border,
-          background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
-        const Dot = ({active}) => (
-          <div style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
-            background: active ? T.green : T.border, transition:"background .15s" }}/>
-        );
+  const rowTotal = (r) => ["construction","startup","operation"]
+    .reduce((s,f) => s + (parseFloat(r[f]) || 0), 0);
+  const isLogged = (r) => rowTotal(r) > 0 || r.treatment || (r.methods && r.methods.length) || r.measures;
+  const hier = (key) => WASTE_HIERARCHY.find(h => h.key === key);
 
-        return (
-          <div>
-            {/* ── Header bar ── */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-              marginBottom:"1rem", gap:8, flexWrap:"wrap" }}>
-              <div>
-                <h2 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700, color:T.text }}>
-                  Waste Handling Register
-                </h2>
-                <p style={{ margin:0, fontSize:12, color:T.muted }}>
-                  {filledCount} of {WASTE_FRACTIONS.length} fractions with data
-                </p>
-              </div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                <button onClick={() => setExpanded(new Set(WASTE_FRACTIONS.map(f=>f.fraction)))}
-                  style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
-                    border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
-                  Expand all
-                </button>
-                <button onClick={() => setExpanded(new Set())}
-                  style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
-                    border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
-                  Collapse all
-                </button>
-              </div>
-            </div>
+  const logged = rows.filter(isLogged);
+  const toTonnes = (r) => {
+    const q = rowTotal(r);
+    if (r.unit === "tonne") return q;
+    if (r.unit === "kg")    return q / 1000;
+    return 0;
+  };
+  const totalTonnes = logged.reduce((s,r) => s + toTonnes(r), 0);
+  const hazCount    = logged.filter(r => r.hazardous).length;
+  const withTreat   = logged.filter(r => r.treatment);
+  const diverted    = withTreat.filter(r => r.treatment !== "Disposal").length;
+  const diversionPct = withTreat.length ? Math.round(diverted / withTreat.length * 100) : 0;
 
-            {/* ── Progress bar ── */}
-            <div style={{ height:4, borderRadius:2, background:T.border, marginBottom:"1.25rem", overflow:"hidden" }}>
-              <div style={{ height:"100%", borderRadius:2, background:T.green,
-                width: (filledCount / WASTE_FRACTIONS.length * 100) + "%", transition:"width .3s" }}/>
-            </div>
+  const visible = fracFilter === "All" ? rows : rows.filter(r => (r.fraction||"Other") === fracFilter);
+  const fractionOrder = [...WASTE_FRACTIONS.map(f => f.fraction), "Other"];
+  const groups = {};
+  visible.forEach(r => { const k = r.fraction || "Other"; (groups[k] = groups[k]||[]).push(r); });
+  const orderedGroups = fractionOrder.filter(f => groups[f]).map(f => [f, groups[f]]);
 
-            {/* ── Fraction cards ── */}
-            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:"1rem" }}>
-              {WASTE_FRACTIONS.map(({ fraction }) => {
-                const rows    = wasteRows.filter(r => r.isStd && r.fraction === fraction);
-                const isOpen  = expanded.has(fraction);
-                const hasCon  = rows.some(r => r.construction);
-                const hasStu  = rows.some(r => r.startup);
-                const hasOp   = rows.some(r => r.operation);
-                const hasMeas = !!(fracMeasures[fraction]);
-                const anyData = hasCon || hasStu || hasOp || hasMeas;
+  const card = { background:T.surface, border:"1px solid "+T.border, borderRadius:9, padding:"12px 14px" };
+  const iw = { padding:"7px 10px", fontSize:13, borderRadius:6, border:"1px solid "+T.border,
+    background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
+  const lbl = { display:"block", fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+    textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 };
 
-                return (
-                  <div key={fraction} style={{
-                    border: "1px solid " + (anyData ? T.greenBd : T.border),
-                    borderRadius:9, overflow:"hidden",
-                    borderLeft: "3px solid " + (anyData ? T.green : T.border),
-                    background: T.surface
-                  }}>
-                    {/* Card header */}
-                    <div onClick={() => toggleFraction(fraction)}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                        cursor:"pointer", userSelect:"none",
-                        background: anyData ? T.greenBg : T.surface2 }}
-                      onMouseEnter={e => e.currentTarget.style.opacity = ".85"}
-                      onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-                      <span style={{ flex:1, fontWeight:600, fontSize:13, color:T.text }}>{fraction}</span>
-                      <span style={{ fontSize:11, color:T.muted }}>
-                        {rows.length} product{rows.length !== 1 ? "s" : ""}
-                      </span>
-                      {/* Phase dots */}
-                      <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                        {[["C", hasCon], ["S", hasStu], ["O", hasOp]].map(([lbl, active]) => (
-                          <div key={lbl} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                            <Dot active={active}/>
-                            <span style={{ fontSize:7, color:T.faint, fontFamily:T.mono }}>{lbl}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {hasMeas && (
-                        <span style={{ fontSize:9, color:T.teal, fontFamily:T.mono,
-                          padding:"1px 5px", borderRadius:3, background:T.tealBg,
-                          border:"1px solid "+T.tealBd }}>Measures ✓</span>
-                      )}
-                      <span style={{ color:T.muted, fontSize:12,
-                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                        transition:"transform .2s", display:"inline-block" }}>▾</span>
-                    </div>
+  const editing = editId ? rows.find(r => r.id === editId) : null;
 
-                    {/* Card body */}
-                    {isOpen && (
-                      <div style={{ padding:"12px 14px", borderTop:"1px solid "+T.border }}>
-                        {/* Product rows table */}
-                        <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:12, fontSize:12 }}>
-                          <thead>
-                            <tr style={{ background:T.surface2 }}>
-                              <th style={{ padding:"5px 10px", textAlign:"left", fontFamily:T.mono,
-                                fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
-                                letterSpacing:"0.07em", borderBottom:"1px solid "+T.border }}>
-                                Product / Material
-                              </th>
-                              {["Construction / Installation","Start-up / Shut-down","Normal Operation"].map(h => (
-                                <th key={h} style={{ padding:"5px 10px", textAlign:"center", fontFamily:T.mono,
-                                  fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
-                                  letterSpacing:"0.07em", borderBottom:"1px solid "+T.border, width:150 }}>
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map((row, ri) => (
-                              <tr key={row.id}
-                                style={{ borderBottom: ri < rows.length-1 ? "1px solid "+T.rowBd : "none" }}
-                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                                <td style={{ padding:"6px 10px", color:T.text, fontSize:12 }}>{row.product}</td>
-                                {["construction","startup","operation"].map(field => (
-                                  <td key={field} style={{ padding:"4px 8px", textAlign:"center" }}>
-                                    <input value={row[field]||""} placeholder="—"
-                                      onChange={e => updateRow(row.id, field, e.target.value)}
-                                      style={{...iw, textAlign:"center", width:130}}/>
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", gap:8, flexWrap:"wrap" }}>
+        <div>
+          <h2 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700, color:T.text }}>Waste Stream Register</h2>
+          <p style={{ margin:0, fontSize:12, color:T.muted }}>
+            Log each waste stream, classify and quantify it, then assign a treatment route and the reduction methods applied.
+          </p>
+        </div>
+        <Btn variant="primary" onClick={addStream}>+ Add waste stream</Btn>
+      </div>
 
-                        {/* Fraction-level reduction measures */}
-                        <div>
-                          <label style={{ display:"block", fontFamily:T.mono, fontSize:9, fontWeight:600,
-                            color:T.faint, textTransform:"uppercase", letterSpacing:"0.07em",
-                            marginBottom:5 }}>
-                            Waste hierarchy / reduction measures
-                          </label>
-                          <textarea
-                            value={fracMeasures[fraction]||""}
-                            onChange={e => updateMeasures(fraction, e.target.value)}
-                            placeholder={"Describe reduction measures, handling requirements, and disposal routes for " + fraction.toLowerCase() + " waste…"}
-                            rows={3}
-                            style={{ ...iw, resize:"vertical", lineHeight:1.5 }}/>
-                        </div>
-                      </div>
-                    )}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:"1.25rem" }}>
+        <div style={card}>
+          <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1 }}>{logged.length}</div>
+          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Streams logged</div>
+        </div>
+        <div style={card}>
+          <div style={{ fontSize:22, fontWeight:700, color:T.teal, lineHeight:1 }}>{totalTonnes.toLocaleString("en-GB",{maximumFractionDigits:2})}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span></div>
+          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Est. mass (kg/t)</div>
+        </div>
+        <div style={{ ...card, background: hazCount?T.redBg:T.surface, borderColor: hazCount?T.redBd:T.border }}>
+          <div style={{ fontSize:22, fontWeight:700, color: hazCount?T.red:T.text, lineHeight:1 }}>{hazCount}</div>
+          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Hazardous</div>
+        </div>
+        <div style={{ ...card, background: diversionPct>=50?T.greenBg:T.surface, borderColor: diversionPct>=50?T.greenBd:T.border }}>
+          <div style={{ fontSize:22, fontWeight:700, color: diversionPct>=50?T.green:T.text, lineHeight:1 }}>{diversionPct}<span style={{ fontSize:13 }}>%</span></div>
+          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diverted from disposal</div>
+        </div>
+      </div>
+
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:"0.75rem" }}>
+        {["All", ...fractionOrder.filter(f => rows.some(r => (r.fraction||"Other")===f))].map(f => (
+          <button key={f} onClick={() => setFracFilter(f)}
+            style={{ fontSize:11, padding:"4px 11px", borderRadius:14, cursor:"pointer", fontFamily:T.sans,
+              border:"1px solid "+(fracFilter===f?T.teal:T.border),
+              background: fracFilter===f?T.tealBg:"transparent",
+              color: fracFilter===f?T.teal:T.muted, whiteSpace:"nowrap" }}>{f}</button>
+        ))}
+      </div>
+
+      <div style={{ borderRadius:9, overflow:"hidden", border:"1px solid "+T.border, marginBottom:"1.5rem" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <thead>
+            <tr style={{ background:"#1E4D35" }}>
+              {["Material / waste stream","Class","Est. qty","Treatment","Methods",""].map((h,i) => (
+                <th key={i} style={{ padding:"8px 12px", textAlign: i>=1&&i<=2?"center":"left",
+                  color:"#fff", fontFamily:T.mono, fontSize:9, fontWeight:600,
+                  textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {orderedGroups.map(([fraction, frows]) => (
+              <React.Fragment key={fraction}>
+                <tr>
+                  <td colSpan={6} style={{ padding:"6px 12px", background:T.surface2,
+                    fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.muted,
+                    textTransform:"uppercase", letterSpacing:"0.06em",
+                    borderTop:"1px solid "+T.border, borderBottom:"1px solid "+T.border }}>
+                    {fraction} <span style={{ color:T.faint, fontWeight:400 }}>· {frows.length}</span>
+                  </td>
+                </tr>
+                {frows.map(r => {
+                  const rlogged = isLogged(r);
+                  const h = hier(r.treatment);
+                  const tot = rowTotal(r);
+                  return (
+                    <tr key={r.id} onClick={() => setEditId(r.id)}
+                      style={{ borderBottom:"1px solid "+T.rowBd, cursor:"pointer",
+                        opacity: rlogged?1:0.55 }}
+                      onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                      onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                      <td style={{ padding:"8px 12px", color:T.text }}>
+                        {r.product || <span style={{ color:T.faint, fontStyle:"italic" }}>Unnamed stream</span>}
+                      </td>
+                      <td style={{ padding:"8px 12px", textAlign:"center" }}>
+                        {r.hazardous
+                          ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:T.redBg, color:T.red, border:"1px solid "+T.redBd }}>HAZ</span>
+                          : <span style={{ fontFamily:T.mono, fontSize:9, color:T.faint }}>non-haz</span>}
+                      </td>
+                      <td style={{ padding:"8px 12px", textAlign:"center", fontFamily:T.mono, color: tot?T.text:T.faint }}>
+                        {tot ? tot.toLocaleString("en-GB",{maximumFractionDigits:2})+" "+r.unit : "—"}
+                      </td>
+                      <td style={{ padding:"8px 12px" }}>
+                        {h
+                          ? <span style={{ fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:4, background:h.bg, color:h.color, border:"1px solid "+h.bd, whiteSpace:"nowrap" }}>{h.label}</span>
+                          : <span style={{ color:T.faint }}>—</span>}
+                      </td>
+                      <td style={{ padding:"8px 12px" }}>
+                        {r.methods && r.methods.length
+                          ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>{r.methods.length} method{r.methods.length!==1?"s":""}</span>
+                          : <span style={{ color:T.faint }}>—</span>}
+                      </td>
+                      <td style={{ padding:"8px 12px", textAlign:"right", whiteSpace:"nowrap" }}>
+                        <span style={{ fontSize:11, color:T.teal }}>Edit ›</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
+        <div onClick={() => setRefOpen(v=>!v)}
+          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
+          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em" }}>
+            Waste hierarchy &amp; reduction principles
+          </span>
+          <span style={{ color:T.muted, fontSize:12, transform: refOpen?"rotate(180deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▾</span>
+        </div>
+        {refOpen && (
+          <div style={{ padding:"16px", display:"grid", gridTemplateColumns:"auto 1fr", gap:24 }}>
+            <div>
+              <p style={lbl}>Waste hierarchy (best → worst)</p>
+              {WASTE_HIERARCHY.map(h => (
+                <div key={h.key} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
+                  <span style={{ width:18, height:18, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
+                  <div>
+                    <span style={{ fontSize:11, fontWeight:600, color:h.color }}>{h.label}</span>
+                    <span style={{ fontSize:10, color:T.faint }}> — {h.desc}</span>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
-
-            {/* ── Custom rows ── */}
-            {customRows.length > 0 && (
-              <div style={{ marginBottom:"1rem" }}>
-                <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                  textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>
-                  Other / custom waste streams
-                </p>
-                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {customRows.map(row => (
-                    <div key={row.id} style={{ border:"1px solid "+T.border, borderRadius:8,
-                      borderLeft:"3px solid "+T.amberBd, background:T.surface, overflow:"hidden" }}>
-                      <div style={{ display:"flex", gap:8, padding:"8px 12px",
-                        background:T.amberBg, borderBottom:"1px solid "+T.border, alignItems:"center" }}>
-                        <input value={row.fraction||""} placeholder="Waste fraction name"
-                          onChange={e => updateCustom(row.id, "fraction", e.target.value)}
-                          style={{...iw, fontWeight:600, flex:1}}/>
-                        <button onClick={() => delCustom(row.id)}
-                          style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
-                            border:"1px solid "+T.border, background:"transparent",
-                            color:T.red, cursor:"pointer", flexShrink:0 }}>Remove</button>
-                      </div>
-                      <div style={{ padding:"10px 12px", display:"grid",
-                        gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
-                        <div>
-                          <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>Product</label>
-                          <input value={row.product||""} placeholder="Product / material"
-                            onChange={e => updateCustom(row.id, "product", e.target.value)} style={iw}/>
-                        </div>
-                        {[["construction","Construction / Install."],["startup","Start-up / Shut-down"],["operation","Normal Operation"]].map(([f, lbl]) => (
-                          <div key={f}>
-                            <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>{lbl}</label>
-                            <input value={row[f]||""} placeholder="—"
-                              onChange={e => updateCustom(row.id, f, e.target.value)} style={{...iw, textAlign:"center"}}/>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ padding:"0 12px 10px" }}>
-                        <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>Reduction measures</label>
-                        <textarea value={row.measures||""} placeholder="Describe reduction / handling measures…"
-                          onChange={e => updateCustom(row.id, "measures", e.target.value)}
-                          rows={2} style={{...iw, resize:"vertical", lineHeight:1.5}}/>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <p style={lbl}>Reduction principles (philosophy)</p>
+              <div style={{ columns:2, columnGap:20 }}>
+                {WASTE_PHILOSOPHY.map((item,i) => (
+                  <div key={i} style={{ display:"flex", gap:6, marginBottom:4, breakInside:"avoid" }}>
+                    <span style={{ color:T.green, fontSize:10, flexShrink:0 }}>✓</span>
+                    <span style={{ fontSize:10, color:T.muted, lineHeight:1.5 }}>{item}</span>
+                  </div>
+                ))}
               </div>
-            )}
-
-            <Btn onClick={addCustom} style={{ marginBottom:"1.5rem" }}>+ Add custom waste stream</Btn>
-
-            {/* ── Waste Philosophy ── */}
-            <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
-              <div onClick={() => setPhiloOpen(v => !v)}
-                style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                  padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
-                <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
-                  textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                  Waste philosophy — reduction principles
-                </span>
-                <span style={{ color:T.muted, fontSize:12,
-                  transform: philoOpen ? "rotate(180deg)" : "rotate(0deg)",
-                  transition:"transform .2s", display:"inline-block" }}>▾</span>
-              </div>
-              {philoOpen && (
-                <div style={{ padding:"14px 16px", columns:2, columnGap:24 }}>
-                  {WASTE_PHILOSOPHY.map((item, i) => (
-                    <div key={i} style={{ display:"flex", gap:7, marginBottom:5, breakInside:"avoid" }}>
-                      <span style={{ color:T.green, fontSize:11, flexShrink:0 }}>✓</span>
-                      <span style={{ fontSize:11, color:T.muted, lineHeight:1.5 }}>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
-        );
+        )}
+      </div>
 
+      {editing && (
+        <div onClick={() => setEditId(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:1000,
+            display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"4vh 16px", overflowY:"auto" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:T.bg, borderRadius:12, width:"100%", maxWidth:600,
+              boxShadow:"0 20px 60px rgba(0,0,0,0.35)", overflow:"hidden" }}>
+            <div style={{ padding:"14px 18px", borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surface }}>
+              <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.text }}>
+                {editing.isStd ? "Edit waste stream" : "Custom waste stream"}
+              </h3>
+              <button onClick={() => setEditId(null)} style={{ fontSize:18, lineHeight:1, padding:"2px 8px", borderRadius:6, border:"none", background:"transparent", color:T.muted, cursor:"pointer" }}>✕</button>
+            </div>
+
+            <div style={{ padding:"18px", display:"flex", flexDirection:"column", gap:16, maxHeight:"72vh", overflowY:"auto" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <div>
+                  <label style={lbl}>Waste fraction</label>
+                  {editing.isStd
+                    ? <div style={{ ...iw, background:T.surface2, color:T.muted }}>{editing.fraction}</div>
+                    : <select value={editing.fraction||""} onChange={e=>updateRow(editId,{fraction:e.target.value})} style={iw}>
+                        <option value="">Select…</option>
+                        {WASTE_FRACTIONS.map(f=> <option key={f.fraction} value={f.fraction}>{f.fraction}</option>)}
+                        <option value="Other">Other</option>
+                      </select>}
+                </div>
+                <div>
+                  <label style={lbl}>Material / product</label>
+                  {editing.isStd
+                    ? <div style={{ ...iw, background:T.surface2, color:T.muted }}>{editing.product}</div>
+                    : <input value={editing.product||""} onChange={e=>updateRow(editId,{product:e.target.value})} placeholder="e.g. used hydraulic oil" style={iw}/>}
+                </div>
+              </div>
+
+              <div>
+                <label style={lbl}>Classification</label>
+                <div style={{ display:"flex", gap:8 }}>
+                  {[{v:false,l:"Non-hazardous"},{v:true,l:"Hazardous"}].map(({v,l})=>(
+                    <button key={l} onClick={()=>updateRow(editId,{hazardous:v})}
+                      style={{ flex:1, padding:"8px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans, fontWeight:500,
+                        border:"1px solid "+(editing.hazardous===v?(v?T.redBd:T.greenBd):T.border),
+                        background: editing.hazardous===v?(v?T.redBg:T.greenBg):"transparent",
+                        color: editing.hazardous===v?(v?T.red:T.green):T.muted }}>{l}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={lbl}>Estimated quantity by phase</label>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:8, alignItems:"end" }}>
+                  {[["construction","Construction /\nInstallation"],["startup","Start-up /\nShut-down"],["operation","Normal\nOperation"]].map(([f,l])=>(
+                    <div key={f}>
+                      <div style={{ fontSize:9, color:T.faint, marginBottom:4, lineHeight:1.3, whiteSpace:"pre-line", minHeight:24 }}>{l}</div>
+                      <input type="number" min="0" value={editing[f]||""} placeholder="0"
+                        onChange={e=>updateRow(editId,{[f]:e.target.value})} style={{...iw, textAlign:"center"}}/>
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize:9, color:T.faint, marginBottom:4, minHeight:24 }}>Unit</div>
+                    <select value={editing.unit||"kg"} onChange={e=>updateRow(editId,{unit:e.target.value})} style={{...iw, width:72}}>
+                      {WASTE_UNITS.map(u=> <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={lbl}>Treatment route (waste hierarchy)</label>
+                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                  {WASTE_HIERARCHY.map(h=>(
+                    <button key={h.key} onClick={()=>updateRow(editId,{treatment: editing.treatment===h.key?"":h.key})}
+                      style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:6, cursor:"pointer", textAlign:"left",
+                        border:"1px solid "+(editing.treatment===h.key?h.bd:T.border),
+                        background: editing.treatment===h.key?h.bg:"transparent", fontFamily:T.sans }}>
+                      <span style={{ width:20, height:20, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
+                      <span style={{ fontSize:12, fontWeight:600, color: editing.treatment===h.key?h.color:T.text, width:120, flexShrink:0 }}>{h.label}</span>
+                      <span style={{ fontSize:10, color:T.faint }}>{h.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={lbl}>Reduction methods applied ({(editing.methods||[]).length} selected)</label>
+                <div style={{ border:"1px solid "+T.border, borderRadius:6, maxHeight:170, overflowY:"auto" }}>
+                  {WASTE_PHILOSOPHY.map((m,i)=>{
+                    const sel = (editing.methods||[]).includes(i);
+                    return (
+                      <div key={i} onClick={()=>{
+                        const cur = editing.methods||[];
+                        updateRow(editId,{ methods: sel ? cur.filter(x=>x!==i) : [...cur,i] });
+                      }} style={{ display:"flex", gap:9, padding:"7px 10px", cursor:"pointer", alignItems:"flex-start",
+                        borderBottom: i<WASTE_PHILOSOPHY.length-1?"1px solid "+T.rowBd:"none",
+                        background: sel?T.tealBg:"transparent" }}>
+                        <span style={{ width:15, height:15, borderRadius:3, flexShrink:0, marginTop:1,
+                          border:"1.5px solid "+(sel?T.teal:T.border), background: sel?T.teal:"transparent",
+                          color:"#fff", fontSize:10, lineHeight:"13px", textAlign:"center" }}>{sel?"✓":""}</span>
+                        <span style={{ fontSize:11, color: sel?T.text:T.muted, lineHeight:1.45 }}>{m}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label style={lbl}>Notes / handling requirements</label>
+                <textarea value={editing.measures||""} onChange={e=>updateRow(editId,{measures:e.target.value})}
+                  rows={2} placeholder="Disposal route, contractor, special handling, EWC code…" style={{...iw, resize:"vertical", lineHeight:1.5}}/>
+              </div>
+            </div>
+
+            <div style={{ padding:"12px 18px", borderTop:"1px solid "+T.border, display:"flex", justifyContent:"space-between", background:T.surface }}>
+              {!editing.isStd
+                ? <Btn variant="danger" onClick={()=>delStream(editId)}>Delete stream</Btn>
+                : <span/>}
+              <Btn variant="primary" onClick={()=>setEditId(null)}>Done</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
