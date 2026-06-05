@@ -2269,6 +2269,275 @@ function initWasteRows(existing) {
   return rows;
 }
 
+// ── WasteTab component (needs useState, must be a real component not an IIFE) ──
+function WasteTab({ project, onChange }) {
+  const [expanded, setExpanded] = React.useState(() => new Set(WASTE_FRACTIONS.map(f => f.fraction)));
+  const [philoOpen, setPhiloOpen] = React.useState(false);
+        const wasteRows     = initWasteRows(project.wasteRows);
+        const fracMeasures  = project.wasteFractionMeasures || {};
+
+        const updateRow = (id, field, value) => {
+          const cur = initWasteRows(project.wasteRows);
+          onChange({ ...project, wasteRows: cur.map(r => r.id === id ? {...r, [field]: value} : r) });
+        };
+        const updateMeasures = (fraction, value) => {
+          onChange({ ...project, wasteFractionMeasures: { ...fracMeasures, [fraction]: value } });
+        };
+        const addCustom = () => {
+          const cur = initWasteRows(project.wasteRows);
+          onChange({ ...project, wasteRows: [...cur, {
+            id: "custom_" + Date.now(), fraction: "", product: "", isStd: false,
+            construction: "", startup: "", operation: "", measures: ""
+          }]});
+        };
+        const delCustom = id => {
+          const cur = initWasteRows(project.wasteRows);
+          onChange({ ...project, wasteRows: cur.filter(r => r.id !== id) });
+        };
+        const updateCustom = (id, field, value) => {
+          const cur = initWasteRows(project.wasteRows);
+          onChange({ ...project, wasteRows: cur.map(r => r.id === id ? {...r, [field]: value} : r) });
+        };
+        const toggleFraction = f => setExpanded(prev => {
+          const next = new Set(prev);
+          next.has(f) ? next.delete(f) : next.add(f);
+          return next;
+        });
+
+        const customRows = wasteRows.filter(r => !r.isStd);
+        const filledCount = WASTE_FRACTIONS.filter(({fraction}) => {
+          const rows = wasteRows.filter(r => r.isStd && r.fraction === fraction);
+          return rows.some(r => r.construction || r.startup || r.operation) || fracMeasures[fraction];
+        }).length;
+
+        const iw = { padding:"5px 8px", fontSize:11, borderRadius:5, border:"1px solid "+T.border,
+          background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
+        const Dot = ({active}) => (
+          <div style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
+            background: active ? T.green : T.border, transition:"background .15s" }}/>
+        );
+
+        return (
+          <div>
+            {/* ── Header bar ── */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+              marginBottom:"1rem", gap:8, flexWrap:"wrap" }}>
+              <div>
+                <h2 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700, color:T.text }}>
+                  Waste Handling Register
+                </h2>
+                <p style={{ margin:0, fontSize:12, color:T.muted }}>
+                  {filledCount} of {WASTE_FRACTIONS.length} fractions with data
+                </p>
+              </div>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <button onClick={() => setExpanded(new Set(WASTE_FRACTIONS.map(f=>f.fraction)))}
+                  style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
+                    border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
+                  Expand all
+                </button>
+                <button onClick={() => setExpanded(new Set())}
+                  style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
+                    border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
+                  Collapse all
+                </button>
+              </div>
+            </div>
+
+            {/* ── Progress bar ── */}
+            <div style={{ height:4, borderRadius:2, background:T.border, marginBottom:"1.25rem", overflow:"hidden" }}>
+              <div style={{ height:"100%", borderRadius:2, background:T.green,
+                width: (filledCount / WASTE_FRACTIONS.length * 100) + "%", transition:"width .3s" }}/>
+            </div>
+
+            {/* ── Fraction cards ── */}
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:"1rem" }}>
+              {WASTE_FRACTIONS.map(({ fraction }) => {
+                const rows    = wasteRows.filter(r => r.isStd && r.fraction === fraction);
+                const isOpen  = expanded.has(fraction);
+                const hasCon  = rows.some(r => r.construction);
+                const hasStu  = rows.some(r => r.startup);
+                const hasOp   = rows.some(r => r.operation);
+                const hasMeas = !!(fracMeasures[fraction]);
+                const anyData = hasCon || hasStu || hasOp || hasMeas;
+
+                return (
+                  <div key={fraction} style={{
+                    border: "1px solid " + (anyData ? T.greenBd : T.border),
+                    borderRadius:9, overflow:"hidden",
+                    borderLeft: "3px solid " + (anyData ? T.green : T.border),
+                    background: T.surface
+                  }}>
+                    {/* Card header */}
+                    <div onClick={() => toggleFraction(fraction)}
+                      style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                        cursor:"pointer", userSelect:"none",
+                        background: anyData ? T.greenBg : T.surface2 }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = ".85"}
+                      onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                      <span style={{ flex:1, fontWeight:600, fontSize:13, color:T.text }}>{fraction}</span>
+                      <span style={{ fontSize:11, color:T.muted }}>
+                        {rows.length} product{rows.length !== 1 ? "s" : ""}
+                      </span>
+                      {/* Phase dots */}
+                      <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                        {[["C", hasCon], ["S", hasStu], ["O", hasOp]].map(([lbl, active]) => (
+                          <div key={lbl} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                            <Dot active={active}/>
+                            <span style={{ fontSize:7, color:T.faint, fontFamily:T.mono }}>{lbl}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {hasMeas && (
+                        <span style={{ fontSize:9, color:T.teal, fontFamily:T.mono,
+                          padding:"1px 5px", borderRadius:3, background:T.tealBg,
+                          border:"1px solid "+T.tealBd }}>Measures ✓</span>
+                      )}
+                      <span style={{ color:T.muted, fontSize:12,
+                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                        transition:"transform .2s", display:"inline-block" }}>▾</span>
+                    </div>
+
+                    {/* Card body */}
+                    {isOpen && (
+                      <div style={{ padding:"12px 14px", borderTop:"1px solid "+T.border }}>
+                        {/* Product rows table */}
+                        <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:12, fontSize:12 }}>
+                          <thead>
+                            <tr style={{ background:T.surface2 }}>
+                              <th style={{ padding:"5px 10px", textAlign:"left", fontFamily:T.mono,
+                                fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
+                                letterSpacing:"0.07em", borderBottom:"1px solid "+T.border }}>
+                                Product / Material
+                              </th>
+                              {["Construction / Installation","Start-up / Shut-down","Normal Operation"].map(h => (
+                                <th key={h} style={{ padding:"5px 10px", textAlign:"center", fontFamily:T.mono,
+                                  fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
+                                  letterSpacing:"0.07em", borderBottom:"1px solid "+T.border, width:150 }}>
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row, ri) => (
+                              <tr key={row.id}
+                                style={{ borderBottom: ri < rows.length-1 ? "1px solid "+T.rowBd : "none" }}
+                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                                <td style={{ padding:"6px 10px", color:T.text, fontSize:12 }}>{row.product}</td>
+                                {["construction","startup","operation"].map(field => (
+                                  <td key={field} style={{ padding:"4px 8px", textAlign:"center" }}>
+                                    <input value={row[field]||""} placeholder="—"
+                                      onChange={e => updateRow(row.id, field, e.target.value)}
+                                      style={{...iw, textAlign:"center", width:130}}/>
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+
+                        {/* Fraction-level reduction measures */}
+                        <div>
+                          <label style={{ display:"block", fontFamily:T.mono, fontSize:9, fontWeight:600,
+                            color:T.faint, textTransform:"uppercase", letterSpacing:"0.07em",
+                            marginBottom:5 }}>
+                            Waste hierarchy / reduction measures
+                          </label>
+                          <textarea
+                            value={fracMeasures[fraction]||""}
+                            onChange={e => updateMeasures(fraction, e.target.value)}
+                            placeholder={"Describe reduction measures, handling requirements, and disposal routes for " + fraction.toLowerCase() + " waste…"}
+                            rows={3}
+                            style={{ ...iw, resize:"vertical", lineHeight:1.5 }}/>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Custom rows ── */}
+            {customRows.length > 0 && (
+              <div style={{ marginBottom:"1rem" }}>
+                <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                  textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>
+                  Other / custom waste streams
+                </p>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {customRows.map(row => (
+                    <div key={row.id} style={{ border:"1px solid "+T.border, borderRadius:8,
+                      borderLeft:"3px solid "+T.amberBd, background:T.surface, overflow:"hidden" }}>
+                      <div style={{ display:"flex", gap:8, padding:"8px 12px",
+                        background:T.amberBg, borderBottom:"1px solid "+T.border, alignItems:"center" }}>
+                        <input value={row.fraction||""} placeholder="Waste fraction name"
+                          onChange={e => updateCustom(row.id, "fraction", e.target.value)}
+                          style={{...iw, fontWeight:600, flex:1}}/>
+                        <button onClick={() => delCustom(row.id)}
+                          style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
+                            border:"1px solid "+T.border, background:"transparent",
+                            color:T.red, cursor:"pointer", flexShrink:0 }}>Remove</button>
+                      </div>
+                      <div style={{ padding:"10px 12px", display:"grid",
+                        gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
+                        <div>
+                          <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>Product</label>
+                          <input value={row.product||""} placeholder="Product / material"
+                            onChange={e => updateCustom(row.id, "product", e.target.value)} style={iw}/>
+                        </div>
+                        {[["construction","Construction / Install."],["startup","Start-up / Shut-down"],["operation","Normal Operation"]].map(([f, lbl]) => (
+                          <div key={f}>
+                            <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>{lbl}</label>
+                            <input value={row[f]||""} placeholder="—"
+                              onChange={e => updateCustom(row.id, f, e.target.value)} style={{...iw, textAlign:"center"}}/>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ padding:"0 12px 10px" }}>
+                        <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>Reduction measures</label>
+                        <textarea value={row.measures||""} placeholder="Describe reduction / handling measures…"
+                          onChange={e => updateCustom(row.id, "measures", e.target.value)}
+                          rows={2} style={{...iw, resize:"vertical", lineHeight:1.5}}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Btn onClick={addCustom} style={{ marginBottom:"1.5rem" }}>+ Add custom waste stream</Btn>
+
+            {/* ── Waste Philosophy ── */}
+            <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
+              <div onClick={() => setPhiloOpen(v => !v)}
+                style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                  padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
+                <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                  textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                  Waste philosophy — reduction principles
+                </span>
+                <span style={{ color:T.muted, fontSize:12,
+                  transform: philoOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition:"transform .2s", display:"inline-block" }}>▾</span>
+              </div>
+              {philoOpen && (
+                <div style={{ padding:"14px 16px", columns:2, columnGap:24 }}>
+                  {WASTE_PHILOSOPHY.map((item, i) => (
+                    <div key={i} style={{ display:"flex", gap:7, marginBottom:5, breakInside:"avoid" }}>
+                      <span style={{ color:T.green, fontSize:11, flexShrink:0 }}>✓</span>
+                      <span style={{ fontSize:11, color:T.muted, lineHeight:1.5 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+}
+
 function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
   const [editAspect, setEditAspect]       = useState(null);
@@ -3647,511 +3916,15 @@ This cannot be undone.`)) return;
             );
           })()}
         </div>
-        </div>
-      )}
-
-      {tab === "opportunities" && (
-        <div>
-          <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
-            <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
-            <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
-              placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
-            <span style={{ marginLeft:"auto", fontFamily:T.mono, fontSize:10, color:T.faint }}>
-              {filteredOpps.length} of {opps.length} opportunit{opps.length!==1?"ies":"y"}
-            </span>
-          </div>
-          {opps.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
-              <p style={{ margin:"0 0 8px", fontSize:13, color:T.muted }}>No opportunities tracked yet.</p>
-              <p style={{ fontSize:12, margin:0 }}>ISO 14001:2015 Cl.6.1.2 requires identifying both risks and opportunities.</p>
-            </div>
-          ) : (
-            <div>
-              {selectedOpp.size > 0 && (
-                <BulkBar count={selectedOpp.size}
-                  accentColor={T.purple} accentBg={T.purpleBg} accentBd={T.purpleBd}
-                  statusOptions={[]}
-                  onDelete={bulkDeleteOpps}
-                  onStatusChange={s => s ? bulkSetOppStatus(s) : setSelectedOpp(new Set())}/>
-              )}
-              <OppTable rows={filteredOpps} onEdit={setEditOpp} onDelete={deleteOpp} selection={selectedOpp} onToggle={toggleSelOpp} onToggleAll={toggleAllOpp}/>
-            </div>
-          )}
-        {/* ── Opportunity Matrix ── */}
-        <div style={{ marginTop:"2.5rem" }}>
-          <div style={{ marginBottom:"0.75rem" }}>
-            <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:700, color:T.text }}>Opportunity Priority Matrix</h3>
-            <p style={{ margin:0, fontSize:12, color:T.muted }}>Environmental Value × Feasibility — click any dot to open and edit</p>
-          </div>
-
-          {(() => {
-            const CELL = 70;
-            const YAXIS_W = 50;   // rotated label (20) + number column (30)
-
-            // Threshold >= 4 for high
-            const oppQ = (ev, feas) => {
-              const hE = ev >= 4, hF = feas >= 4;
-              if  (!hE && hF)  return { bg:T.purpleBg, bd:T.purpleBd, label:"Pursue",       c:T.purple };
-              if  (hE  && hF)  return { bg:T.greenBg,  bd:T.greenBd,  label:"Quick win",    c:T.green  };
-              if  (!hE && !hF) return { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritize", c:T.slate  };
-              return                   { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",         c:T.blue   };
-            };
-
-            const isQCorner = (ev, feas) =>
-              (ev===1&&feas===5)||(ev===5&&feas===5)||(ev===1&&feas===1)||(ev===5&&feas===1);
-
-            const oGrid = {};
-            opps.forEach(o => {
-              const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
-              const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
-              const k = ev+","+feas;
-              if (!oGrid[k]) oGrid[k] = [];
-              oGrid[k].push(o);
-            });
-
-            return (
-              <div>
-                {/* ── Matrix ── */}
-                <div style={{ overflowX:"auto" }}>
-                  <div style={{ display:"flex", flexDirection:"column", width:"fit-content" }}>
-
-                    {/* ENV VALUE label + numbers — top header */}
-                    <div style={{ display:"flex", flexDirection:"column", marginLeft:YAXIS_W }}>
-                      <div style={{ width:CELL*5, textAlign:"center", paddingBottom:4 }}>
-                        <span style={{ fontSize:9, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
-                          ENVIRONMENTAL VALUE →
-                        </span>
-                      </div>
-                      <div style={{ display:"flex", marginBottom:2 }}>
-                        {[1,2,3,4,5].map(v => (
-                          <div key={v} style={{ width:CELL, flexShrink:0, textAlign:"center" }}>
-                            <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Y-axis + grid rows */}
-                    <div style={{ display:"flex" }}>
-                      {/* Y-axis: rotated label + numbers */}
-                      <div style={{ width:YAXIS_W, flexShrink:0, display:"flex" }}>
-                        <div style={{ width:20, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                          <span style={{ fontSize:9, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
-                            whiteSpace:"nowrap", textTransform:"uppercase", letterSpacing:"0.07em" }}>
-                            FEASIBILITY →
-                          </span>
-                        </div>
-                        <div style={{ width:30 }}>
-                          {[5,4,3,2,1].map(v => (
-                            <div key={v} style={{ height:CELL, display:"flex", alignItems:"center",
-                              justifyContent:"flex-end", paddingRight:6 }}>
-                              <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>{v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Grid cells */}
-                      <div>
-                        {[5,4,3,2,1].map(feas => (
-                          <div key={feas} style={{ display:"flex" }}>
-                            {[1,2,3,4,5].map(ev => {
-                              const q     = oppQ(ev, feas);
-                              const items = oGrid[ev+","+feas]||[];
-                              const isC   = isQCorner(ev, feas);
-                              return (
-                                <div key={ev} style={{ width:CELL, height:CELL, flexShrink:0,
-                                  background:q.bg, border:"1px solid "+q.bd,
-                                  display:"flex", flexWrap:"wrap",
-                                  alignContent:"center", justifyContent:"center",
-                                  gap:4, padding:5, boxSizing:"border-box" }}>
-                                  {items.length===0 && isC && (
-                                    <span style={{ fontSize:9, fontWeight:700, color:q.c,
-                                      opacity:0.5, textAlign:"center", lineHeight:1.3,
-                                      pointerEvents:"none" }}>{q.label}</span>
-                                  )}
-                                  {items.map((o, i) => {
-                                    const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
-                                    const sz = 10 + (bv-1)*3;
-                                    return (
-                                      <div key={i} onClick={()=>setEditOpp(o)}
-                                        title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
-                                        style={{ width:sz, height:sz, borderRadius:"50%",
-                                          background:q.c,
-                                          opacity:0.85,
-                                          cursor:"pointer", flexShrink:0 }}/>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* ── Legend panels (below the grid) ── */}
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 1fr", gap:12, marginTop:"1.25rem" }}>
-
-                  {/* Quadrant guide */}
-                  <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px", minWidth:180 }}>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Quadrant guide</p>
-                    {[
-                      {l:"Pursue",      c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"Low environmental effort, high feasibility"},
-                      {l:"Quick win",   c:T.green, bd:T.greenBd, bg:T.greenBg, d:"High value and achievable"},
-                      {l:"Plan",        c:T.blue,  bd:T.blueBd,  bg:T.blueBg,  d:"High value but low feasibility"},
-                      {l:"Deprioritize",c:T.slate, bd:T.slateBd, bg:T.slateBg, d:"Low value and low feasibility"},
-                    ].map(({l,c,bd,bg,d})=>(
-                      <div key={l} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:8 }}>
-                        <div style={{ width:14, height:14, borderRadius:3, background:bg,
-                          border:"2px solid "+bd, flexShrink:0, marginTop:1 }}/>
-                        <div>
-                          <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:c }}>{l}</div>
-                          <div style={{ fontSize:9, color:T.faint, lineHeight:1.4 }}>{d}</div>
-                        </div>
-                      </div>
-                    ))}
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dot size = Business Value</p>
-                    {[{bv:1,sz:10,l:"Low (1–2)"},{bv:3,sz:16,l:"Moderate (3)"},{bv:5,sz:22,l:"High (4–5)"}].map(({bv,sz,l})=>(
-                      <div key={bv} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
-                        <div style={{ width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                          <div style={{ width:sz, height:sz, borderRadius:"50%", background:T.purple, opacity:0.85 }}/>
-                        </div>
-                        <span style={{ fontSize:9, color:T.muted }}>{l}</span>
-                      </div>
-                    ))}
-                    <p style={{ fontSize:9, color:T.faint, margin:"6px 0 0", lineHeight:1.5 }}>
-                      Faded dots are closed opportunities.
-                    </p>
-                  </div>
-
-                  {/* Environmental Value scale */}
-                  <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Environmental Value (x-axis)</p>
-                    {[
-                      {v:5,l:"Major",      d:"Transformational environmental benefit; measurable improvement at portfolio or regional scale."},
-                      {v:4,l:"Significant",d:"Clear and quantifiable environmental benefit; materially reduces impact or footprint."},
-                      {v:3,l:"Moderate",   d:"Meaningful improvement; reduces environmental impact in a targeted area."},
-                      {v:2,l:"Minor",      d:"Small marginal improvement; limited contribution to overall environmental performance."},
-                      {v:1,l:"Negligible", d:"Negligible direct environmental benefit; primarily internal or administrative gain."},
-                    ].map(({v,l,d})=>(
-                      <div key={v} style={{ marginBottom:9 }}>
-                        <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
-                          <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
-                          <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
-                        </div>
-                        <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Feasibility scale */}
-                  <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                      textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Implementation Feasibility (y-axis)</p>
-                    {[
-                      {v:5,l:"Easy",         d:"Can be implemented with existing resources, no regulatory hurdles, quick payback."},
-                      {v:4,l:"Achievable",   d:"Feasible within normal project constraints; modest investment or process change required."},
-                      {v:3,l:"Moderate",     d:"Requires dedicated effort, some investment, or coordination across teams."},
-                      {v:2,l:"Difficult",    d:"Significant barriers: cost, technology maturity, regulatory complexity, or stakeholder resistance."},
-                      {v:1,l:"Very difficult",d:"Currently not feasible without major breakthroughs in technology, funding, or regulatory change."},
-                    ].map(({v,l,d})=>(
-                      <div key={v} style={{ marginBottom:9 }}>
-                        <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
-                          <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
-                          <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
-                        </div>
-                        <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                </div>
-
-              </div>
-            );
-          })()}
-        </div>
-        </div>
-      )}
-
+      </div>
+    )}
 
       {tab === "footprint" && (
         <FootprintTab project={project} onChange={onChange}/>
       )}
 
-      {tab === "waste" && (() => {
-        const wasteRows     = initWasteRows(project.wasteRows);
-        const fracMeasures  = project.wasteFractionMeasures || {};
-        const [expanded, setExpanded] = React.useState(() => new Set(WASTE_FRACTIONS.map(f => f.fraction)));
-        const [philoOpen, setPhiloOpen] = React.useState(false);
 
-        const updateRow = (id, field, value) => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: cur.map(r => r.id === id ? {...r, [field]: value} : r) });
-        };
-        const updateMeasures = (fraction, value) => {
-          onChange({ ...project, wasteFractionMeasures: { ...fracMeasures, [fraction]: value } });
-        };
-        const addCustom = () => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: [...cur, {
-            id: "custom_" + Date.now(), fraction: "", product: "", isStd: false,
-            construction: "", startup: "", operation: "", measures: ""
-          }]});
-        };
-        const delCustom = id => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: cur.filter(r => r.id !== id) });
-        };
-        const updateCustom = (id, field, value) => {
-          const cur = initWasteRows(project.wasteRows);
-          onChange({ ...project, wasteRows: cur.map(r => r.id === id ? {...r, [field]: value} : r) });
-        };
-        const toggleFraction = f => setExpanded(prev => {
-          const next = new Set(prev);
-          next.has(f) ? next.delete(f) : next.add(f);
-          return next;
-        });
-
-        const customRows = wasteRows.filter(r => !r.isStd);
-        const filledCount = WASTE_FRACTIONS.filter(({fraction}) => {
-          const rows = wasteRows.filter(r => r.isStd && r.fraction === fraction);
-          return rows.some(r => r.construction || r.startup || r.operation) || fracMeasures[fraction];
-        }).length;
-
-        const iw = { padding:"5px 8px", fontSize:11, borderRadius:5, border:"1px solid "+T.border,
-          background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
-        const Dot = ({active}) => (
-          <div style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
-            background: active ? T.green : T.border, transition:"background .15s" }}/>
-        );
-
-        return (
-          <div>
-            {/* ── Header bar ── */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-              marginBottom:"1rem", gap:8, flexWrap:"wrap" }}>
-              <div>
-                <h2 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700, color:T.text }}>
-                  Waste Handling Register
-                </h2>
-                <p style={{ margin:0, fontSize:12, color:T.muted }}>
-                  {filledCount} of {WASTE_FRACTIONS.length} fractions with data
-                </p>
-              </div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                <button onClick={() => setExpanded(new Set(WASTE_FRACTIONS.map(f=>f.fraction)))}
-                  style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
-                    border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
-                  Expand all
-                </button>
-                <button onClick={() => setExpanded(new Set())}
-                  style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
-                    border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
-                  Collapse all
-                </button>
-              </div>
-            </div>
-
-            {/* ── Progress bar ── */}
-            <div style={{ height:4, borderRadius:2, background:T.border, marginBottom:"1.25rem", overflow:"hidden" }}>
-              <div style={{ height:"100%", borderRadius:2, background:T.green,
-                width: (filledCount / WASTE_FRACTIONS.length * 100) + "%", transition:"width .3s" }}/>
-            </div>
-
-            {/* ── Fraction cards ── */}
-            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:"1rem" }}>
-              {WASTE_FRACTIONS.map(({ fraction }) => {
-                const rows    = wasteRows.filter(r => r.isStd && r.fraction === fraction);
-                const isOpen  = expanded.has(fraction);
-                const hasCon  = rows.some(r => r.construction);
-                const hasStu  = rows.some(r => r.startup);
-                const hasOp   = rows.some(r => r.operation);
-                const hasMeas = !!(fracMeasures[fraction]);
-                const anyData = hasCon || hasStu || hasOp || hasMeas;
-
-                return (
-                  <div key={fraction} style={{
-                    border: "1px solid " + (anyData ? T.greenBd : T.border),
-                    borderRadius:9, overflow:"hidden",
-                    borderLeft: "3px solid " + (anyData ? T.green : T.border),
-                    background: T.surface
-                  }}>
-                    {/* Card header */}
-                    <div onClick={() => toggleFraction(fraction)}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                        cursor:"pointer", userSelect:"none",
-                        background: anyData ? T.greenBg : T.surface2 }}
-                      onMouseEnter={e => e.currentTarget.style.opacity = ".85"}
-                      onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-                      <span style={{ flex:1, fontWeight:600, fontSize:13, color:T.text }}>{fraction}</span>
-                      <span style={{ fontSize:11, color:T.muted }}>
-                        {rows.length} product{rows.length !== 1 ? "s" : ""}
-                      </span>
-                      {/* Phase dots */}
-                      <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                        {[["C", hasCon], ["S", hasStu], ["O", hasOp]].map(([lbl, active]) => (
-                          <div key={lbl} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                            <Dot active={active}/>
-                            <span style={{ fontSize:7, color:T.faint, fontFamily:T.mono }}>{lbl}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {hasMeas && (
-                        <span style={{ fontSize:9, color:T.teal, fontFamily:T.mono,
-                          padding:"1px 5px", borderRadius:3, background:T.tealBg,
-                          border:"1px solid "+T.tealBd }}>Measures ✓</span>
-                      )}
-                      <span style={{ color:T.muted, fontSize:12,
-                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                        transition:"transform .2s", display:"inline-block" }}>▾</span>
-                    </div>
-
-                    {/* Card body */}
-                    {isOpen && (
-                      <div style={{ padding:"12px 14px", borderTop:"1px solid "+T.border }}>
-                        {/* Product rows table */}
-                        <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:12, fontSize:12 }}>
-                          <thead>
-                            <tr style={{ background:T.surface2 }}>
-                              <th style={{ padding:"5px 10px", textAlign:"left", fontFamily:T.mono,
-                                fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
-                                letterSpacing:"0.07em", borderBottom:"1px solid "+T.border }}>
-                                Product / Material
-                              </th>
-                              {["Construction / Installation","Start-up / Shut-down","Normal Operation"].map(h => (
-                                <th key={h} style={{ padding:"5px 10px", textAlign:"center", fontFamily:T.mono,
-                                  fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
-                                  letterSpacing:"0.07em", borderBottom:"1px solid "+T.border, width:150 }}>
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map((row, ri) => (
-                              <tr key={row.id}
-                                style={{ borderBottom: ri < rows.length-1 ? "1px solid "+T.rowBd : "none" }}
-                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                                <td style={{ padding:"6px 10px", color:T.text, fontSize:12 }}>{row.product}</td>
-                                {["construction","startup","operation"].map(field => (
-                                  <td key={field} style={{ padding:"4px 8px", textAlign:"center" }}>
-                                    <input value={row[field]||""} placeholder="—"
-                                      onChange={e => updateRow(row.id, field, e.target.value)}
-                                      style={{...iw, textAlign:"center", width:130}}/>
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-
-                        {/* Fraction-level reduction measures */}
-                        <div>
-                          <label style={{ display:"block", fontFamily:T.mono, fontSize:9, fontWeight:600,
-                            color:T.faint, textTransform:"uppercase", letterSpacing:"0.07em",
-                            marginBottom:5 }}>
-                            Waste hierarchy / reduction measures
-                          </label>
-                          <textarea
-                            value={fracMeasures[fraction]||""}
-                            onChange={e => updateMeasures(fraction, e.target.value)}
-                            placeholder={"Describe reduction measures, handling requirements, and disposal routes for " + fraction.toLowerCase() + " waste…"}
-                            rows={3}
-                            style={{ ...iw, resize:"vertical", lineHeight:1.5 }}/>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* ── Custom rows ── */}
-            {customRows.length > 0 && (
-              <div style={{ marginBottom:"1rem" }}>
-                <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
-                  textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>
-                  Other / custom waste streams
-                </p>
-                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {customRows.map(row => (
-                    <div key={row.id} style={{ border:"1px solid "+T.border, borderRadius:8,
-                      borderLeft:"3px solid "+T.amberBd, background:T.surface, overflow:"hidden" }}>
-                      <div style={{ display:"flex", gap:8, padding:"8px 12px",
-                        background:T.amberBg, borderBottom:"1px solid "+T.border, alignItems:"center" }}>
-                        <input value={row.fraction||""} placeholder="Waste fraction name"
-                          onChange={e => updateCustom(row.id, "fraction", e.target.value)}
-                          style={{...iw, fontWeight:600, flex:1}}/>
-                        <button onClick={() => delCustom(row.id)}
-                          style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
-                            border:"1px solid "+T.border, background:"transparent",
-                            color:T.red, cursor:"pointer", flexShrink:0 }}>Remove</button>
-                      </div>
-                      <div style={{ padding:"10px 12px", display:"grid",
-                        gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
-                        <div>
-                          <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>Product</label>
-                          <input value={row.product||""} placeholder="Product / material"
-                            onChange={e => updateCustom(row.id, "product", e.target.value)} style={iw}/>
-                        </div>
-                        {[["construction","Construction / Install."],["startup","Start-up / Shut-down"],["operation","Normal Operation"]].map(([f, lbl]) => (
-                          <div key={f}>
-                            <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>{lbl}</label>
-                            <input value={row[f]||""} placeholder="—"
-                              onChange={e => updateCustom(row.id, f, e.target.value)} style={{...iw, textAlign:"center"}}/>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ padding:"0 12px 10px" }}>
-                        <label style={{ fontSize:9, color:T.faint, display:"block", marginBottom:3, fontFamily:T.mono, textTransform:"uppercase", letterSpacing:".06em" }}>Reduction measures</label>
-                        <textarea value={row.measures||""} placeholder="Describe reduction / handling measures…"
-                          onChange={e => updateCustom(row.id, "measures", e.target.value)}
-                          rows={2} style={{...iw, resize:"vertical", lineHeight:1.5}}/>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <Btn onClick={addCustom} style={{ marginBottom:"1.5rem" }}>+ Add custom waste stream</Btn>
-
-            {/* ── Waste Philosophy ── */}
-            <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
-              <div onClick={() => setPhiloOpen(v => !v)}
-                style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                  padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
-                <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
-                  textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                  Waste philosophy — reduction principles
-                </span>
-                <span style={{ color:T.muted, fontSize:12,
-                  transform: philoOpen ? "rotate(180deg)" : "rotate(0deg)",
-                  transition:"transform .2s", display:"inline-block" }}>▾</span>
-              </div>
-              {philoOpen && (
-                <div style={{ padding:"14px 16px", columns:2, columnGap:24 }}>
-                  {WASTE_PHILOSOPHY.map((item, i) => (
-                    <div key={i} style={{ display:"flex", gap:7, marginBottom:5, breakInside:"avoid" }}>
-                      <span style={{ color:T.green, fontSize:11, flexShrink:0 }}>✓</span>
-                      <span style={{ fontSize:11, color:T.muted, lineHeight:1.5 }}>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {tab === "waste" && <WasteTab project={project} onChange={onChange}/>}
 
       {tab === "attendees" && (() => {
         const sessions    = project.attendeeSessions || [];
