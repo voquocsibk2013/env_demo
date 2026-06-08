@@ -4186,9 +4186,9 @@ This cannot be undone.`)) return;
         </div>
       )}
 
-      {tab === "footprint" && (
+      <div style={{ display: tab === "footprint" ? undefined : "none" }}>
         <FootprintTab project={project} onChange={onChange}/>
-      )}
+      </div>
 
 
       {tab === "waste" && <WasteTab project={project} onChange={onChange}/>}
