@@ -2811,10 +2811,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'<div style="margin-top:36px;padding-top:14px;border-top:2px solid #e2e8f0">'
         +SEC("Appendix &mdash; Matrix Legends")
         +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Risk Matrix</p>'
-        +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px;margin-bottom:20px">'
+        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">'
         +'<div>'+LBL("Zone key")+zLgnd+'<p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin:10px 0 7px">Dots</p>'+dotLgnd+'</div><div>'+LBL("Consequence levels")+cLgnd+'</div><div>'+LBL("Probability levels")+pLgnd+'</div></div>'
         +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Opportunity Matrix</p>'
-        +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:16px">'
+        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">'
         +'<div>'+LBL("Quadrant guide")+oQLgnd+'<p style="font-size:9px;color:#64748b;margin-top:10px"><strong>Dot size</strong> = Business Value &mdash; small&nbsp;(1&ndash;2) &middot; medium&nbsp;(3) &middot; large&nbsp;(4&ndash;5)</p></div><div>'+LBL("Environmental Value")+eLgnd+'</div><div>'+LBL("Feasibility")+fLgnd+'</div></div></div>'
         +'</body></html>';
 
@@ -5492,7 +5492,14 @@ function FootprintTab({ project, onChange }) {
 
   // ── Excel export — MTO sheet + MEL sheet + Summary sheet ────────────────────
   const exportXLSX = () => {
-    if (!displayResult || !displayResult.allRows) return;
+    if (!displayResult) {
+      setToast("No calculation to export yet."); setTimeout(()=>setToast(""),2500); return;
+    }
+    if (!displayResult.allRows || !displayResult.allRows.length) {
+      setToast("Row data isn't loaded — re-upload the source file, then export.");
+      setTimeout(()=>setToast(""),3500); return;
+    }
+   try {
 
     const wb = XLSX.utils.book_new();
     const exportDate = new Date();
@@ -5599,7 +5606,23 @@ function FootprintTab({ project, onChange }) {
     XLSX.utils.book_append_sheet(wb, wsSumm, "Summary");
 
     const slug = (project.name||"footprint").replace(/[^a-z0-9]/gi,"_").toLowerCase();
-    XLSX.writeFile(wb, `${slug}_environmental_budget.xlsx`);
+
+    // Robust download — XLSX.writeFile's internal trigger is unreliable in some
+    // browsers, so build the binary ourselves and download via a Blob + anchor.
+    const wbout = XLSX.write(wb, { bookType:"xlsx", type:"array" });
+    const blob  = new Blob([wbout], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement("a");
+    a.href      = url;
+    a.download  = `${slug}_environmental_budget.xlsx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setToast("Excel downloaded ✓"); setTimeout(()=>setToast(""),2000);
+
+   } catch(err) {
+     console.error("Excel export error:", err);
+     setToast("Excel export failed: " + err.message); setTimeout(()=>setToast(""),3500);
+   }
   };
 
   // ── File intake — worker-based ───────────────────────────────────────────────
