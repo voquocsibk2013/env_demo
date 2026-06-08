@@ -5514,50 +5514,122 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── Excel export — MTO sheet + MEL sheet + Summary sheet ────────────────────
-  const exportCSV = () => {
+  const exportXLSX = () => {
     if (!displayResult || !displayResult.allRows || !displayResult.allRows.length) {
       setToast("No row data — upload and calculate first.");
       setTimeout(() => setToast(""), 3000);
       return;
     }
-    const rows = displayResult.allRows;
-    const esc  = v => {
-      const s = String(v == null ? "" : v);
-      return (s.includes(",") || s.includes('"') || s.includes("\n"))
-        ? '"' + s.replace(/"/g, '""') + '"'
-        : s;
-    };
-    const headers = [
-      "Source","COR Code","Original COR Code","Category",
-      "Description","Material","MHC Code",
-      "Gross Dry Weight (kg)","Emission Factor","Emission (tCO2e)","Status"
-    ];
-    const lines = [
-      headers.join(","),
-      ...rows.map(r => [
-        r.source       || "",
-        r.cor          || "",
-        r._originalCor || r.cor || "",
-        r.category     || "",
-        r.desc         || "",
-        r.material     || "",
-        r.mhc          || "",
-        r.weight        != null ? Number(r.weight).toFixed(2)        : "",
-        r.emissionFactor!= null ? Number(r.emissionFactor).toFixed(6): "",
-        r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : "",
-        r.status       || "",
-      ].map(esc).join(","))
-    ];
-    const slug = (project.name||"footprint").replace(/[^a-z0-9]/gi,"_").toLowerCase();
-    const blob = new Blob([lines.join("\n")], { type:"text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = slug + "_environmental_budget.csv";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    setToast("CSV downloaded ✓");
-    setTimeout(() => setToast(""), 2000);
+    try {
+      const wb  = XLSX.utils.book_new();
+      const now = new Date();
+      const slug = (project.name||"footprint").replace(/[^a-z0-9]/gi,"_").toLowerCase();
+
+      // ── Cell helpers (no style — community edition ignores s: anyway) ────────
+      const s  = v => ({ v: v == null ? "" : String(v),        t: "s" });
+      const n  = (v, fmt)  => ({ v: Number(v),                 t: "n", z: fmt  || "0.00" });
+      const n6 = v         => ({ v: Number(v),                 t: "n", z: "0.000000" });
+      const n2 = v         => ({ v: Number(v),                 t: "n", z: "0.00" });
+      const n4 = v         => ({ v: Number(v),                 t: "n", z: "0.0000" });
+      const d  = v         => ({ v,                            t: "d", z: "DD/MM/YYYY HH:MM" });
+      const hdr = v        => ({ v: String(v),                 t: "s" });
+      // empty cell
+      const e  = ()        => ({ v: "",                        t: "s" });
+
+      const setW = (ws, widths) => { ws["!cols"] = widths.map(w => ({ wch: w })); };
+
+      // ── MTO sheet ────────────────────────────────────────────────────────────
+      const mtoRows = displayResult.allRows.filter(r => r.source === "MTO");
+      const mtoData = [
+        [ hdr("COR Code"), hdr("Original COR Code"), hdr("Category"),
+          hdr("Weight Item Description"), hdr("Material"),
+          hdr("Mod. Handling Code"), hdr("Gross Dry Weight (kg)"),
+          hdr("Emission Factor (tCO2e/tonne)"), hdr("Emission (tCO2e)"), hdr("Status") ],
+        ...mtoRows.map(r => [
+          s(r.cor),
+          s(r._originalCor || r.cor),
+          s(r.category),
+          s(r.desc),
+          s(r.material),
+          s(r.mhc),
+          r.weight        != null ? n2(r.weight)       : e(),
+          r.emissionFactor!= null ? n4(r.emissionFactor): e(),
+          r.emissionTco2e != null ? n6(r.emissionTco2e) : e(),
+          s(r.status),
+        ]),
+        [ s("TOTAL"), e(), e(), e(), e(), e(), e(),
+          s("TOTAL MTO (tCO2e)"), n6(displayResult.mtoTotal || 0), e() ],
+      ];
+      const wsMTO = XLSX.utils.aoa_to_sheet(mtoData);
+      setW(wsMTO, [12, 16, 20, 42, 22, 16, 22, 24, 18, 10]);
+      XLSX.utils.book_append_sheet(wb, wsMTO, "MTO");
+
+      // ── MEL sheet ────────────────────────────────────────────────────────────
+      const melRows = displayResult.allRows.filter(r => r.source === "MEL");
+      const melData = [
+        [ hdr("COR Code"), hdr("Original COR Code"), hdr("Category"),
+          hdr("Equipment Type Description"),
+          hdr("Mod. Handling Code"), hdr("Gross Dry Weight (kg)"),
+          hdr("Emission Factor (tCO2e/tonne)"), hdr("Emission (tCO2e)"), hdr("Status") ],
+        ...melRows.map(r => [
+          s(r.cor),
+          s(r._originalCor || r.cor),
+          s(r.category),
+          s(r.desc),
+          s(r.mhc),
+          r.weight        != null ? n2(r.weight)        : e(),
+          r.emissionFactor!= null ? n4(r.emissionFactor): e(),
+          r.emissionTco2e != null ? n6(r.emissionTco2e) : e(),
+          s(r.status),
+        ]),
+        [ s("TOTAL"), e(), e(), e(), e(), e(),
+          s("TOTAL MEL (tCO2e)"), n6(displayResult.melTotal || 0), e() ],
+      ];
+      const wsMEL = XLSX.utils.aoa_to_sheet(melData);
+      setW(wsMEL, [12, 16, 20, 52, 16, 22, 24, 18, 10]);
+      XLSX.utils.book_append_sheet(wb, wsMEL, "MEL");
+
+      // ── Summary sheet ────────────────────────────────────────────────────────
+      const summData = [
+        [ hdr("Environmental Budget Summary"), e() ],
+        [ s("Project"),   s(project.name    || "") ],
+        [ s("Company"),   s(project.company || "") ],
+        [ s("Contract"),  s(project.contract|| "") ],
+        [ s("Type"),      s(project.type    || "") ],
+        [ s("Phase"),     s(project.phase   || "") ],
+        [ s("Exported"),  d(now)                   ],
+        [ e(), e() ],
+        [ hdr("Section"),                   hdr("Total (tCO2e)") ],
+        [ s("MTO — Material Take-Off"),     n6(displayResult.mtoTotal || 0) ],
+        [ s("MEL — Material Equipment List"),n6(displayResult.melTotal || 0) ],
+        [ s("COMBINED TOTAL"),              n6(displayResult.combined  || 0) ],
+        [ e(), e() ],
+        [ s("MTO rows"),   n(mtoRows.length, "0") ],
+        [ s("MEL rows"),   n(melRows.length, "0") ],
+        [ s("Total rows"), n(mtoRows.length + melRows.length, "0") ],
+      ];
+      const wsSumm = XLSX.utils.aoa_to_sheet(summData);
+      setW(wsSumm, [38, 22]);
+      XLSX.utils.book_append_sheet(wb, wsSumm, "Summary");
+
+      // ── Download — XLSX.write returns ArrayBuffer; Blob accepts ArrayBuffer ──
+      const buf  = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = slug + "_environmental_budget.xlsx";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      setToast("Excel downloaded ✓");
+      setTimeout(() => setToast(""), 2000);
+
+    } catch (err) {
+      console.error("Excel export error:", err);
+      setToast("Export failed: " + err.message);
+      setTimeout(() => setToast(""), 4000);
+    }
   };
 
   // ── File intake — worker-based ───────────────────────────────────────────────
@@ -6248,8 +6320,8 @@ function FootprintTab({ project, onChange }) {
           <button onClick={() => setStep("mapping")} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>
             ← Edit mapping
           </button>
-          <button onClick={exportCSV} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
-            ↓ Download CSV
+          <button onClick={exportXLSX} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
+            ↓ Download Excel
           </button>
           <button onClick={addToProject}
             style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans,
