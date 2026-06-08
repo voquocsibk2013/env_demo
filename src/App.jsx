@@ -5422,11 +5422,23 @@ function applyOverrides(calcResult, overrides) {
 // The summary, overrides, and meta are enough to show dashboard & mapping UI.
 const stripForSave = r => !r ? null : (({ allRows:_, mtoRows:__, melRows:___, ...rest }) => rest)(r);
 
+// ── Session cache — survives React remounts (key changes) within the same tab ─
+// Keyed by project ID so switching projects and back restores the right rows.
+const _fpRowCache = new Map(); // projectId → { allRows, mtoRows, melRows }
+
 function FootprintTab({ project, onChange }) {
   const [step, setStep]           = useState("upload");
   const [fileName, setFileName]   = useState(project.footprintFile || "");
   const [sheetMetas, setSheetMetas] = useState(project.footprintMeta || []);
-  const [result, setResult]       = useState(project.footprint || null);
+  const [result, setResult] = useState(() => {
+    const fp = project.footprint;
+    if (!fp) return null;
+    const cached = _fpRowCache.get(project.id);
+    if (cached && cached.allRows && cached.allRows.length) {
+      return { ...fp, allRows: cached.allRows, mtoRows: cached.mtoRows, melRows: cached.melRows };
+    }
+    return fp;
+  });
   const [suggestions, setSuggestions] = useState({});
   const [corOverrides, setCorOverrides]   = useState(project.footprintCorOverrides || {});
   const [overrideHistory, setOverrideHistory] = useState([project.footprintCorOverrides || {}]);
@@ -5469,6 +5481,17 @@ function FootprintTab({ project, onChange }) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   });  // no dep array — captures latest closure vals via doUndo/doRedo refs
+
+  // Keep session cache up-to-date whenever rows are in memory
+  React.useEffect(() => {
+    if (result && result.allRows && result.allRows.length > 0) {
+      _fpRowCache.set(project.id, {
+        allRows: result.allRows,
+        mtoRows: result.mtoRows,
+        melRows: result.melRows,
+      });
+    }
+  }, [result]);
 
   // displayResult = base result with overrides applied
   const displayResult = React.useMemo(
