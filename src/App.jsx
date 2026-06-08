@@ -5514,138 +5514,50 @@ function FootprintTab({ project, onChange }) {
   };
 
   // ── Excel export — MTO sheet + MEL sheet + Summary sheet ────────────────────
-  const exportXLSX = () => {
-    if (!displayResult) {
-      setToast("No calculation to export yet."); setTimeout(()=>setToast(""),2500); return;
+  const exportCSV = () => {
+    if (!displayResult || !displayResult.allRows || !displayResult.allRows.length) {
+      setToast("No row data — upload and calculate first.");
+      setTimeout(() => setToast(""), 3000);
+      return;
     }
-    if (!displayResult.allRows || !displayResult.allRows.length) {
-      setToast("Row data isn't loaded — re-upload the source file, then export.");
-      setTimeout(()=>setToast(""),3500); return;
-    }
-   try {
-
-    const wb = XLSX.utils.book_new();
-    const exportDate = new Date();
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    const hdrStyle = { font:{ bold:true, color:{ rgb:"FFFFFF" } }, fill:{ fgColor:{ rgb:"1E4D35" } },
-                       alignment:{ horizontal:"center", vertical:"center", wrapText:true } };
-    const subStyle = { font:{ bold:true }, fill:{ fgColor:{ rgb:"D6EAD8" } } };
-    const numFmt6  = "0.000000";
-    const numFmt2  = "0.00";
-    const dateFmt  = "DD/MM/YYYY HH:MM";
-
-    // Annotate sheet array: { v, t?, z?, s? }
-    const cell = (v, t, z) => {
-      if (v == null || v === "") return { v:"", t:"s" };
-      const c = { v, t: t || (typeof v === "number" ? "n" : v instanceof Date ? "d" : "s") };
-      if (z) c.z = z;
-      return c;
+    const rows = displayResult.allRows;
+    const esc  = v => {
+      const s = String(v == null ? "" : v);
+      return (s.includes(",") || s.includes('"') || s.includes("\n"))
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
     };
-    const hdr  = v => ({ v, t:"s", s: hdrStyle });
-    const sub  = v => ({ v, t:"s", s: subStyle });
-
-    const setColWidths = (ws, widths) => {
-      ws["!cols"] = widths.map(w => ({ wch: w }));
-    };
-
-    const autoFreeze = (ws) => { ws["!freeze"] = { xSplit:0, ySplit:2 }; };
-
-    // ── MTO sheet ────────────────────────────────────────────────────────────
-    const MTO_W = [14, 16, 18, 40, 22, 18, 20, 16, 18];
-    const mtoRows = displayResult.allRows.filter(r => r.source === "MTO");
-    const mtoAoa  = [
-      [ hdr("COR Code"), hdr("Original COR Code"), hdr("Category"),
-        hdr("Weight Item Descr."), hdr("Material"),
-        hdr("Mod. Handl. Code"), hdr("Gross Dry Weight (kg)"),
-        hdr("Emission Factor"), hdr("Emission (tCO2e)") ],
-      ...mtoRows.map(r => [
-        cell(r.cor||""),
-        cell(r._originalCor||r.cor||""),
-        cell(r.category||""),
-        cell(r.desc||""),
-        cell(r.material||""),
-        cell(r.mhc||""),
-        r.weight != null ? cell(Number(r.weight),"n",numFmt2) : cell(""),
-        r.emissionFactor != null ? cell(Number(r.emissionFactor),"n","0.0000") : cell(""),
-        r.emissionTco2e  != null ? cell(Number(r.emissionTco2e), "n",numFmt6)  : cell(""),
-      ]),
-      [ sub("TOTAL"), sub(""), sub(""), sub(""), sub(""), sub(""),
-        sub(""), sub("TOTAL MTO (tCO2e)"),
-        { v: displayResult.mtoTotal, t:"n", z:numFmt6, s:subStyle } ],
+    const headers = [
+      "Source","COR Code","Original COR Code","Category",
+      "Description","Material","MHC Code",
+      "Gross Dry Weight (kg)","Emission Factor","Emission (tCO2e)","Status"
     ];
-    const wsMTO = XLSX.utils.aoa_to_sheet(mtoAoa);
-    setColWidths(wsMTO, MTO_W);
-    XLSX.utils.book_append_sheet(wb, wsMTO, "MTO");
-
-    // ── MEL sheet ────────────────────────────────────────────────────────────
-    const MEL_W = [14, 16, 18, 50, 18, 20, 16, 18];
-    const melRows = displayResult.allRows.filter(r => r.source === "MEL");
-    const melAoa  = [
-      [ hdr("COR Code"), hdr("Original COR Code"), hdr("Category"),
-        hdr("Equipment Type Description"),
-        hdr("Mod. Handl. Code"), hdr("Gross Dry Weight (kg)"),
-        hdr("Emission Factor"), hdr("Emission (tCO2e)") ],
-      ...melRows.map(r => [
-        cell(r.cor||""),
-        cell(r._originalCor||r.cor||""),
-        cell(r.category||""),
-        cell(r.desc||""),
-        cell(r.mhc||""),
-        r.weight != null ? cell(Number(r.weight),"n",numFmt2) : cell(""),
-        r.emissionFactor != null ? cell(Number(r.emissionFactor),"n","0.0000") : cell(""),
-        r.emissionTco2e  != null ? cell(Number(r.emissionTco2e), "n",numFmt6)  : cell(""),
-      ]),
-      [ sub("TOTAL"), sub(""), sub(""), sub(""),
-        sub(""), sub(""), sub("TOTAL MEL (tCO2e)"),
-        { v: displayResult.melTotal, t:"n", z:numFmt6, s:subStyle } ],
+    const lines = [
+      headers.join(","),
+      ...rows.map(r => [
+        r.source       || "",
+        r.cor          || "",
+        r._originalCor || r.cor || "",
+        r.category     || "",
+        r.desc         || "",
+        r.material     || "",
+        r.mhc          || "",
+        r.weight        != null ? Number(r.weight).toFixed(2)        : "",
+        r.emissionFactor!= null ? Number(r.emissionFactor).toFixed(6): "",
+        r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(6) : "",
+        r.status       || "",
+      ].map(esc).join(","))
     ];
-    const wsMEL = XLSX.utils.aoa_to_sheet(melAoa);
-    setColWidths(wsMEL, MEL_W);
-    XLSX.utils.book_append_sheet(wb, wsMEL, "MEL");
-
-    // ── Summary sheet ────────────────────────────────────────────────────────
-    const fp = project.footprintSummary;
-    const summAoa = [
-      [ hdr("Environmental Budget Summary"), hdr("") ],
-      [ sub("Project"),   cell(project.name||"")      ],
-      [ sub("Company"),   cell(project.company||"")   ],
-      [ sub("Contract"),  cell(project.contract||"")  ],
-      [ sub("Type"),      cell(project.type||"")      ],
-      [ sub("Phase"),     cell(project.phase||"")     ],
-      [ sub("Exported"),  cell(exportDate,"d",dateFmt)],
-      [ cell(""), cell("") ],
-      [ hdr("Section"), hdr("Total (tCO2e)") ],
-      [ cell("MTO — Material Take-Off"), cell(displayResult.mtoTotal,"n",numFmt6) ],
-      [ cell("MEL — Material Equipment List"), cell(displayResult.melTotal,"n",numFmt6) ],
-      [ sub("COMBINED"), { v: displayResult.combined, t:"n", z:numFmt6, s:subStyle } ],
-      [ cell(""), cell("") ],
-      [ cell("MTO rows"), cell(mtoRows.length,"n","0") ],
-      [ cell("MEL rows"), cell(melRows.length,"n","0") ],
-      [ cell("Total rows"), cell(mtoRows.length+melRows.length,"n","0") ],
-    ];
-    const wsSumm = XLSX.utils.aoa_to_sheet(summAoa);
-    wsSumm["!cols"] = [{ wch:38 }, { wch:22 }];
-    XLSX.utils.book_append_sheet(wb, wsSumm, "Summary");
-
     const slug = (project.name||"footprint").replace(/[^a-z0-9]/gi,"_").toLowerCase();
-
-    // Robust download — XLSX.writeFile's internal trigger is unreliable in some
-    // browsers, so build the binary ourselves and download via a Blob + anchor.
-    const wbout = XLSX.write(wb, { bookType:"xlsx", type:"array" });
-    const blob  = new Blob([wbout], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url   = URL.createObjectURL(blob);
-    const a     = document.createElement("a");
-    a.href      = url;
-    a.download  = `${slug}_environmental_budget.xlsx`;
+    const blob = new Blob([lines.join("\n")], { type:"text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = slug + "_environmental_budget.csv";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    setToast("Excel downloaded ✓"); setTimeout(()=>setToast(""),2000);
-
-   } catch(err) {
-     console.error("Excel export error:", err);
-     setToast("Excel export failed: " + err.message); setTimeout(()=>setToast(""),3500);
-   }
+    setToast("CSV downloaded ✓");
+    setTimeout(() => setToast(""), 2000);
   };
 
   // ── File intake — worker-based ───────────────────────────────────────────────
@@ -6336,8 +6248,8 @@ function FootprintTab({ project, onChange }) {
           <button onClick={() => setStep("mapping")} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>
             ← Edit mapping
           </button>
-          <button onClick={exportXLSX} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
-            ↓ Download Excel
+          <button onClick={exportCSV} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
+            ↓ Download CSV
           </button>
           <button onClick={addToProject}
             style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans,
