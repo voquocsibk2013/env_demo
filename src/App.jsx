@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { idbGet, idbSet, idbAvailable } from "./storage";
 
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -5420,7 +5421,32 @@ function applyOverrides(calcResult, overrides) {
 // ── Strip large row arrays before persisting footprint to project ──────────────
 // allRows/mtoRows/melRows can be 100k+ items; keep them in session memory only.
 // The summary, overrides, and meta are enough to show dashboard & mapping UI.
-const stripForSave = r => !r ? null : (({ allRows:_, mtoRows:__, melRows:___, ...rest }) => rest)(r);
+// Drop the large per-row arrays AND the (potentially huge) per-row error list before
+// persisting. Only compact, summary-level fields are stored; full detail stays in the
+// in-session result and is available via the Download Excel button.
+const stripForSave = r => !r ? null : (({ allRows:_, mtoRows:__, melRows:___, errors:____, ...rest }) => rest)(r);
+
+// Build a small, persistable summary (totals + NP/RP split + category breakdown) from a
+// full calculation result. This is what the dashboard / portfolio show after a reload.
+function summarizeFootprint(r) {
+  if (!r || !r.success) return null;
+  const rows = (r.allRows || []).filter(x => x && x.status === "VALID");
+  const byCat = {};
+  rows.forEach(x => { const k = x.category || "Uncategorised"; byCat[k] = (byCat[k] || 0) + (x.emissionTco2e || 0); });
+  const catBreakdown = Object.entries(byCat)
+    .filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    .map(([cat, tco2e]) => ({ cat, tco2e }));
+  return {
+    scope:    "Scope 3 Cat 1",
+    combined: r.combined != null ? r.combined : (r.mtoTotal || 0) + (r.melTotal || 0),
+    mtoTotal: r.mtoTotal || 0,
+    melTotal: r.melTotal || 0,
+    npTotal:  rows.filter(x => x.mhc === "NP").reduce((s, x) => s + (x.emissionTco2e || 0), 0),
+    rpTotal:  rows.filter(x => x.mhc === "RP").reduce((s, x) => s + (x.emissionTco2e || 0), 0),
+    catBreakdown,
+    date: new Date().toISOString(),
+  };
+}
 
 // ── Session cache — survives React remounts (key changes) within the same tab ─
 // Keyed by project ID so switching projects and back restores the right rows.
@@ -5709,7 +5735,9 @@ function FootprintTab({ project, onChange }) {
         setWorkerBusy(false);
         setResult(cal); setView("summary"); setStep("result");
         setCorOverrides({});
-        onChange({ ...project, footprint: stripForSave(cal), footprintFile: fileName,
+        onChange({ ...project, footprint: stripForSave(cal),
+                   footprintSummary: summarizeFootprint(cal),  // compact totals persist across reloads
+                   footprintFile: fileName,
                    footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
         setSuggestions({});
       } else if (type === "ERROR") {
@@ -6759,36 +6787,52 @@ export default function App() {
   const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
-    applyTheme("light");
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const d = JSON.parse(saved);
-        if (d.projects && d.projects.length) {
-          setProjects(d.projects);
-          setActiveId(d.activeId || d.projects[0].id);
+    let cancelled = false;
+    (async () => {
+      applyTheme("light");
+      try {
+        let d = idbAvailable() ? await idbGet(STORAGE_KEY) : null;
+        // One-time migration from the legacy localStorage blob -> IndexedDB.
+        if (!d) {
+          const legacy = localStorage.getItem(STORAGE_KEY);
+          if (legacy) {
+            d = JSON.parse(legacy);
+            if (idbAvailable()) {
+              try { await idbSet(STORAGE_KEY, d); localStorage.removeItem(STORAGE_KEY); } catch {}
+            }
+          }
         }
-        if (d.theme === "dark") { setIsDark(true); applyTheme("dark"); }
+        if (!cancelled && d) {
+          if (d.projects && d.projects.length) {
+            setProjects(d.projects);
+            setActiveId(d.activeId || d.projects[0].id);
+          }
+          if (d.theme === "dark") { setIsDark(true); applyTheme("dark"); }
+        }
+      } catch (e) {
+        console.error("env-toolkit: failed to load saved data", e);
       }
-    } catch {}
-    setLoaded(true);
+      if (!cancelled) setLoaded(true);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId, theme: isDark?"dark":"light" }));
-      setSaveError(null);
-    } catch (err) {
-      console.error("env-toolkit: failed to save to localStorage", err);
-      const quota = err && (err.name === "QuotaExceededError" || err.code === 22 || err.code === 1014);
-      setSaveError(
-        quota
-          ? "Storage is full — your most recent changes are NOT saved. Export this project now (Settings \u2192 \u2193 Export project), then delete old projects to free space."
-          : "Your most recent changes could NOT be saved to this browser. Export this project now (Settings \u2192 \u2193 Export project) to avoid losing work."
-      );
-    }
+    const payload = { projects, activeId, theme: isDark ? "dark" : "light" };
+    // Debounced so rapid edits (typing) don't rewrite the whole state on every keystroke.
+    const t = setTimeout(async () => {
+      try {
+        if (idbAvailable()) await idbSet(STORAGE_KEY, payload);
+        else localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); // fallback for very old browsers
+        setSaveError(null);
+      } catch (err) {
+        console.error("env-toolkit: failed to save", err);
+        setSaveError("Your most recent changes could NOT be saved to this browser. Export this project now (Settings → ↓ Export project) to avoid losing work.");
+      }
+    }, 300);
     try { localStorage.setItem("env-zoom", String(zoom)); } catch {}
+    return () => clearTimeout(t);
   }, [projects, activeId, loaded, isDark, zoom]);
 
   useEffect(() => { document.body.style.zoom = String(zoom); }, [zoom]);
@@ -6852,7 +6896,7 @@ export default function App() {
                   background:"#A32D2D", color:"#fff", padding:"10px 16px", fontSize:13, lineHeight:1.4,
                   fontFamily:T.sans, display:"flex", alignItems:"center", gap:12,
                   justifyContent:"space-between", boxShadow:"0 2px 10px rgba(0,0,0,.3)" }}>
-        <span><strong>\u26a0 Not saved.</strong> {saveError}</span>
+        <span><strong>⚠ Not saved.</strong> {saveError}</span>
         <button onClick={()=>setSaveError(null)}
           style={{ flexShrink:0, background:"transparent", color:"#fff", border:"1px solid rgba(255,255,255,.6)",
                    borderRadius:5, padding:"3px 12px", fontSize:12, cursor:"pointer", fontFamily:T.sans }}>
