@@ -3009,13 +3009,13 @@ This cannot be undone.`)) return;
 This cannot be undone.`)) return;
     const kept = opps.filter(o=>!selectedOpp.has(o.id));
     const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed",[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
-    onChange({ ...project, opps:kept, changelog:[...(project.changelog||[]), log] });
+    onChange({ ...project, opportunities:kept, changelog:[...(project.changelog||[]), log] });
     setSelectedOpp(new Set());
   };
   const bulkSetOppStatus = (status) => {
     const updated = opps.map(o => selectedOpp.has(o.id) ? { ...o, status } : o);
     const log  = logChange("Bulk updated opp status", `${selectedOpp.size} opportunity(s) → ${status}`,[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
-    onChange({ ...project, opps:updated, changelog:[...(project.changelog||[]), log] });
+    onChange({ ...project, opportunities:updated, changelog:[...(project.changelog||[]), log] });
     setSelectedOpp(new Set());
   };
   const toggleSelAsp = (id) => setSelectedAsp(prev => { const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
@@ -6756,6 +6756,7 @@ export default function App() {
   const [isDark,   setIsDark]   = useState(false);
   const [zoom,    setZoom]    = useState(() => parseFloat(localStorage.getItem("env-zoom")||"1"));
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
     applyTheme("light");
@@ -6775,9 +6776,20 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId, theme: isDark?"dark":"light" })); } catch {}
-    localStorage.setItem("env-zoom", String(zoom));
-  }, [projects, activeId, loaded, isDark]);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, activeId, theme: isDark?"dark":"light" }));
+      setSaveError(null);
+    } catch (err) {
+      console.error("env-toolkit: failed to save to localStorage", err);
+      const quota = err && (err.name === "QuotaExceededError" || err.code === 22 || err.code === 1014);
+      setSaveError(
+        quota
+          ? "Storage is full — your most recent changes are NOT saved. Export this project now (Settings \u2192 \u2193 Export project), then delete old projects to free space."
+          : "Your most recent changes could NOT be saved to this browser. Export this project now (Settings \u2192 \u2193 Export project) to avoid losing work."
+      );
+    }
+    try { localStorage.setItem("env-zoom", String(zoom)); } catch {}
+  }, [projects, activeId, loaded, isDark, zoom]);
 
   useEffect(() => { document.body.style.zoom = String(zoom); }, [zoom]);
 
@@ -6806,10 +6818,11 @@ export default function App() {
       id: newId,
       name: (src.name||"Unnamed")+" (copy)",
       createdAt: new Date().toISOString(),
-      aspects: (src.aspects||[]).map((a,i) => ({ ...a, id:(ts+i+1).toString() })),
-      opps:    (src.opps||[]).map((o,i)    => ({ ...o, id:(ts+100+i).toString() })),
+      aspects:       (src.aspects||[]).map((a,i)       => ({ ...a, id:`${newId}-a${i}` })),
+      opportunities: (src.opportunities||src.opps||[]).map((o,i) => ({ ...o, id:`${newId}-o${i}` })),
       changelog: [],
     };
+    delete copy.opps; // drop any legacy mis-named field carried over by the spread
     setProjects(prev => {
       const idx = prev.findIndex(p=>p.id===id);
       const next = [...prev];
@@ -6833,6 +6846,20 @@ export default function App() {
   const active = projects.find(p => p.id === activeId) || null;
 
   return (
+   <>
+    {saveError && (
+      <div role="alert" style={{ position:"fixed", top:0, left:0, right:0, zIndex:9999,
+                  background:"#A32D2D", color:"#fff", padding:"10px 16px", fontSize:13, lineHeight:1.4,
+                  fontFamily:T.sans, display:"flex", alignItems:"center", gap:12,
+                  justifyContent:"space-between", boxShadow:"0 2px 10px rgba(0,0,0,.3)" }}>
+        <span><strong>\u26a0 Not saved.</strong> {saveError}</span>
+        <button onClick={()=>setSaveError(null)}
+          style={{ flexShrink:0, background:"transparent", color:"#fff", border:"1px solid rgba(255,255,255,.6)",
+                   borderRadius:5, padding:"3px 12px", fontSize:12, cursor:"pointer", fontFamily:T.sans }}>
+          Dismiss
+        </button>
+      </div>
+    )}
     <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
                isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}
@@ -6876,5 +6903,6 @@ export default function App() {
         )}
       </div>
     </div>
+   </>
   );
 }

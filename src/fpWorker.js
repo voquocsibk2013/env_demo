@@ -9,7 +9,7 @@
 //   { type: 'PROGRESS',    pct: 0-100, label: string }
 //   { type: 'ERROR',       message: string }
 
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+import * as XLSX from 'xlsx';
 
 // ────── shared logic (duplicated from App.jsx — keep in sync) ──────────────
 // ── COR Lookup ───────────────────────────────────────────────────────────────
