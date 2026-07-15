@@ -596,8 +596,8 @@ const T = {
   sbFaint:  "var(--sb-faint)",
   sbSig:    "var(--sb-sig)",
   sbSigTx:  "var(--sb-sig-text)",
-  mono:     "'Inter', system-ui, sans-serif",
-  sans:     "'Inter', system-ui, sans-serif",
+  mono:     "var(--mono)",
+  sans:     "var(--sans)",
 };
 
 
@@ -1101,7 +1101,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                 const cqty=parseFloat(cr.reduction||cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
                 const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
                 return(
-                  <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg+"22"}}>
+                  <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg}}>
                     {visibleScopes.length>1&&<td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd}}/>}
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
                       {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"type",e.target.value)}
@@ -1153,7 +1153,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                           placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
                             border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
                         <button onClick={()=>onDelCustomRow(si,cr.uid)}
-                          style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>✕</button>
+                          style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>×</button>
                       </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
                     </td>
                   </tr>
@@ -1237,7 +1237,7 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
                          color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
                   onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
                   onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
-                  ✕
+                  ×
                 </button>
               )}
             </div>
@@ -1582,7 +1582,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                                color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
                         onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
                         onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
-                        ✕
+                        ×
                       </button>
                     )}
                   </div>
@@ -1692,7 +1692,7 @@ function OppForm({ opp, onSave, onCancel }) {
 
 // ── Shared table ─────────────────────────────────────────────────────────────
 const TH = ({ children }) => (
-  <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:"'IBM Plex Mono',monospace",
+  <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:"var(--mono)",
                fontWeight:500, fontSize:9, color:"var(--muted)", borderBottom:"1px solid var(--border)",
                whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase",
                background:"var(--surface2)" }}>
@@ -2485,7 +2485,7 @@ function WasteTab({ project, onChange }) {
               <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.text }}>
                 {editing.isStd ? "Edit waste stream" : "Custom waste stream"}
               </h3>
-              <button onClick={() => setEditId(null)} style={{ fontSize:18, lineHeight:1, padding:"2px 8px", borderRadius:6, border:"none", background:"transparent", color:T.muted, cursor:"pointer" }}>✕</button>
+              <button onClick={() => setEditId(null)} style={{ fontSize:18, lineHeight:1, padding:"2px 8px", borderRadius:6, border:"none", background:"transparent", color:T.muted, cursor:"pointer" }}>×</button>
             </div>
 
             <div style={{ padding:"18px", display:"flex", flexDirection:"column", gap:16, maxHeight:"72vh", overflowY:"auto" }}>
@@ -2891,7 +2891,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   };
 
   const changelog = project.changelog || [];
-  const nextRef = (arr, pfx) => pfx+"-"+String(arr.length+1).padStart(3,"0");
+  const nextRef = (arr, pfx) => {
+    const max = arr.reduce((m,x)=>Math.max(m, parseInt(String(x.ref||"").split("-").pop(),10)||0), 0);
+    return pfx+"-"+String(max+1).padStart(3,"0");
+  };
 
   const logChange = (action, detail, fields) => {
     const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail, fields:fields||[] };
@@ -3150,7 +3153,7 @@ This cannot be undone.`)) return;
       <button onClick={()=> onStatusChange(null)}
         style={{ fontSize:11, padding:"4px 8px", borderRadius:4, border:"none",
                  background:"transparent", color:accentColor, cursor:"pointer", marginLeft:"auto" }}>
-        Clear ✕
+        Clear ×
       </button>
     </div>
   );
@@ -3280,7 +3283,7 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>x</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(a)}>×</Btn>
                 </td>
               </tr>
             );
@@ -3373,7 +3376,7 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
-                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>x</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>onDel(o)}>×</Btn>
                 </td>
               </tr>
             );
@@ -6507,7 +6510,7 @@ function FootprintTab({ project, onChange }) {
                   const c = catC(r.category);
                   return (
                     <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd,
-                      background: r._overridden ? T.purpleBg + "33" : r.status === "ERROR" ? T.redBg + "33" : undefined }}>
+                      background: r._overridden ? T.purpleBg : r.status === "ERROR" ? T.redBg : undefined }}>
                       <td style={{ padding: "6px 10px" }}>
                         <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 6px", borderRadius: 3,
                           background: r.source === "MTO" ? T.tealBg : T.blueBg,
@@ -6635,7 +6638,7 @@ function FootprintTab({ project, onChange }) {
                         const allSamples = [...new Set(baseRows.map(r => r.desc).filter(Boolean))].slice(0, 6);
                         const localSugs  = localSuggestCOR(allSamples);
                         return (
-                          <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg + "33" : undefined, verticalAlign: "top" }}>
+                          <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg : undefined, verticalAlign: "top" }}>
                             <td style={{ padding: "12px 14px" }}>
                               <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: allDone ? T.green : T.red }}>{code}</span>
                               {allDone && <div style={{ fontSize: 10, color: T.green, marginTop: 2 }}>✓ remapped</div>}
@@ -6882,7 +6885,7 @@ export default function App() {
   };
 
   if (!loaded) return (
-    <div style={{ padding:"2rem", fontFamily:"'IBM Plex Mono',monospace", fontSize:12, color:"var(--muted)", background:"var(--bg)", minHeight:"100vh" }}>
+    <div style={{ padding:"2rem", fontFamily:"var(--mono)", fontSize:12, color:"var(--muted)", background:"var(--bg)", minHeight:"100vh" }}>
       Loading...
     </div>
   );
