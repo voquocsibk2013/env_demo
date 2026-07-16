@@ -1018,9 +1018,21 @@ function relevantLines(type, prefillIds) {
 }
 
 // ── GHG snapshot table (hoisted to module level to prevent input focus loss) ──
+// arm-then-fire confirm: first activation arms (for 4s), second fires; arm(null) cancels
+const useArmedConfirm = () => {
+  const [armed, setArmed] = useState(null);
+  useEffect(() => {
+    if (armed == null) return;
+    const t = setTimeout(() => setArmed(null), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return [armed, setArmed];
+};
+
 function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGroups,
                         customForScope, SCOPE_COLORS, thS, tdS, fmt, snapKgFn,
                         onSetLine, onSetCustomRow, onAddCustomRow, onDelCustomRow }) {
+  const [armedDel, armDel] = useArmedConfirm();  // custom-row id armed for delete
   const t = snapKgFn(snap);  // {identified, actual}
   return (
     <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
@@ -1098,10 +1110,11 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                 );
               }),
               ...crows.map(cr=>{
+                const crid=cr.id||cr.uid;  // rows are created with id; uid only on legacy data
                 const cqty=parseFloat(cr.reduction||cr.qty)||0,ccf=parseFloat(cr.cf)||0,csav=cqty&&ccf?cqty*ccf:null;
                 const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
                 return(
-                  <tr key={cr.uid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg}}>
+                  <tr key={crid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg}}>
                     {visibleScopes.length>1&&<td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd}}/>}
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
                       {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"type",e.target.value)}
@@ -1149,11 +1162,13 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                     </td>
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
                       {editable?<div style={{display:"flex",gap:3,alignItems:"center"}}>
-                        <input value={cr.ref||""} onChange={e=>onSetCustomRow(si,cr.uid,"ref",e.target.value)}
+                        <input value={cr.ref||""} onChange={e=>onSetCustomRow(si,crid,"ref",e.target.value)}
                           placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
                             border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                        <button onClick={()=>onDelCustomRow(si,cr.uid)}
-                          style={{fontSize:11,color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>×</button>
+                        <button onClick={()=>{ if(armedDel===crid){ armDel(null); onDelCustomRow(si,crid); } else armDel(crid); }}
+                          style={{fontSize:armedDel===crid?10:11,fontWeight:armedDel===crid?600:400,minWidth:34,whiteSpace:"nowrap",
+                            color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>
+                          {armedDel===crid?"Sure?":"×"}</button>
                       </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
                     </td>
                   </tr>
@@ -1510,8 +1525,8 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                 const qp=f.qualPhases||[];
                 if(qp.length===0){
                   setF(p=>({...p,qualPhases:[{id:"qp_"+Date.now(),label:"Phase 1",date:new Date().toISOString(),note:""}]}));
-                } else {
-                  setF(p=>({...p,qualPhases:[]})); // hide = clear phases (confirmed by user)
+                } else if (window.confirm("Remove all qualitative phases? Data will be lost.")) {
+                  setF(p=>({...p,qualPhases:[]}));
                 }
               }}
               style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
@@ -1701,7 +1716,7 @@ const TH = ({ children }) => (
 );
 
 // ── Screening tab ─────────────────────────────────────────────────────────────
-function ScreeningTab({ project, onAddAspect, onAddOpp }) {
+function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
   const [mode, setMode]               = useState("risks");
   const [expanded, setExpanded]       = useState({});
   const [view, setView]               = useState("guide");
@@ -1710,9 +1725,10 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
   const [toast, setToast]             = useState("");
   const [screenSearch, setScreenSearch] = useState("");
   const [noxWarn, setNoxWarn]         = useState(false);
-  // Session-only skip state — tracks which items were consciously passed over
-  const [skipped, setSkipped]         = useState({});
-  const toggleSkip = id => setSkipped(p=>({...p,[id]:!p[id]}));
+  // Skips are workshop decisions, not view state — persisted on the project record
+  const skipped    = project.screeningSkips || {};
+  const toggleSkip = id => onChange({ ...project,
+    screeningSkips: { ...skipped, [id]: !skipped[id] } });
   // Track which items have been added this session (by item id → aspect ref)
   const addedItems = {};
   (project.aspects||[]).forEach(a=>{ if(a._screeningId) addedItems[a._screeningId]=a.ref; });
@@ -2033,7 +2049,7 @@ function ScreeningTab({ project, onAddAspect, onAddOpp }) {
                           )}
                           {!isAdded&&(
                             <>
-                              <button onClick={()=>setSkipped(p=>({...p,["opp_"+btn.id]:!p["opp_"+btn.id]}))}
+                              <button onClick={()=>toggleSkip("opp_"+btn.id)}
                                 style={{fontSize:11,padding:"2px 8px",borderRadius:12,
                                   border:"1px solid "+T.border,background:"transparent",
                                   color:isSkipped?T.muted:T.faint,cursor:"pointer",
@@ -2297,7 +2313,11 @@ function WasteTab({ project, onChange }) {
       hazardous:false, treatment:"", methods:[], measures:"" }]);
     setEditId(id);
   };
-  const delStream = (id) => { save(rows.filter(r => r.id !== id)); setEditId(null); };
+  const delStream = (id) => {
+    const r = rows.find(x => x.id === id);
+    if (!window.confirm(`Delete waste stream${r?.fraction ? " \"" + r.fraction + "\"" : ""}? This cannot be undone.`)) return;
+    save(rows.filter(x => x.id !== id)); setEditId(null);
+  };
 
   const rowTotal = (r) => ["construction","startup","operation"]
     .reduce((s,f) => s + (parseFloat(r[f]) || 0), 0);
@@ -2611,6 +2631,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [selectedAsp, setSelectedAsp]     = useState(new Set());
   const [selectedOpp, setSelectedOpp]     = useState(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [armedDelSession, armDelSession]  = useArmedConfirm();  // session id armed for delete
   const [clFrom, setClFrom] = useState(() => {
     const d=new Date(); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0);
     return d.toISOString().slice(0,10);
@@ -2872,6 +2893,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           // Objects — coerce to {} if missing or wrong type
           footprintCorOverrides: (src.footprintCorOverrides && typeof src.footprintCorOverrides === "object"
             && !Array.isArray(src.footprintCorOverrides)) ? src.footprintCorOverrides : {},
+          screeningSkips: (src.screeningSkips && typeof src.screeningSkips === "object"
+            && !Array.isArray(src.screeningSkips)) ? src.screeningSkips : {},
           footprintMeta: Array.isArray(src.footprintMeta) ? src.footprintMeta : [],
           // Footprint result — strip row arrays (they're large and session-only)
           footprint: src.footprint ? stripForSave(src.footprint) : null,
@@ -3044,7 +3067,7 @@ This cannot be undone.`)) return;
                     : dashFilter==="sig"     ? aspects.filter(a=>calcSig(a)==="SIGNIFICANT")
                     : dashFilter==="watch"   ? aspects.filter(a=>calcSig(a)==="MEDIUM")
                     : dashFilter==="low"     ? aspects.filter(a=>calcSig(a)==="Low")
-                    : dashFilter==="opps"    ? aspects
+                    : dashFilter==="action"  ? aspects.filter(a=>a.status==="Action")
                     : aspects;
 
   const filteredAspects = (() => {
@@ -3094,7 +3117,8 @@ This cannot be undone.`)) return;
   const StatCard = ({ label, value, bg, color, border, filterId }) => {
     const active = dashFilter === filterId;
     return (
-      <div onClick={() => { setDashFilter(dashFilter===filterId?"all":filterId); if(filterId!=="opps") setTab("dashboard"); }}
+      <div onClick={() => { if (filterId==="opps") { setTab("opportunities"); return; }
+        setDashFilter(dashFilter===filterId?"all":filterId); }}
         style={{ background:bg||T.surface, borderRadius:7, padding:"12px 14px",
                  border: active ? "2px solid "+color : "1px solid "+(border||T.border),
                  cursor:"pointer", transition:"all 0.15s",
@@ -3427,8 +3451,8 @@ This cannot be undone.`)) return;
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:"1.25rem" }}>
             <StatCard label="All aspects"   value={aspects.length + opps.length}                         filterId="all"  color={T.text}   border={T.border}   bg={T.surface}/>
             <StatCard label="Significant"   value={sigCount}                                              filterId="sig"  color={T.red}    border={T.redBd}    bg={T.redBg}/>
-            <StatCard label="Action risks"  value={aspects.filter(a=>a.status==="Action").length}         filterId="all"  color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
-            <StatCard label="Opportunities" value={opps.length}                                           filterId="opps" color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
+            <StatCard label="Action risks"  value={aspects.filter(a=>a.status==="Action").length}         filterId="action" color={T.amber}  border={T.amberBd}  bg={T.amberBg}/>
+            <StatCard label="Opportunities ›" value={opps.length}                                         filterId="opps" color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
           </div>
 
           {/* ── Footprint card (if pinned) ── */}
@@ -3726,7 +3750,7 @@ This cannot be undone.`)) return;
       )}
 
       {tab === "screening" && (
-        <ScreeningTab project={project} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
+        <ScreeningTab project={project} onChange={onChange} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
       )}
 
       {tab === "risks" && (
@@ -4270,10 +4294,16 @@ This cannot be undone.`)) return;
                     <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint, flexShrink:0 }}>
                       {sess.rows.filter(r=>r.name).length} attendee{sess.rows.filter(r=>r.name).length!==1?"s":""}
                     </span>
-                    <button onClick={()=>deleteSession(sess.id)}
-                      style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
-                        border:"1px solid "+T.border, background:"transparent",
-                        color:T.faint, cursor:"pointer" }}>Remove session</button>
+                    {armedDelSession===sess.id
+                      ? <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                          <span style={{ fontFamily:T.mono, fontSize:11, color:T.red }}>Are you sure?</span>
+                          <Btn variant="danger" onClick={()=>{ armDelSession(null); deleteSession(sess.id); }}>Yes, delete</Btn>
+                          <Btn onClick={()=>armDelSession(null)}>Cancel</Btn>
+                        </div>
+                      : <button onClick={()=>armDelSession(sess.id)}
+                          style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
+                            border:"1px solid "+T.border, background:"transparent",
+                            color:T.faint, cursor:"pointer" }}>Remove session</button>}
                   </div>
 
                   {/* Attendee table */}
