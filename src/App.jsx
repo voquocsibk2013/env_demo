@@ -1056,7 +1056,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                 const qty=parseFloat(l.reduction||l.qty)||0,cf=parseFloat(l.cf)||0;
                 const sav=qty&&cf?qty*cf:null;
                 return(
-                  <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,background:qty>0?sc2.bg+"44":undefined}}>
+                  <tr key={l.id} style={{borderBottom:"1px solid "+T.rowBd,background:qty>0?sc2.bg:undefined}}>
                     {visibleScopes.length>1&&li===0&&<td rowSpan={totalRows}
                       style={{padding:"5px 7px",verticalAlign:"top",paddingTop:8,borderBottom:"1px solid "+T.rowBd,
                               borderRight:"1px solid "+T.border,width:82}}>
@@ -2271,11 +2271,11 @@ const WASTE_PHILOSOPHY = [
   "Reduce the use of disposable items",
 ];
 const WASTE_HIERARCHY = [
-  { key:"Prevention", label:"Prevention",           rank:1, color:"#15803D", bg:"#dcfce7", bd:"#86efac", desc:"Avoid generating the waste in the first place" },
-  { key:"Reuse",      label:"Preparing for re-use", rank:2, color:"#0d9488", bg:"#ccfbf1", bd:"#5eead4", desc:"Reuse the material with little or no processing" },
-  { key:"Recycling",  label:"Recycling",            rank:3, color:"#2563eb", bg:"#dbeafe", bd:"#93c5fd", desc:"Reprocess into new materials or products" },
-  { key:"Recovery",   label:"Recovery",             rank:4, color:"#d97706", bg:"#fef3c7", bd:"#fcd34d", desc:"Energy recovery / incineration with energy capture" },
-  { key:"Disposal",   label:"Disposal",             rank:5, color:"#dc2626", bg:"#fee2e2", bd:"#fca5a5", desc:"Landfill or other final disposal (least preferred)" },
+  { key:"Prevention", label:"Prevention",           rank:1, color:"var(--green)", bg:"var(--green-bg)", bd:"var(--green-bd)", desc:"Avoid generating the waste in the first place" },
+  { key:"Reuse",      label:"Preparing for re-use", rank:2, color:"var(--teal)",  bg:"var(--teal-bg)",  bd:"var(--teal-bd)",  desc:"Reuse the material with little or no processing" },
+  { key:"Recycling",  label:"Recycling",            rank:3, color:"var(--blue)",  bg:"var(--blue-bg)",  bd:"var(--blue-bd)",  desc:"Reprocess into new materials or products" },
+  { key:"Recovery",   label:"Recovery",             rank:4, color:"var(--amber)", bg:"var(--amber-bg)", bd:"var(--amber-bd)", desc:"Energy recovery / incineration with energy capture" },
+  { key:"Disposal",   label:"Disposal",             rank:5, color:"var(--red)",   bg:"var(--red-bg)",   bd:"var(--red-bd)",   desc:"Landfill or other final disposal (least preferred)" },
 ];
 const WASTE_UNITS = ["kg","tonne","m³","L","pcs"];
 
@@ -2395,10 +2395,10 @@ function WasteTab({ project, onChange }) {
       <div style={{ borderRadius:9, overflow:"hidden", border:"1px solid "+T.border, marginBottom:"1.5rem" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
           <thead>
-            <tr style={{ background:"#1E4D35" }}>
+            <tr style={{ background:T.surface2, borderBottom:"1px solid "+T.border }}>
               {["Material / waste stream","Class","Est. qty","Treatment","Methods",""].map((h,i) => (
                 <th key={i} style={{ padding:"8px 12px", textAlign: i>=1&&i<=2?"center":"left",
-                  color:"#fff", fontFamily:T.mono, fontSize:9, fontWeight:600,
+                  color:T.muted, fontFamily:T.mono, fontSize:9, fontWeight:600,
                   textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>{h}</th>
               ))}
             </tr>
@@ -3804,9 +3804,9 @@ This cannot be undone.`)) return;
 
             const cellStyle = (sv, pb) => {
               const z = matrixZone(sv, pb);
-              if (z === "SIGNIFICANT") return { bg:"#FEE2E2", bd:"#FCA5A5", tc:"#991B1B" };
-              if (z === "Low")         return { bg:"#F0FDF4", bd:"#86EFAC", tc:"#15803D" };
-              return                           { bg:"#FEFCE8", bd:"#FDE047", tc:"#A16207" };
+              if (z === "SIGNIFICANT") return { bg:T.redBg,   bd:T.redBd,   tc:T.red };
+              if (z === "Low")         return { bg:T.greenBg, bd:T.greenBd, tc:T.green };
+              return                           { bg:T.amberBg, bd:T.amberBd, tc:T.amber };
             };
 
             const rGrid = {};
@@ -3890,8 +3890,8 @@ This cannot be undone.`)) return;
                                 gap:3, alignContent:"center", justifyContent:"center", padding:"18px 4px 4px" }}>
                                 {items.map((a, i) => {
                                   const sig      = calcSig(a);
-                                  const dotColor = a.status==="Info" ? "#9CA3AF"
-                                    : sig==="SIGNIFICANT"?"#DC2626":sig==="MEDIUM"?"#D97706":"#16A34A";
+                                  const dotColor = a.status==="Info" ? T.slate
+                                    : sig==="SIGNIFICANT"?T.red:sig==="MEDIUM"?T.amber:T.green;
                                   return (
                                     <div key={i} onClick={()=>setEditAspect(a)}
                                       title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+sv+" × P"+pb+" = "+sv*pb}
@@ -3922,9 +3922,9 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Zone key</p>
                     {[
-                      {bg:"#FEE2E2",bd:"#FCA5A5",c:"#991B1B",z:"SIGNIFICANT",d:"Immediate action & senior sign-off"},
-                      {bg:"#FEFCE8",bd:"#FDE047",c:"#A16207",z:"MEDIUM",       d:"Active management & monitoring"},
-                      {bg:"#F0FDF4",bd:"#86EFAC",c:"#15803D",z:"Low",         d:"Standard controls sufficient"},
+                      {bg:T.redBg,  bd:T.redBd,  c:T.red,  z:"SIGNIFICANT",d:"Immediate action & senior sign-off"},
+                      {bg:T.amberBg,bd:T.amberBd,c:T.amber,z:"MEDIUM",       d:"Active management & monitoring"},
+                      {bg:T.greenBg,bd:T.greenBd,c:T.green,z:"Low",         d:"Standard controls sufficient"},
                     ].map(({bg,bd,c,z,d})=>(
                       <div key={z} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:7 }}>
                         <div style={{ width:14, height:14, borderRadius:3, background:bg,
@@ -3938,10 +3938,10 @@ This cannot be undone.`)) return;
                     <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dots</p>
                     {[
-                      {c:"#DC2626",l:"Significant — Action"},
-                      {c:"#D97706",l:"Medium — Action"},
-                      {c:"#16A34A",l:"Low — Action"},
-                      {c:"#9CA3AF",l:"Any — Info"},
+                      {c:T.red,  l:"Significant — Action"},
+                      {c:T.amber,l:"Medium — Action"},
+                      {c:T.green,l:"Low — Action"},
+                      {c:T.slate,l:"Any — Info"},
                     ].map(({c,l})=>(
                       <div key={l} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
                         <div style={{ width:12, height:12, borderRadius:"50%", background:c, flexShrink:0 }}/>
@@ -6282,7 +6282,7 @@ function FootprintTab({ project, onChange }) {
                                   return (
                                     <td key={h} style={{ padding: "4px 10px", fontFamily: T.mono, fontSize: 10,
                                       color: fDef ? fDef.color : val ? T.muted : T.faint,
-                                      background: fDef ? fDef.bg + "22" : undefined,
+                                      background: fDef ? fDef.bg : undefined,
                                       borderRight: "1px solid " + T.rowBd, maxWidth: 200,
                                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                                       title={val}>{val || <span style={{ opacity: 0.2 }}>·</span>}</td>
