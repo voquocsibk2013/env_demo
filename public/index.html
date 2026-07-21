@@ -123,11 +123,12 @@
         border: 1px solid var(--border);
         border-radius: 5px;
         padding: 6px 10px;
-        outline: none;
         transition: border-color 0.15s;
         width: 100%;
       }
       input:focus, select:focus, textarea:focus { border-color: var(--teal); }
+      :focus:not(:focus-visible) { outline: none; }                          /* mouse: quiet */
+      :focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; } /* keyboard: ring */
       select option { background: var(--surface); color: var(--text); }
       button { cursor: pointer; }
       ::-webkit-scrollbar { width: 4px; height: 4px; }

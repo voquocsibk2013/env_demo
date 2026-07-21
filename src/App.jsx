@@ -1018,6 +1018,11 @@ function relevantLines(type, prefillIds) {
 }
 
 // ── GHG snapshot table (hoisted to module level to prevent input focus loss) ──
+// Keyboard-accessible props for a div/tr/span that acts as a button.
+// Spread onto the element; supplies role, tab stop, label, and Enter/Space activation.
+const clickable = (fn, label) => ({ role:"button", tabIndex:0, "aria-label":label, onClick:fn,
+  onKeyDown:e => { if (e.key==="Enter"||e.key===" ") { e.preventDefault(); fn(); } } });
+
 // arm-then-fire confirm: first activation arms (for 4s), second fires; arm(null) cancels
 const useArmedConfirm = () => {
   const [armed, setArmed] = useState(null);
@@ -1819,10 +1824,11 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
           <input value={screenSearch} onChange={e=>setScreenSearch(e.target.value)}
             placeholder={isRisks?"Search guide words...":"Search opportunity categories..."}
             style={{ width:200, padding:"5px 10px", fontSize:12, border:"1px solid "+T.border,
-                     borderRadius:6, background:T.surface, color:T.text, outline:"none" }}/>
+                     borderRadius:6, background:T.surface, color:T.text }}/>
         )}
         {toast && (
-          <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, background:T.tealBg,
+          <span role="status" aria-live="polite"
+                style={{ fontFamily:T.mono, fontSize:11, color:T.teal, background:T.tealBg,
                          border:"1px solid "+T.tealBd, padding:"4px 10px", borderRadius:4 }}>
             {toast}
           </span>
@@ -1889,7 +1895,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
                 return(
                   <div key={cat.cat} style={{ marginBottom:6 }}>
                     {/* Category header */}
-                    <div onClick={()=>toggleCat(key)}
+                    <div {...clickable(()=>toggleCat(key), cat.cat)} aria-expanded={open}
                       style={{ display:"flex", alignItems:"center", gap:10,
                                padding:"8px 14px", background:col.bg,
                                border:"1px solid "+col.border,
@@ -2000,7 +2006,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
             const addr=addedCt+skippedCt;
             return(
               <div key={skey} style={{marginBottom:6}}>
-                <div onClick={()=>toggleCat(skey)}
+                <div {...clickable(()=>toggleCat(skey), title)} aria-expanded={open}
                   style={{display:"flex",alignItems:"center",gap:10,
                     padding:"8px 14px",background:col.bg,
                     border:"1px solid "+col.border,
@@ -2301,6 +2307,36 @@ function WasteTab({ project, onChange }) {
   const [editId, setEditId]   = React.useState(null);
   const [refOpen, setRefOpen] = React.useState(false);
   const [fracFilter, setFracFilter] = React.useState("All");
+  const dialogRef = React.useRef(null);
+
+  // Modal behaviour for the stream-editor drawer: focus in on open, trap Tab,
+  // Escape to close, restore focus to the trigger on close.
+  useEffect(() => {
+    if (editId == null) return;
+    const prevFocus = document.activeElement;
+    const panel = dialogRef.current;
+    const focusables = () => panel
+      ? Array.from(panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+          .filter(el => !el.disabled && el.offsetParent !== null)
+      : [];
+    const first = focusables()[0];
+    if (first) first.focus(); else if (panel) panel.focus();
+    const onKey = e => {
+      if (e.key === "Escape") { setEditId(null); return; }
+      if (e.key === "Tab" && panel) {
+        const f = focusables();
+        if (f.length === 0) { e.preventDefault(); return; }
+        const firstEl = f[0], lastEl = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+        else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (prevFocus && prevFocus.focus) prevFocus.focus();
+    };
+  }, [editId]);
 
   const rows = initWasteRows(project.wasteRows);
 
@@ -2446,7 +2482,10 @@ function WasteTab({ project, onChange }) {
                           : <span style={{ color:T.faint }}>—</span>}
                       </td>
                       <td style={{ padding:"8px 12px", textAlign:"right", whiteSpace:"nowrap" }}>
-                        <span style={{ fontSize:11, color:T.teal }}>Edit ›</span>
+                        <button onClick={e=>{ e.stopPropagation(); setEditId(r.id); }}
+                          aria-label={"Edit "+(r.product||r.fraction||"waste stream")}
+                          style={{ fontSize:11, color:T.teal, background:"transparent", border:"none",
+                            padding:"2px 4px", cursor:"pointer", fontFamily:T.sans }}>Edit ›</button>
                       </td>
                     </tr>
                   );
@@ -2458,7 +2497,7 @@ function WasteTab({ project, onChange }) {
       </div>
 
       <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
-        <div onClick={() => setRefOpen(v=>!v)}
+        <div {...clickable(() => setRefOpen(v=>!v), "Waste hierarchy & reduction principles")} aria-expanded={refOpen}
           style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
           <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em" }}>
             Waste hierarchy &amp; reduction principles
@@ -2499,8 +2538,11 @@ function WasteTab({ project, onChange }) {
           style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:1000,
             display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"4vh 16px", overflowY:"auto" }}>
           <div onClick={e => e.stopPropagation()}
+            ref={dialogRef} tabIndex={-1}
+            role="dialog" aria-modal="true"
+            aria-label={editing.isStd ? "Edit waste stream" : "Custom waste stream"}
             style={{ background:T.bg, borderRadius:12, width:"100%", maxWidth:600,
-              boxShadow:"0 20px 60px rgba(0,0,0,0.35)", overflow:"hidden" }}>
+              boxShadow:"0 20px 60px rgba(0,0,0,0.35)", overflow:"hidden", outline:"none" }}>
             <div style={{ padding:"14px 18px", borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surface }}>
               <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.text }}>
                 {editing.isStd ? "Edit waste stream" : "Custom waste stream"}
@@ -2582,17 +2624,17 @@ function WasteTab({ project, onChange }) {
                   {WASTE_PHILOSOPHY.map((m,i)=>{
                     const sel = (editing.methods||[]).includes(i);
                     return (
-                      <div key={i} onClick={()=>{
-                        const cur = editing.methods||[];
-                        updateRow(editId,{ methods: sel ? cur.filter(x=>x!==i) : [...cur,i] });
-                      }} style={{ display:"flex", gap:9, padding:"7px 10px", cursor:"pointer", alignItems:"flex-start",
+                      <label key={i} style={{ display:"flex", gap:9, padding:"7px 10px", cursor:"pointer", alignItems:"flex-start",
                         borderBottom: i<WASTE_PHILOSOPHY.length-1?"1px solid "+T.rowBd:"none",
                         background: sel?T.tealBg:"transparent" }}>
-                        <span style={{ width:15, height:15, borderRadius:3, flexShrink:0, marginTop:1,
-                          border:"1.5px solid "+(sel?T.teal:T.border), background: sel?T.teal:"transparent",
-                          color:"#fff", fontSize:10, lineHeight:"13px", textAlign:"center" }}>{sel?"✓":""}</span>
+                        <input type="checkbox" checked={sel}
+                          onChange={()=>{
+                            const cur = editing.methods||[];
+                            updateRow(editId,{ methods: sel ? cur.filter(x=>x!==i) : [...cur,i] });
+                          }}
+                          style={{ width:15, height:15, flexShrink:0, margin:"1px 0 0", padding:0, accentColor:T.teal }}/>
                         <span style={{ fontSize:11, color: sel?T.text:T.muted, lineHeight:1.45 }}>{m}</span>
-                      </div>
+                      </label>
                     );
                   })}
                 </div>
@@ -3117,8 +3159,9 @@ This cannot be undone.`)) return;
   const StatCard = ({ label, value, bg, color, border, filterId }) => {
     const active = dashFilter === filterId;
     return (
-      <div onClick={() => { if (filterId==="opps") { setTab("opportunities"); return; }
-        setDashFilter(dashFilter===filterId?"all":filterId); }}
+      <div {...clickable(() => { if (filterId==="opps") { setTab("opportunities"); return; }
+        setDashFilter(dashFilter===filterId?"all":filterId); }, label+": "+value)}
+        aria-pressed={filterId==="opps" ? undefined : active}
         style={{ background:bg||T.surface, borderRadius:7, padding:"12px 14px",
                  border: active ? "2px solid "+color : "1px solid "+(border||T.border),
                  cursor:"pointer", transition:"all 0.15s",
@@ -3427,9 +3470,19 @@ This cannot be undone.`)) return;
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
                     marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
-        <div style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border }}>
+        <div role="tablist" aria-label="Project sections"
+          onKeyDown={e => {
+            const i = TABS.indexOf(tab);
+            let n = null;
+            if (e.key==="ArrowRight") n = (i+1) % TABS.length;
+            else if (e.key==="ArrowLeft") n = (i-1+TABS.length) % TABS.length;
+            else if (e.key==="Home") n = 0;
+            else if (e.key==="End") n = TABS.length-1;
+            if (n!==null) { e.preventDefault(); setTab(TABS[n]); const el = document.getElementById("projtab-"+TABS[n]); if (el) el.focus(); }
+          }}
+          style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border }}>
           {TABS.map(t => (
-            <button key={t} onClick={()=>setTab(t)}
+            <button key={t} id={"projtab-"+t} role="tab" aria-selected={tab===t} tabIndex={tab===t?0:-1} onClick={()=>setTab(t)}
               style={{ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
                        fontWeight:500, background:"transparent", border:"none",
                        borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
@@ -3893,9 +3946,10 @@ This cannot be undone.`)) return;
                                   const dotColor = a.status==="Info" ? T.slate
                                     : sig==="SIGNIFICANT"?T.red:sig==="MEDIUM"?T.amber:T.green;
                                   return (
-                                    <div key={i} onClick={()=>setEditAspect(a)}
+                                    <button key={i} onClick={()=>setEditAspect(a)}
                                       title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+sv+" × P"+pb+" = "+sv*pb}
-                                      style={{ width:14, height:14, borderRadius:"50%",
+                                      aria-label={(a.ref||"aspect")+" — "+(a.aspect||"")+", C"+sv+" × P"+pb+" = "+(sv*pb)+", "+sig}
+                                      style={{ width:14, height:14, borderRadius:"50%", border:"none", padding:0,
                                         background:dotColor, cursor:"pointer", flexShrink:0 }}/>
                                   );
                                 })}
@@ -4124,9 +4178,10 @@ This cannot be undone.`)) return;
                                       const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
                                       const sz = 10 + (bv-1)*3;
                                       return (
-                                        <div key={i} onClick={()=>setEditOpp(o)}
+                                        <button key={i} onClick={()=>setEditOpp(o)}
                                           title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
-                                          style={{ width:sz, height:sz, borderRadius:"50%", background:q.c,
+                                          aria-label={(o.ref||"opportunity")+" — "+(o.type||(o.description||"").slice(0,40))+", "+q.label}
+                                          style={{ width:sz, height:sz, borderRadius:"50%", background:q.c, border:"none", padding:0,
                                             opacity:0.85, cursor:"pointer", flexShrink:0 }}/>
                                       );
                                     })}
@@ -4608,7 +4663,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const hi=opp.filter(o=>calcOppScore(o)>=75).length;
     const tot=asp.length;
     return (
-      <div onClick={()=>{onSelect(p.id);onClose();}}
+      <div {...clickable(()=>{onSelect(p.id);onClose();}, "Open project "+(p.name||"Unnamed"))}
         style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:10,
                  padding:"14px 16px",cursor:"pointer",transition:"border-color 0.15s",
                  display:"grid",gridTemplateColumns:"1fr auto",gap:"12px 20px",alignItems:"start" }}
@@ -4997,7 +5052,7 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
           return (
             <div key={p.id} style={{ position:"relative", marginBottom:1 }}
               onMouseEnter={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="1"; }}
-              onMouseLeave={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="0"; }}>
+              onMouseLeave={e=>{ const btn=e.currentTarget.querySelector(".dup-btn"); if(btn)btn.style.opacity="0.35"; }}>
               <button onClick={()=>onSelect(p.id)}
                 style={{ width:"100%", textAlign:"left", padding:"8px 10px", borderRadius:6,
                          cursor:"pointer", fontFamily:T.sans, border:"1px solid transparent",
@@ -5017,9 +5072,11 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
                 </p>
               </button>
               <button className="dup-btn" onClick={e=>{ e.stopPropagation(); onDuplicate(p.id); }}
-                title="Duplicate project"
+                title="Duplicate project" aria-label={"Duplicate project "+(p.name||"Unnamed")}
+                onFocus={e=>{ e.currentTarget.style.opacity="1"; }}
+                onBlur={e=>{ e.currentTarget.style.opacity="0.35"; }}
                 style={{ position:"absolute", top:"50%", right:6, transform:"translateY(-50%)",
-                         opacity:0, transition:"opacity 0.15s",
+                         opacity:0.35, transition:"opacity 0.15s",
                          background:T.sbBg2, border:"1px solid "+T.sbBd, borderRadius:4,
                          padding:"3px 6px", cursor:"pointer", fontSize:11, color:T.sbMuted }}>
                 ⧉
@@ -6583,7 +6640,8 @@ function FootprintTab({ project, onChange }) {
           boxShadow: "0 2px 12px rgba(0,0,0,0.15)", borderRadius: 8, overflow: "hidden" }}>
           {/* Toast — grows leftward */}
           {toast && (
-            <div style={{ padding: "8px 14px", background: T.tealBg, border: "1px solid " + T.tealBd,
+            <div role="status" aria-live="polite"
+              style={{ padding: "8px 14px", background: T.tealBg, border: "1px solid " + T.tealBd,
               borderRight: "none", fontSize: 12, fontWeight: 600, color: T.teal,
               fontFamily: T.mono, whiteSpace: "nowrap", borderRadius: "8px 0 0 8px" }}>
               {toast}
