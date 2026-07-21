@@ -2709,65 +2709,65 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     try {
       const esc = v => String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
       const dateStr = new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"});
-      const fmtT = kg => kg>=1000?(kg/1000).toFixed(3)+" tCO\u2082e":Math.round(kg)+" kg CO\u2082e";
+      const nb3  = n => Number(n||0).toLocaleString("nb-NO",{minimumFractionDigits:3,maximumFractionDigits:3});
+      const fmtT = kg => kg>=1000?nb3(kg/1000)+" tCO\u2082e":Math.round(kg).toLocaleString("nb-NO")+" kg CO\u2082e";
       const fp = project.footprintSummary;
       const sigCnt    = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
       const actionCnt = aspects.filter(a=>a.status==="Action").length;
       const totalAll  = aspects.length + opps.length;
-      const SEC = t=>'<div style="font-size:12px;font-weight:700;color:#1e4d35;margin:0 0 8px;padding:6px 10px;background:#f1f5f9;border-left:3px solid #1e4d35;border-radius:0 4px 4px 0">'+t+'</div>';
-      const LBL = t=>'<p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px">'+t+'</p>';
+      const SEC = t=>'<p class="sec">'+t+'</p>';
+      const LBL = t=>'<p class="lbl">'+t+'</p>';
 
       // risk matrix cells
       const mGrid={};
       aspects.forEach(a=>{const sv=Math.min(5,Math.max(1,parseInt(a.severity)||0));const pb=Math.min(5,Math.max(1,parseInt(a.probability)||0));if(sv&&pb){const k=sv+","+pb;if(!mGrid[k])mGrid[k]=[];mGrid[k].push(a);}});
-      const zBg=(sv,pb)=>{const z=matrixZone(sv,pb);return z==="SIGNIFICANT"?"#FEE2E2":z==="MEDIUM"?"#FEFCE8":"#F0FDF4";};
+      const zCls=(sv,pb)=>{const z=matrixZone(sv,pb);return z==="SIGNIFICANT"?"z-s":z==="MEDIUM"?"z-m":"z-l";};
       const cLbl={5:"Catastrophic",4:"Major",3:"Moderate",2:"Minor",1:"Negligible"};
       const pLbl={1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
       const pRng={1:"0\u20131%",2:"1\u20135%",3:"5\u201325%",4:"25\u201350%",5:"50\u2013100%"};
       let rRows="";
-      [5,4,3,2,1].forEach(sv=>{let cells="";[1,2,3,4,5].forEach(pb=>{const items=mGrid[sv+","+pb]||[];const dots=items.map(a=>{const s=calcSig(a);const dc=s==="SIGNIFICANT"?"#DC2626":s==="MEDIUM"?"#D97706":"#16A34A";const op=a.status==="Info"?"0.35":"1";return'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+dc+';opacity:'+op+';margin:1px"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+zBg(sv,pb)+';border:1px solid #e5e7eb;padding:2px;vertical-align:top;position:relative"><span style="position:absolute;top:2px;left:3px;font-size:7px;color:#9ca3af;font-weight:bold">'+(sv*pb)+'</span><div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:12px">'+dots+'</div></td>';});rRows+='<tr><td style="text-align:right;padding:0 8px 0 4px;vertical-align:middle;width:90px"><div style="font-size:11px;font-weight:700;color:#1e293b;line-height:1.2">'+sv+'</div><div style="font-size:8px;color:#64748b;line-height:1.2">'+cLbl[sv]+'</div></td>'+cells+'</tr>';});
-      let pHdr="";[1,2,3,4,5].forEach(pb=>{pHdr+='<td style="text-align:center;width:46px;height:54px;vertical-align:top;padding-top:4px;color:#475569"><div style="font-size:11px;font-weight:700;color:#1e293b;line-height:1.2">'+pb+'</div><div style="font-size:7px;color:#64748b;line-height:1.3">'+pLbl[pb]+'</div><div style="font-size:7px;color:#94a3b8;line-height:1.3">'+pRng[pb]+'</div></td>';});
+      [5,4,3,2,1].forEach(sv=>{let cells="";[1,2,3,4,5].forEach(pb=>{const items=mGrid[sv+","+pb]||[];const dots=items.map(a=>{const s=calcSig(a);const dc=a.status==="Info"?"var(--slate)":s==="SIGNIFICANT"?"var(--red)":s==="MEDIUM"?"var(--amber)":"var(--green)";return'<span class="dot" style="background:'+dc+'"></span>';}).join("");cells+='<td class="'+zCls(sv,pb)+'"><span class="cs">'+(sv*pb)+'</span>'+(dots?'<div class="dots">'+dots+'</div>':'')+'</td>';});rRows+='<tr><td class="axc"><div class="axn">'+sv+'</div><div class="axl">'+cLbl[sv]+'</div></td>'+cells+'</tr>';});
+      let pHdr="";[1,2,3,4,5].forEach(pb=>{pHdr+='<td class="axb"><div class="axn">'+pb+'</div><div class="axl">'+pLbl[pb]+'</div><div class="axr">'+pRng[pb]+'</div></td>';});
 
       // opp matrix cells
       const oGrid={};
       opps.forEach(o=>{const ev=Math.min(5,Math.max(1,parseInt(o.envValue)||1));const fe=Math.min(5,Math.max(1,parseInt(o.feasibility)||1));const k=ev+","+fe;if(!oGrid[k])oGrid[k]=[];oGrid[k].push(o);});
-      const oQbg=(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"#f0fdf4":(!hE&&hF)?"#f5f3ff":(hE&&!hF)?"#eff6ff":"#f8fafc";};
-      const oQc =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"#16a34a":(!hE&&hF)?"#7c3aed":(hE&&!hF)?"#2563eb":"#94a3b8";};
+      const oQcls=(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"q-g":(!hE&&hF)?"q-p":(hE&&!hF)?"q-b":"q-n";};
+      const oQc =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"var(--green)":(!hE&&hF)?"var(--purple)":(hE&&!hF)?"var(--blue)":"var(--slate)";};
       const oQL =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";};
       const oCr =(ev,fe)=>(ev===5&&fe===5)||(ev===3&&fe===5)||(ev===5&&fe===3)||(ev===3&&fe===3);
       const eLbl={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"};
       const fLbl2={5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"Very difficult"};
       let oRows="";
-      [5,4,3,2,1].forEach(fe=>{let cells="";[1,2,3,4,5].forEach(ev=>{const c=oQc(ev,fe);const items=oGrid[ev+","+fe]||[];const lbl=items.length===0&&oCr(ev,fe)?'<span style="font-size:7px;font-weight:bold;color:'+c+';opacity:0.5">'+oQL(ev,fe)+'</span>':"";const dots=items.map(o=>{const bv=Math.min(5,Math.max(1,parseInt(o.bizValue)||1));const sz=7+(bv-1)*2;return'<span style="display:inline-block;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+c+';opacity:0.85;margin:1px;vertical-align:middle"></span>';}).join("");cells+='<td style="width:46px;height:46px;background:'+oQbg(ev,fe)+';border:1px solid #e5e7eb;padding:3px;text-align:center;vertical-align:middle">'+lbl+dots+'</td>';});oRows+='<tr><td style="text-align:right;padding:0 8px 0 4px;vertical-align:middle;width:90px"><div style="font-size:11px;font-weight:700;color:#1e293b;line-height:1.2">'+fe+'</div><div style="font-size:8px;color:#64748b;line-height:1.2">'+fLbl2[fe]+'</div></td>'+cells+'</tr>';});
-      let eHdr="";[1,2,3,4,5].forEach(ev=>{eHdr+='<td style="text-align:center;width:46px;height:54px;vertical-align:top;padding-top:4px;color:#475569"><div style="font-size:11px;font-weight:700;color:#1e293b;line-height:1.2">'+ev+'</div><div style="font-size:7px;color:#64748b;line-height:1.3">'+eLbl[ev]+'</div></td>';});
+      [5,4,3,2,1].forEach(fe=>{let cells="";[1,2,3,4,5].forEach(ev=>{const c=oQc(ev,fe);const items=oGrid[ev+","+fe]||[];const lbl=items.length===0&&oCr(ev,fe)?'<span class="qlbl" style="color:'+c+'">'+oQL(ev,fe)+'</span>':"";const dots=items.map(o=>{const bv=Math.min(5,Math.max(1,parseInt(o.bizValue)||1));const sz=7+(bv-1)*2;return'<span class="odot" style="width:'+sz+'px;height:'+sz+'px;background:'+c+'"></span>';}).join("");cells+='<td class="'+oQcls(ev,fe)+'" style="text-align:center;vertical-align:middle">'+lbl+dots+'</td>';});oRows+='<tr><td class="axc"><div class="axn">'+fe+'</div><div class="axl">'+fLbl2[fe]+'</div></td>'+cells+'</tr>';});
+      let eHdr="";[1,2,3,4,5].forEach(ev=>{eHdr+='<td class="axb"><div class="axn">'+ev+'</div><div class="axl">'+eLbl[ev]+'</div></td>';});
 
       // table rows — exact column order as the web app (score omitted)
       const PHASE_ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
       let riskRows="";
       aspects.forEach(a=>{
         const s   = calcSig(a);
-        const bg  = s==="SIGNIFICANT"?"#fee2e2":s==="MEDIUM"?"#fefce8":"#f0fdf4";
-        const co  = s==="SIGNIFICANT"?"#991b1b":s==="MEDIUM"?"#92400e":"#166534";
+        const sc  = s==="SIGNIFICANT"?"s":s==="MEDIUM"?"m":"l";
         const cat = getCategoryLabel(a);
         const shortCat = cat ? (CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */,"")) : "";
         const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
         const phaseHtml = phases.length
-          ? phases.map(p=>'<span style="font-family:monospace;font-size:8px;padding:1px 4px;border-radius:3px;background:#f1f5f9;color:#475569;margin:1px;display:inline-block">'+(PHASE_ABBR[p]||p.slice(0,3))+'</span>').join("")
-          : '<span style="color:#94a3b8">&#8212;</span>';
-        const catHtml  = shortCat ? '<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#f1f5f9;color:#475569">'+esc(shortCat)+'</span>' : '<span style="color:#94a3b8">&#8212;</span>';
+          ? phases.map(p=>'<span class="chip sl">'+esc(PHASE_ABBR[p]||p.slice(0,3))+'</span>').join("")
+          : '<span class="dash">&#8212;</span>';
+        const catHtml  = shortCat ? '<span class="chip sl">'+esc(shortCat)+'</span>' : '<span class="dash">&#8212;</span>';
         const isAbn    = a.condition==="Abnormal" || a.condition==="Emergency";
-        const abnHtml  = isAbn ? '<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#fefce8;color:#92400e">'+esc(a.condition)+'</span>' : '';
+        const abnHtml  = isAbn ? '<span class="chip am">'+esc(a.condition)+'</span>' : '<span class="dash">&#8212;</span>';
         riskRows += '<tr>'
-          +'<td style="font-family:monospace;font-size:10px;color:#475569;white-space:nowrap">'+esc(a.ref)+'</td>'
+          +'<td><span class="ref">'+esc(a.ref)+'</span></td>'
           +'<td style="white-space:nowrap">'+phaseHtml+'</td>'
           +'<td style="white-space:nowrap">'+catHtml+'</td>'
-          +'<td style="font-size:10px">'
-            +(a.area?'<div style="font-family:monospace;font-size:9px;color:#64748b;margin-bottom:2px">'+esc(a.area)+'</div>':'')
+          +'<td>'
+            +(a.area?'<div class="area">'+esc(a.area)+'</div>':'')
             +'<div style="font-weight:500">'+esc(a.aspect||"")+'</div>'
           +'</td>'
           +'<td style="text-align:center">'+abnHtml+'</td>'
-          +'<td style="text-align:center"><span style="background:'+bg+';color:'+co+';padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700">'+esc(s)+'</span></td>'
-          +'<td style="text-align:center;font-size:10px;color:#64748b">'+esc(a.status)+'</td>'
+          +'<td style="text-align:center"><span class="sig '+sc+'">'+esc(s)+'</span></td>'
+          +'<td style="text-align:center;color:var(--muted)">'+esc(a.status)+'</td>'
           +'</tr>';
       });
 
@@ -2775,111 +2775,197 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       opps.forEach(o=>{
         const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;
         const pr  = hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";
-        const co  = hEp&&hFp?"#16a34a":(!hEp&&hFp)?"#7c3aed":(hEp&&!hFp)?"#2563eb":"#64748b";
+        const co  = hEp&&hFp?"var(--green)":(!hEp&&hFp)?"var(--purple)":(hEp&&!hFp)?"var(--blue)":"var(--slate)";
         const ghg = calcGhgTotal(o);
-        const matC = o.materiality&&o.materiality.startsWith("Inside")?"#0d9488":o.materiality&&o.materiality.startsWith("Outside")?"#2563eb":"#7c3aed";
+        const matC = o.materiality&&o.materiality.startsWith("Inside")?"var(--teal)":o.materiality&&o.materiality.startsWith("Outside")?"var(--blue)":"var(--purple)";
         oppRows += '<tr>'
-          +'<td style="font-family:monospace;font-size:10px;color:#475569;white-space:nowrap">'+esc(o.ref)+'</td>'
-          +'<td style="white-space:nowrap">'+(o.type?'<span style="font-family:monospace;font-size:8px;padding:2px 5px;border-radius:3px;background:#f5f3ff;color:#7c3aed">'+esc(o.type)+'</span>':'<span style="color:#94a3b8">&#8212;</span>')+'</td>'
-          +'<td style="font-size:10px">'
+          +'<td><span class="ref p">'+esc(o.ref)+'</span></td>'
+          +'<td style="white-space:nowrap">'+(o.type?'<span class="chip pu">'+esc(o.type)+'</span>':'<span class="dash">&#8212;</span>')+'</td>'
+          +'<td>'
             +'<div style="font-weight:500">'+esc(o.description||"")+'</div>'
-            +(o.envBenefit?'<div style="font-size:9px;color:#0d9488;margin-top:2px">'+esc(o.envBenefit)+'</div>':'')
+            +(o.envBenefit?'<div class="benefit">'+esc(o.envBenefit)+'</div>':'')
           +'</td>'
-          +'<td style="text-align:center"><span style="font-size:9px;font-weight:700;color:'+co+'">'+esc(pr)+'</span></td>'
-          +'<td style="text-align:center;font-size:10px;color:#0d9488">'+(ghg?fmtT(ghg):"&#8212;")+'</td>'
-          +'<td style="text-align:center">'+(o.materiality?'<span style="font-size:9px;color:'+matC+'">'+esc(o.materiality)+'</span>':'<span style="color:#94a3b8">&#8212;</span>')+'</td>'
+          +'<td style="text-align:center"><span style="font-size:9px;font-weight:600;color:'+co+'">'+esc(pr)+'</span></td>'
+          +'<td class="num" style="text-align:center;color:var(--teal)">'+(ghg?fmtT(ghg):'<span class="dash">&#8212;</span>')+'</td>'
+          +'<td style="text-align:center">'+(o.materiality?'<span style="font-size:9px;color:'+matC+'">'+esc(o.materiality)+'</span>':'<span class="dash">&#8212;</span>')+'</td>'
           +'</tr>';
       });
 
       // legend strings
-      const zLgnd=[["#FEE2E2","#FCA5A5","#991B1B","SIGNIFICANT","Immediate action required"],["#FEFCE8","#FDE047","#A16207","MEDIUM","Active management required"],["#F0FDF4","#86EFAC","#15803D","Low","Standard controls sufficient"]].map(([bg,bd,c,z,d])=>'<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;background:'+bg+';border:1.5px solid '+bd+'"></div><div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> &#8212; <span style="font-size:9px;color:#475569">'+d+'</span></div></div>').join("");
-      const dotLgnd=[["#DC2626","Significant \u2014 Action"],["#D97706","Medium \u2014 Action"],["#16A34A","Low \u2014 Action"],["#9CA3AF","Any \u2014 Info"]].map(([c,l])=>'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:11px;height:11px;border-radius:50%;flex-shrink:0;background:'+c+'"></div><span style="font-size:9px;color:#475569">'+l+'</span></div>').join("");
-      const cLgnd=[["5","Catastrophic","Irreversible damage; prosecution risk."],["4","Major","Lasting damage; regulatory breach."],["3","Moderate","Noticeable harm; 1&#8211;2 year recovery."],["2","Minor","Localised; months recovery."],["1","Negligible","No lasting effect."]].map(([n,l,d])=>'<div style="margin-bottom:4px"><strong style="font-size:9px">'+n+' &#8212; '+l+'</strong><span style="font-size:9px;color:#64748b"> &#8212; '+d+'</span></div>').join("");
-      const pLgnd=[["5","Very likely","50&#8211;100%","Will occur without controls."],["4","Likely","25&#8211;50%","Expected at some point."],["3","Possible","5&#8211;25%","Occurred in similar projects."],["2","Unlikely","1&#8211;5%","Rare; no credible mechanism."],["1","Very unlikely","0&#8211;1%","No realistic pathway."]].map(([n,l,r,d])=>'<div style="margin-bottom:4px"><strong style="font-size:9px">'+n+' &#8212; '+l+' ('+r+')</strong><span style="font-size:9px;color:#64748b"> &#8212; '+d+'</span></div>').join("");
-      const oQLgnd=[["#f5f3ff","#c4b5fd","#7c3aed","Pursue","Low env + high feasibility"],["#f0fdf4","#86efac","#16a34a","Quick win","High env + high feasibility"],["#eff6ff","#bfdbfe","#2563eb","Plan","High env + low feasibility"],["#f8fafc","#e2e8f0","#94a3b8","Deprioritize","Low env + low feasibility"]].map(([bg,bd,c,z,d])=>'<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;background:'+bg+';border:1.5px solid '+bd+'"></div><div><strong style="font-size:9px;color:'+c+'">'+z+'</strong> &#8212; <span style="font-size:9px;color:#475569">'+d+'</span></div></div>').join("");
-      const eLgnd=["5 &#8212; Major","4 &#8212; Significant","3 &#8212; Moderate","2 &#8212; Minor","1 &#8212; Negligible"].map(t=>'<div style="margin-bottom:4px;font-size:9px"><strong>'+t+'</strong></div>').join("");
-      const fLgnd=["5 &#8212; Easy","4 &#8212; Achievable","3 &#8212; Moderate","2 &#8212; Difficult","1 &#8212; Very difficult"].map(t=>'<div style="margin-bottom:4px;font-size:9px"><strong>'+t+'</strong></div>').join("");
+      const SWROW=(bg,bd,c,z,d)=>'<div class="lrow"><div class="lsw" style="background:'+bg+';border-color:'+bd+'"></div><div class="ltx"><strong style="color:'+c+'">'+z+'</strong> &#8212; '+d+'</div></div>';
+      const zLgnd=[["var(--red-bg)","var(--red-bd)","var(--red)","SIGNIFICANT","Immediate action required"],["var(--amber-bg)","var(--amber-bd)","var(--amber)","MEDIUM","Active management required"],["var(--green-bg)","var(--green-bd)","var(--green)","Low","Standard controls sufficient"]].map(([bg,bd,c,z,d])=>SWROW(bg,bd,c,z,d)).join("");
+      const dotLgnd=[["var(--red)","Significant \u2014 Action"],["var(--amber)","Medium \u2014 Action"],["var(--green)","Low \u2014 Action"],["var(--slate)","Any \u2014 Info"]].map(([c,l])=>'<div class="lrow" style="align-items:center;margin-bottom:5px"><div class="ldot" style="background:'+c+'"></div><span class="ltx">'+l+'</span></div>').join("");
+      const cLgnd=[["5","Catastrophic","Irreversible damage; prosecution risk."],["4","Major","Lasting damage; regulatory breach."],["3","Moderate","Noticeable harm; 1&#8211;2 year recovery."],["2","Minor","Localised; months recovery."],["1","Negligible","No lasting effect."]].map(([n,l,d])=>'<div class="scale"><strong>'+n+' &#8212; '+l+'</strong><span> &#8212; '+d+'</span></div>').join("");
+      const pLgnd=[["5","Very likely","50&#8211;100%","Will occur without controls."],["4","Likely","25&#8211;50%","Expected at some point."],["3","Possible","5&#8211;25%","Occurred in similar projects."],["2","Unlikely","1&#8211;5%","Rare; no credible mechanism."],["1","Very unlikely","0&#8211;1%","No realistic pathway."]].map(([n,l,r,d])=>'<div class="scale"><strong>'+n+' &#8212; '+l+' ('+r+')</strong><span> &#8212; '+d+'</span></div>').join("");
+      const oQLgnd=[["var(--purple-bg)","var(--purple-bd)","var(--purple)","Pursue","Low env + high feasibility"],["var(--green-bg)","var(--green-bd)","var(--green)","Quick win","High env + high feasibility"],["var(--blue-bg)","var(--blue-bd)","var(--blue)","Plan","High env + low feasibility"],["var(--surface2)","var(--slate-bd)","var(--slate)","Deprioritize","Low env + low feasibility"]].map(([bg,bd,c,z,d])=>SWROW(bg,bd,c,z,d)).join("");
+      const eLgnd=["5 &#8212; Major","4 &#8212; Significant","3 &#8212; Moderate","2 &#8212; Minor","1 &#8212; Negligible"].map(t=>'<div class="scale"><strong>'+t+'</strong></div>').join("");
+      const fLgnd=["5 &#8212; Easy","4 &#8212; Achievable","3 &#8212; Moderate","2 &#8212; Difficult","1 &#8212; Very difficult"].map(t=>'<div class="scale"><strong>'+t+'</strong></div>').join("");
 
       const pName = esc(project.name||"Untitled Project");
       const html =
         '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>'+pName+'</title>'
-        +'<style>* { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }'
-        +'body { font-family:Arial,sans-serif; font-size:11px; color:#1e293b; background:#fff; }'
-        +'@page { size:A4 landscape; margin:14mm 12mm; }'
-        +'@media print { .np { display:none !important; } }'
-        +'.np { position:fixed; top:16px; right:16px; z-index:100; display:flex; gap:8px; align-items:center; background:rgba(255,255,255,.95); padding:8px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.15); }'
-        +'table { width:100%; border-collapse:collapse; margin-bottom:20px; }'
-        +'th { background:#1e4d35; color:#fff; padding:6px 8px; text-align:left; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }'
-        +'td { padding:5px 8px; border-bottom:1px solid #e2e8f0; vertical-align:middle; }'
-        +'tr:nth-child(even) td { background:#f8fafc; }'
+        +'<link rel="preconnect" href="https://fonts.googleapis.com"/>'
+        +'<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>'
+        +'<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>'
+        +'<style>'
+        // The report always prints light — light-theme token literals, single source for the sheet
+        +':root{--surface:#FFFFFF;--surface2:#FAFAF8;--text:#1A1C1E;--muted:#6B7280;--faint:#9CA3AF;--border:#DDD9D0;--row-bd:#F0EDE6;'
+        +'--teal:#0F6E56;--teal-bg:#E1F5EE;--teal-bd:#9FE1CB;--teal-dk:#085041;'
+        +'--red:#A32D2D;--red-bg:#FCEBEB;--red-bd:#F09595;--amber:#856404;--amber-bg:#FFFBE6;--amber-bd:#FFD700;'
+        +'--green:#27500A;--green-bg:#EAF3DE;--green-bd:#97C459;--purple:#3C3489;--purple-bg:#EEEDFE;--purple-bd:#AFA9EC;'
+        +'--blue:#0C447C;--blue-bg:#E6F1FB;--blue-bd:#85B7EB;--slate:#455A64;--slate-bg:#ECEFF1;--slate-bd:#B0BEC5;}'
+        +'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}'
+        +"body{font-family:'Inter',system-ui,sans-serif;font-size:11px;color:var(--text);background:#fff}"
+        +'@page{size:A4 landscape;margin:14mm 12mm}'
+        +'@media print{.np{display:none !important}}'
+        +'.np{position:fixed;top:16px;right:16px;z-index:100;display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.95);padding:8px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)}'
+        +".np button{font:500 12px 'Inter',system-ui,sans-serif;padding:8px 18px;border-radius:6px;cursor:pointer}"
+        +'.np .prim{background:var(--teal);color:#fff;border:1px solid var(--teal)}'
+        +'.np .close{background:var(--surface);color:var(--muted);border:1px solid var(--border)}'
+        +'.np span{font-size:10px;color:var(--faint)}'
+        +'.rhead{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid var(--teal);margin-bottom:16px}'
+        +'.pname{font-size:19px;font-weight:600;color:var(--teal-dk);letter-spacing:-0.005em}'
+        +'.pmeta{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.7}'
+        +'.pmeta strong{color:var(--text);font-weight:500}'
+        +'.rtitle{text-align:right}'
+        +'.rtitle .t1{font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal-dk);font-weight:600}'
+        +'.rtitle .t2{font-size:10px;color:var(--muted);margin-top:2px}'
+        +'.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}'
+        +'.kpi{padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--surface);text-align:center}'
+        +'.kpi .v{font-size:23px;font-weight:500;line-height:1;color:var(--text)}'
+        +'.kpi .l{font-size:9px;margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;color:var(--muted)}'
+        +'.kpi.red{background:var(--red-bg);border-color:var(--red-bd)}.kpi.red .v,.kpi.red .l{color:var(--red)}'
+        +'.kpi.amber{background:var(--amber-bg);border-color:var(--amber-bd)}.kpi.amber .v,.kpi.amber .l{color:var(--amber)}'
+        +'.kpi.purple{background:var(--purple-bg);border-color:var(--purple-bd)}.kpi.purple .v,.kpi.purple .l{color:var(--purple)}'
+        +'.sec{font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--teal-dk);border-bottom:1px solid var(--border);padding-bottom:5px;margin:0 0 12px}'
+        // .block for short sections that should stay whole; .rblock for the registers,
+        // which run past a page — they paginate per row via "table.reg tr" below
+        +'.block{break-inside:avoid;margin-bottom:20px}'
+        +'.rblock{margin-bottom:20px}'
+        +'.mats{display:flex;gap:48px;align-items:flex-start;flex-wrap:wrap}'
+        +'.mtitle{font-size:10px;font-weight:600;color:var(--text);margin:0 0 6px}'
+        +'.mwrap{display:flex;align-items:stretch}'
+        +'.yax{writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:600;letter-spacing:0.06em;color:var(--muted);align-self:center;padding-right:5px;white-space:nowrap}'
+        +'.xax{text-align:center;font-size:8px;font-weight:600;letter-spacing:0.06em;color:var(--muted);margin-top:3px}'
+        +'table.mx{border-collapse:collapse}'
+        +'table.mx td{width:46px;height:46px;border:1px solid var(--border);padding:2px;vertical-align:top;position:relative}'
+        +'table.mx td.axc{border:none;text-align:right;padding:0 8px 0 4px;vertical-align:middle;width:90px;height:auto}'
+        +'table.mx td.axb{border:none;text-align:center;height:auto;vertical-align:top;padding-top:4px}'
+        +'.axn{font-size:11px;font-weight:600;color:var(--text);line-height:1.2}'
+        +'.axl{font-size:8px;color:var(--muted);line-height:1.3}'
+        +'.axr{font-size:8px;color:var(--faint);line-height:1.3}'
+        +'td.z-s{background:var(--red-bg)}td.z-m{background:var(--amber-bg)}td.z-l{background:var(--green-bg)}'
+        +'td.q-g{background:var(--green-bg)}td.q-p{background:var(--purple-bg)}td.q-b{background:var(--blue-bg)}td.q-n{background:var(--surface2)}'
+        +'.cs{position:absolute;top:2px;left:3px;font-size:7px;color:var(--faint);font-weight:600}'
+        // In flow, not absolute: a cell can hold any number of aspects and the row grows to fit
+        +'.dots{display:flex;flex-wrap:wrap;justify-content:center;align-content:center;gap:2px;margin-top:12px}'
+        +'.dot{width:9px;height:9px;border-radius:50%}'
+        +'.qlbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;opacity:0.55;text-align:center;line-height:1.2}'
+        +'.odot{border-radius:50%;display:inline-block;vertical-align:middle;margin:1px;opacity:0.9}'
+        +'table.reg{width:100%;border-collapse:collapse;margin-bottom:2px}'
+        +'table.reg th{background:var(--surface2);color:var(--muted);padding:6px 8px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border)}'
+        +'table.reg td{padding:5px 8px;border-bottom:1px solid var(--row-bd);vertical-align:middle;font-size:10px}'
+        +'table.reg tr:nth-child(even) td{background:var(--surface2)}'
+        +'table.reg tr{break-inside:avoid}'
+        +'.ref{font-size:10px;font-weight:500;color:var(--teal);letter-spacing:0.03em;white-space:nowrap}'
+        +'.ref.p{color:var(--purple)}'
+        +'.chip{display:inline-block;font-size:8px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;padding:2px 5px;border-radius:3px;border:1px solid;white-space:nowrap;margin:1px}'
+        +'.chip.sl{background:var(--slate-bg);color:var(--slate);border-color:var(--slate-bd)}'
+        +'.chip.am{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-bd)}'
+        +'.chip.pu{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-bd)}'
+        +'.sig{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-weight:600;border:1px solid}'
+        +'.sig.s{background:var(--red-bg);color:var(--red);border-color:var(--red-bd)}'
+        +'.sig.m{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-bd)}'
+        +'.sig.l{background:var(--green-bg);color:var(--green);border-color:var(--green-bd)}'
+        +'.area{font-size:9px;color:var(--muted);margin-bottom:2px;letter-spacing:0.02em}'
+        +'.benefit{font-size:9px;color:var(--teal);margin-top:2px}'
+        +'.num{font-variant-numeric:tabular-nums}'
+        +'.dash{color:var(--faint)}'
+        +'.fps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}'
+        +'.fp{padding:10px 14px;border-radius:7px;border:1px solid var(--border);background:var(--surface)}'
+        +'.fp .l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;font-weight:500}'
+        +'.fp .v{font-size:16px;font-weight:600;color:var(--teal-dk);margin-top:2px;font-variant-numeric:tabular-nums}'
+        +'.fp.hl{background:var(--teal-bg);border-color:var(--teal-bd)}'
+        +'.rfoot{margin-top:20px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;color:var(--faint);font-size:9px;letter-spacing:0.04em}'
+        +'.appx{margin-top:34px;padding-top:14px;border-top:2px solid var(--border)}'
+        +'.lgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}'
+        +'.lbl{font-size:9px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin:0 0 8px}'
+        +'.lrow{display:flex;gap:8px;margin-bottom:6px}'
+        +'.lsw{width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;border:1.5px solid}'
+        +'.ldot{width:11px;height:11px;border-radius:50%;flex-shrink:0}'
+        +'.ltx{font-size:9px;color:var(--muted);line-height:1.45}'
+        +'.ltx strong{font-weight:600}'
+        +'.scale{margin-bottom:4px;font-size:9px;line-height:1.45}'
+        +'.scale strong{font-weight:600;color:var(--text)}'
+        +'.scale span{color:var(--muted)}'
         +'</style></head><body>'
-        +'<div class="np"><button onclick="window.print()" style="padding:8px 18px;background:#1e4d35;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer">&#128424; Print / Save as PDF</button>'
-        +'<button onclick="window.close()" style="padding:8px 18px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer">&#x2715; Close</button>'
-        +'<span style="font-size:10px;color:#94a3b8">Choose &ldquo;Save as PDF&rdquo; as printer</span></div>'
-        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:3px solid #1e4d35;margin-bottom:16px">'
-        +'<div><div style="font-size:20px;font-weight:700;color:#1e4d35">'+pName+'</div>'
-        +'<div style="font-size:10px;color:#475569;margin-top:4px;line-height:1.7">'
+        +'<div class="np"><button class="prim" onclick="window.print()">Print / Save as PDF</button>'
+        +'<button class="close" onclick="window.close()">&#215; Close</button>'
+        +'<span>Choose &ldquo;Save as PDF&rdquo; as printer</span></div>'
+        +'<div class="rhead">'
+        +'<div><div class="pname">'+pName+'</div>'
+        +'<div class="pmeta">'
         +(project.projectId?'<strong>ID:</strong> '+esc(project.projectId)+' &nbsp;&middot;&nbsp; ':'')
         +(project.company?'<strong>Company:</strong> '+esc(project.company)+' &nbsp;&middot;&nbsp; ':'')
         +(project.contract?'<strong>Contract:</strong> '+esc(project.contract)+' &nbsp;&middot;&nbsp; ':'')
         +(project.type?'<strong>Type:</strong> '+esc(project.type)+' &nbsp;&middot;&nbsp; ':'')
         +(project.phase?'<strong>Phase:</strong> '+esc(project.phase):'')
         +'</div></div>'
-        +'<div style="text-align:right"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-weight:600">Environmental Risk Assessment Report</div>'
-        +'<div style="font-size:10px;color:#475569;margin-top:2px">'+esc(dateStr)+'</div></div></div>'
-        +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">'
-        +'<div style="padding:10px;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc;text-align:center"><div style="font-size:24px;font-weight:700;color:#1e293b">'+totalAll+'</div><div style="font-size:9px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">All aspects</div></div>'
-        +'<div style="padding:10px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;text-align:center"><div style="font-size:24px;font-weight:700;color:#dc2626">'+sigCnt+'</div><div style="font-size:9px;color:#991b1b;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Significant</div></div>'
-        +'<div style="padding:10px;border-radius:6px;border:1px solid #fde047;background:#fefce8;text-align:center"><div style="font-size:24px;font-weight:700;color:#d97706">'+actionCnt+'</div><div style="font-size:9px;color:#92400e;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Action risks</div></div>'
-        +'<div style="padding:10px;border-radius:6px;border:1px solid #c4b5fd;background:#f5f3ff;text-align:center"><div style="font-size:24px;font-weight:700;color:#7c3aed">'+opps.length+'</div><div style="font-size:9px;color:#5b21b6;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">Opportunities</div></div>'
+        +'<div class="rtitle"><div class="t1">Environmental Risk Assessment Report</div>'
+        +'<div class="t2">'+esc(dateStr)+'</div></div></div>'
+        +'<div class="kpis">'
+        +'<div class="kpi"><div class="v">'+totalAll+'</div><div class="l">All aspects</div></div>'
+        +'<div class="kpi red"><div class="v">'+sigCnt+'</div><div class="l">Significant</div></div>'
+        +'<div class="kpi amber"><div class="v">'+actionCnt+'</div><div class="l">Action risks</div></div>'
+        +'<div class="kpi purple"><div class="v">'+opps.length+'</div><div class="l">Opportunities</div></div>'
         +'</div>'
-        +SEC("Matrices")
-        +'<div style="display:flex;gap:48px;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap">'
-        +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Environmental Risk Matrix</p>'
-        +'<div style="display:flex;align-items:flex-start"><div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap">CONSEQUENCE &rarr;</div>'
-        +'<div><table style="border-collapse:collapse"><tbody>'+rRows+'<tr><td></td>'+pHdr+'</tr></tbody></table>'
-        +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;margin-top:3px">PROBABILITY &rarr;</div></div></div></div>'
-        +'<div><p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 6px">Opportunity Priority Matrix</p>'
-        +'<div style="display:flex;align-items:flex-start"><div style="writing-mode:vertical-lr;transform:rotate(180deg);font-size:8px;font-weight:700;color:#475569;align-self:center;padding-right:5px;white-space:nowrap">FEASIBILITY &rarr;</div>'
-        +'<div><table style="border-collapse:collapse"><tbody>'+oRows+'<tr><td></td>'+eHdr+'</tr></tbody></table>'
-        +'<div style="text-align:center;font-size:8px;color:#475569;font-weight:700;margin-top:3px">ENVIRONMENTAL VALUE &rarr;</div>'
+        +'<div class="block">'+SEC("Matrices")
+        +'<div class="mats">'
+        +'<div><p class="mtitle">Environmental Risk Matrix</p>'
+        +'<div class="mwrap"><div class="yax">CONSEQUENCE &rarr;</div>'
+        +'<div><table class="mx"><tbody>'+rRows+'<tr><td class="axc"></td>'+pHdr+'</tr></tbody></table>'
+        +'<div class="xax">PROBABILITY &rarr;</div></div></div></div>'
+        +'<div><p class="mtitle">Opportunity Priority Matrix</p>'
+        +'<div class="mwrap"><div class="yax">FEASIBILITY &rarr;</div>'
+        +'<div><table class="mx"><tbody>'+oRows+'<tr><td class="axc"></td>'+eHdr+'</tr></tbody></table>'
+        +'<div class="xax">ENVIRONMENTAL VALUE &rarr;</div>'
         +'</div></div></div>'
-        +'</div>'
-        +(fp?SEC("Environmental Budget")+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">'
-          +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">MTO</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.mtoTotal||0).toFixed(3)+' tCO\u2082e</div></div>'
-          +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">MEL</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.melTotal||0).toFixed(3)+' tCO\u2082e</div></div>'
-          +'<div style="padding:10px 14px;border-radius:6px;border:1px solid #5eead4;background:#f0fdfa"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.07em">Combined</div><div style="font-size:16px;font-weight:700;color:#0d9488;font-family:monospace">'+Number(fp.combined||0).toFixed(3)+' tCO\u2082e</div></div>'
-          +'</div>':'')
-        +SEC("Risk Register ("+aspects.length+" aspects)")
-        +'<table><thead><tr>'
-        +'<th style="width:65px">Ref</th>'
-        +'<th style="width:70px">Phase</th>'
-        +'<th style="width:110px">Category</th>'
+        +'</div></div>'
+        +(fp?'<div class="block">'+SEC("Environmental Budget")+'<div class="fps">'
+          +'<div class="fp"><div class="l">MTO</div><div class="v">'+nb3(fp.mtoTotal)+' tCO\u2082e</div></div>'
+          +'<div class="fp"><div class="l">MEL</div><div class="v">'+nb3(fp.melTotal)+' tCO\u2082e</div></div>'
+          +'<div class="fp hl"><div class="l">Combined</div><div class="v">'+nb3(fp.combined)+' tCO\u2082e</div></div>'
+          +'</div></div>':'')
+        +'<div class="rblock">'+SEC("Risk Register ("+aspects.length+" aspects)")
+        +'<table class="reg"><thead><tr>'
+        +'<th style="width:60px">Ref</th>'
+        +'<th style="width:78px">Phase</th>'
+        +'<th style="width:112px">Category</th>'
         +'<th>Risk</th>'
-        +'<th style="width:80px;text-align:center">Abnormal</th>'
-        +'<th style="width:100px;text-align:center">Significance</th>'
-        +'<th style="width:75px;text-align:center">Status</th>'
-        +'</tr></thead><tbody>'+riskRows+'</tbody></table>'
-        +SEC("Opportunity Register ("+opps.length+" opportunities)")
-        +'<table><thead><tr>'
-        +'<th style="width:65px">Ref</th>'
-        +'<th style="width:130px">Type</th>'
+        +'<th style="width:74px;text-align:center">Abnormal</th>'
+        +'<th style="width:98px;text-align:center">Significance</th>'
+        +'<th style="width:60px;text-align:center">Status</th>'
+        +'</tr></thead><tbody>'+riskRows+'</tbody></table></div>'
+        +'<div class="rblock">'+SEC("Opportunity Register ("+opps.length+" opportunities)")
+        +'<table class="reg"><thead><tr>'
+        +'<th style="width:60px">Ref</th>'
+        +'<th style="width:150px">Type</th>'
         +'<th>Description</th>'
-        +'<th style="width:95px;text-align:center">Priority</th>'
-        +'<th style="width:110px;text-align:center">GHG saving</th>'
-        +'<th style="width:100px;text-align:center">Materiality</th>'
-        +'</tr></thead><tbody>'+oppRows+'</tbody></table>'
-        +'<div style="margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:9px">'
+        +'<th style="width:86px;text-align:center">Priority</th>'
+        +'<th style="width:104px;text-align:center">GHG saving</th>'
+        +'<th style="width:120px;text-align:center">Materiality</th>'
+        +'</tr></thead><tbody>'+oppRows+'</tbody></table></div>'
+        +'<div class="rfoot">'
         +'<span>ENV&middot;ASPECTS TOOLKIT &mdash; Environmental Risk Assessment Report</span>'
         +'<span>'+esc(dateStr)+' &nbsp;&middot;&nbsp; '+pName+'</span></div>'
-        +'<div style="margin-top:36px;padding-top:14px;border-top:2px solid #e2e8f0">'
+        +'<div class="appx">'
         +SEC("Appendix &mdash; Matrix Legends")
-        +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Risk Matrix</p>'
-        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">'
-        +'<div>'+LBL("Zone key")+zLgnd+'<p style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin:10px 0 7px">Dots</p>'+dotLgnd+'</div><div>'+LBL("Consequence levels")+cLgnd+'</div><div>'+LBL("Probability levels")+pLgnd+'</div></div>'
-        +'<p style="font-size:10px;font-weight:700;color:#1e4d35;margin:0 0 10px">Opportunity Matrix</p>'
-        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">'
-        +'<div>'+LBL("Quadrant guide")+oQLgnd+'<p style="font-size:9px;color:#64748b;margin-top:10px"><strong>Dot size</strong> = Business Value &mdash; small&nbsp;(1&ndash;2) &middot; medium&nbsp;(3) &middot; large&nbsp;(4&ndash;5)</p></div><div>'+LBL("Environmental Value")+eLgnd+'</div><div>'+LBL("Feasibility")+fLgnd+'</div></div></div>'
+        +'<p class="mtitle" style="margin-bottom:10px">Risk Matrix</p>'
+        +'<div class="lgrid">'
+        +'<div>'+LBL("Zone key")+zLgnd+'<p class="lbl" style="margin-top:10px">Dots</p>'+dotLgnd+'</div><div>'+LBL("Consequence levels")+cLgnd+'</div><div>'+LBL("Probability levels")+pLgnd+'</div></div>'
+        +'<p class="mtitle" style="margin-bottom:10px">Opportunity Matrix</p>'
+        +'<div class="lgrid">'
+        +'<div>'+LBL("Quadrant guide")+oQLgnd+'<p class="ltx" style="margin-top:10px"><strong>Dot size</strong> = Business Value &mdash; small&nbsp;(1&ndash;2) &middot; medium&nbsp;(3) &middot; large&nbsp;(4&ndash;5)</p></div><div>'+LBL("Environmental Value")+eLgnd+'</div><div>'+LBL("Feasibility")+fLgnd+'</div></div></div>'
         +'</body></html>';
 
       // window.open is called synchronously inside a click handler — browsers allow it
