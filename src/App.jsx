@@ -630,6 +630,15 @@ function calcSig(a) {
   return matrixZone(c, p);
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
+// The one priority vocabulary: quadrant label + its colors travel together (D7).
+// calcOppScore stays as the numeric Score column / dot-size input; it no longer names priority.
+function oppQuadrant(o) {
+  const hE = (o.envValue||1) >= 4, hF = (o.feasibility||1) >= 4;
+  if (hE && hF)  return { label:"Quick win",    c:T.green,  bg:T.greenBg,  bd:T.greenBd,  rank:3 };
+  if (!hE && hF) return { label:"Pursue",       c:T.purple, bg:T.purpleBg, bd:T.purpleBd, rank:2 };
+  if (hE && !hF) return { label:"Plan",         c:T.blue,   bg:T.blueBg,   bd:T.blueBd,   rank:1 };
+  return                { label:"Deprioritize", c:T.slate,  bg:T.slateBg,  bd:T.slateBd,  rank:0 };
+}
 function snapKg(phase) {
   // Works for both GhgPhase and legacy GhgSnapshot
   if (!phase) return {identified:0, actual:0};
@@ -885,34 +894,25 @@ function ThemeToggle({ isDark, onToggle }) {
   );
 }
 
-// ── Aspect form — matches screening form UI ───────────────────────────────────
-function AspectForm({ aspect, onSave, onCancel }) {
-  const [f, setF] = useState({ ...emptyAspect(), ...aspect });
-  const set = (k, v) => setF(p => ({ ...p, [k]:v }));
-  const score = calcScore(f);
-  const sig   = calcSig(f);
+// ── Shared aspect field-set — create (screening) and edit render the SAME fields (D2).
+// The fuller of the two forms: includes Receptor sensitivity / Scale / Duration.
+// Flow-specific bits (header, prefill, submit copy, drawer vs inline) stay in the callers.
+const AspectFormFields = ({ form, set }) => {
+  const score = calcScore(form);
+  const sig   = calcSig(form);
   return (
-    <div style={{ padding:"1.25rem" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
-        <Btn onClick={onCancel} variant="ghost">← Back</Btn>
-        <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red }}>
-          {aspect.id ? "Edit risk" : "New risk"}
-        </h3>
-        {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
-      </div>
-
+    <>
       <Card style={{ marginBottom:"1rem" }} accent={T.red}>
         <SectionLabel>Activity details</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
           <Fld label="Phase">
             <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
               {PHASES.map(p => {
-                const sel = (f.phase||"").split(",").filter(Boolean);
-                const active = sel.includes(p);
+                const active = (form.phase||"").split(",").filter(Boolean).includes(p);
                 return (
                   <button key={p} type="button"
                     onClick={() => {
-                      const cur = (f.phase||"").split(",").filter(Boolean);
+                      const cur = (form.phase||"").split(",").filter(Boolean);
                       const next = active ? cur.filter(x=>x!==p) : [...cur, p];
                       set("phase", next.join(","));
                     }}
@@ -927,23 +927,23 @@ function AspectForm({ aspect, onSave, onCancel }) {
               })}
             </div>
           </Fld>
-          <Fld label="Activity area"><input value={f.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-          <Fld label="Environmental risk" wide><input value={f.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
-          <Fld label="Potential environmental impact" wide><textarea value={f.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="Activity area"><input value={form.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
+          <Fld label="Environmental aspect" wide><input value={form.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
+          <Fld label="Potential environmental impact" wide><textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
           <Fld label="Abnormal condition" wide>
             <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
-              <input type="checkbox" checked={!!f.isAbnormal}
+              <input type="checkbox" checked={!!form.isAbnormal}
                 onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) { set("abnormalType",""); set("abnormalDesc",""); } }}
                 style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
               <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
             </label>
-            {f.isAbnormal && (
+            {form.isAbnormal && (
               <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:5 }}>
-                <select value={f.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)} style={iw}>
+                <select value={form.abnormalType||""} onChange={e=>set("abnormalType",e.target.value)} style={iw}>
                   <option value="">— select type —</option>
                   {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
                 </select>
-                <textarea value={f.abnormalDesc||""} onChange={e=>set("abnormalDesc",e.target.value)}
+                <textarea value={form.abnormalDesc||""} onChange={e=>set("abnormalDesc",e.target.value)}
                   rows={2} placeholder="Describe the abnormal condition…" style={{ ...iw, resize:"vertical" }}/>
               </div>
             )}
@@ -953,23 +953,28 @@ function AspectForm({ aspect, onSave, onCancel }) {
 
       <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
         <SectionLabel>Significance scoring</SectionLabel>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:10 }}>
+          <Fld label="Receptor sensitivity"><select value={form.recSensitivity} onChange={e=>set("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Scale"><select value={form.scale} onChange={e=>set("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Duration"><select value={form.duration} onChange={e=>set("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
+        </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
           <Fld label="Consequence (C1–C5)">
-            <select value={f.severity} onChange={e=>set("severity",+e.target.value)} style={iw}>
+            <select value={form.severity} onChange={e=>set("severity",+e.target.value)} style={iw}>
               {[{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Major"},{v:5,l:"5 — Catastrophic"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
           </Fld>
           <Fld label="Probability (P1–P5)">
-            <select value={f.probability} onChange={e=>set("probability",+e.target.value)} style={iw}>
+            <select value={form.probability} onChange={e=>set("probability",+e.target.value)} style={iw}>
               {[{v:1,l:"1 — Very unlikely (0–1%)"},{v:2,l:"2 — Unlikely (1–5%)"},{v:3,l:"3 — Possible (5–25%)"},{v:4,l:"4 — Likely (25–50%)"},{v:5,l:"5 — Very likely (50–100%)"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
           </Fld>
-          <Fld label="Legal threshold"><select value={f.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
-          <Fld label="Stakeholder concern"><select value={f.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+          <Fld label="Legal threshold"><select value={form.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+          <Fld label="Stakeholder concern"><select value={form.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
         </div>
         {score !== null && (
           <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
@@ -981,21 +986,40 @@ function AspectForm({ aspect, onSave, onCancel }) {
               </strong>
             </span>
             <span style={sigStyle(sig)}>{sig}</span>
-            {f.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
-            {f.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
+            {form.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
+            {form.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
           </div>
         )}
       </Card>
 
-      <Card style={{ marginBottom:"1.5rem" }}>
-        <SectionLabel>Controls & management</SectionLabel>
+      <Card style={{ marginBottom:"1rem" }}>
+        <SectionLabel>Controls &amp; management</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-          <Fld label="Key control measure" wide><textarea value={f.control} onChange={e=>set("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
-          <Fld label="Legal / regulatory reference" wide><input value={f.legalRef} onChange={e=>set("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7, OSPAR" style={iw}/></Fld>
-          <Fld label="Owner"><input value={f.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
-          <Fld label="Status"><select value={f.status} onChange={e=>set("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Key control measure" wide><textarea value={form.control} onChange={e=>set("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="Legal / regulatory reference" wide><input value={form.legalRef} onChange={e=>set("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7, OSPAR" style={iw}/></Fld>
+          <Fld label="Owner"><input value={form.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
+          <Fld label="Status"><select value={form.status} onChange={e=>set("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
         </div>
       </Card>
+    </>
+  );
+};
+
+// ── Aspect form — matches screening form UI ───────────────────────────────────
+function AspectForm({ aspect, onSave, onCancel }) {
+  const [f, setF] = useState({ ...emptyAspect(), ...aspect });
+  const set = (k, v) => setF(p => ({ ...p, [k]:v }));
+  return (
+    <div style={{ padding:"1.25rem" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
+        <Btn onClick={onCancel} variant="ghost">← Back</Btn>
+        <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.red }}>
+          {aspect.id ? "Edit risk" : "New risk"}
+        </h3>
+        {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
+      </div>
+
+      <AspectFormFields form={f} set={set}/>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
         <Btn onClick={onCancel}>Cancel</Btn>
         <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
@@ -1315,12 +1339,9 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   );
 
   const score = calcOppScore(f);
-  const hEf = (f.envValue||1) >= 4, hFf = (f.feasibility||1) >= 4;
-  const prioLabel = hEf&&hFf ? "Quick win" : (!hEf&&hFf) ? "Pursue" : (hEf&&!hFf) ? "Plan" : "Deprioritize";
-  const sc = hEf&&hFf ? {bg:T.greenBg, c:T.green}
-           : (!hEf&&hFf) ? {bg:T.purpleBg, c:T.purple}
-           : (hEf&&!hFf) ? {bg:T.blueBg,   c:T.blue}
-           :                {bg:T.slateBg,  c:T.slate};
+  const q = oppQuadrant(f);
+  const prioLabel = q.label;
+  const sc = { bg:q.bg, c:q.c };
 
   // Keep activeSnapIdx in bounds
   const snaps = f.ghgPhases||[];
@@ -1721,13 +1742,12 @@ const TH = ({ children }) => (
 );
 
 // ── Screening tab ─────────────────────────────────────────────────────────────
-function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
+function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
   const [mode, setMode]               = useState("risks");
   const [expanded, setExpanded]       = useState({});
   const [view, setView]               = useState("guide");
   const [riskForm, setRiskForm]       = useState(emptyAspect());
   const [oppForm, setOppForm]         = useState(emptyOpp());
-  const [toast, setToast]             = useState("");
   const [screenSearch, setScreenSearch] = useState("");
   const [noxWarn, setNoxWarn]         = useState(false);
   // Skips are workshop decisions, not view state — persisted on the project record
@@ -1742,7 +1762,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
   const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
   const setRF = (k, v) => setRiskForm(p => ({ ...p, [k]:v }));
   const setOF = (k, v) => setOppForm(p => ({ ...p, [k]:v }));
-  const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+  const showToast = msg => notify(msg);   // route through the shared shell toast
 
   // prefillRisk now inlined in button onClick — kept for legacy compatibility
   const prefillRisk = (code, item, sectionColor) => {
@@ -1752,8 +1772,6 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
   };
 
   // Prefill for risk guide words (unchanged)
-  const riskScore = calcScore(riskForm);
-  const riskSig   = calcSig(riskForm);
   const saveRisk  = () => {
     if (!riskForm.aspect.trim()) return;
     onAddAspect(riskForm); setRiskForm(emptyAspect()); setView("guide");
@@ -1779,10 +1797,6 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
     onAddOpp(oppForm); setOppForm(emptyOpp()); setView("guide"); setNoxWarn(false);
     showToast("Opportunity saved to register");
   };
-
-  const oppScore = calcOppScore(oppForm);
-  const prioLabel = oppScore>=75?"High priority":oppScore>=30?"Medium priority":"Low priority";
-  const oppSc = oppScore>=75?{bg:T.tealBg,c:T.tealDark}:oppScore>=30?{bg:T.tealBg,c:T.teal}:{bg:T.slateBg,c:T.slate};
 
   // Risk guide data now uses RISK_CATEGORIES constant — filteredRiskGuide removed
 
@@ -1825,13 +1839,6 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
             placeholder={isRisks?"Search guide words...":"Search opportunity categories..."}
             style={{ width:200, padding:"5px 10px", fontSize:12, border:"1px solid "+T.border,
                      borderRadius:6, background:T.surface, color:T.text }}/>
-        )}
-        {toast && (
-          <span role="status" aria-live="polite"
-                style={{ fontFamily:T.mono, fontSize:11, color:T.teal, background:T.tealBg,
-                         border:"1px solid "+T.tealBd, padding:"4px 10px", borderRadius:4 }}>
-            {toast}
-          </span>
         )}
         {view === "guide" && (
           <button onClick={() => setView("form")}
@@ -2111,108 +2118,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp }) {
             <h3 style={{ margin:"0 0 1rem", fontSize:14, fontWeight:600, color:T.red }}>
               Risk screening
             </h3>
-            <Card style={{ marginBottom:"1rem" }} accent={T.red}>
-              <SectionLabel>Activity details</SectionLabel>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-                {/* Phase — toggle pill buttons, left column */}
-                <Fld label="Phase">
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-                    {PHASES.map(p => {
-                      const sel = (riskForm.phase||"").split(",").filter(Boolean);
-                      const active = sel.includes(p);
-                      return (
-                        <button key={p} type="button"
-                          onClick={() => {
-                            const cur = (riskForm.phase||"").split(",").filter(Boolean);
-                            const next = active ? cur.filter(x=>x!==p) : [...cur, p];
-                            setRF("phase", next.join(","));
-                          }}
-                          style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
-                            cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
-                            background: active ? T.tealBg : "transparent",
-                            color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
-                            fontFamily:"var(--sans,system-ui)" }}>
-                          {p}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Fld>
-                <Fld label="Activity area"><input value={riskForm.area} onChange={e=>setRF("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-                <Fld label="Environmental aspect" wide><input value={riskForm.aspect} onChange={e=>setRF("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
-                <Fld label="Potential environmental impact" wide><textarea value={riskForm.impact} onChange={e=>setRF("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
-                {/* Abnormal condition — plain, no colour coding */}
-                <Fld label="Abnormal condition" wide>
-                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
-                    <input type="checkbox" checked={!!riskForm.isAbnormal}
-                      onChange={e => { setRF("isAbnormal", e.target.checked); if (!e.target.checked) { setRF("abnormalType",""); setRF("abnormalDesc",""); } }}
-                      style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
-                    <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
-                  </label>
-                  {riskForm.isAbnormal && (
-                    <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:5 }}>
-                      <select value={riskForm.abnormalType||""} onChange={e=>setRF("abnormalType",e.target.value)} style={iw}>
-                        <option value="">— select type —</option>
-                        {ABNORMAL_CONDITIONS.map(c=><option key={c}>{c}</option>)}
-                      </select>
-                      <textarea value={riskForm.abnormalDesc||""} onChange={e=>setRF("abnormalDesc",e.target.value)}
-                        rows={2} placeholder="Describe the abnormal condition…" style={{ ...iw, resize:"vertical" }}/>
-                    </div>
-                  )}
-                </Fld>
-              </div>
-            </Card>
-            <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
-              <SectionLabel>Significance scoring</SectionLabel>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:10 }}>
-                <Fld label="Receptor sensitivity"><select value={riskForm.recSensitivity} onChange={e=>setRF("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-                <Fld label="Scale"><select value={riskForm.scale} onChange={e=>setRF("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-                <Fld label="Duration"><select value={riskForm.duration} onChange={e=>setRF("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
-                <Fld label="Consequence (C1–C5)">
-                  <select value={riskForm.severity} onChange={e=>setRF("severity",+e.target.value)} style={iw}>
-                    {[{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Major"},{v:5,l:"5 — Catastrophic"}].map(o=>(
-                      <option key={o.v} value={o.v}>{o.l}</option>
-                    ))}
-                  </select>
-                </Fld>
-                <Fld label="Probability (P1–P5)">
-                  <select value={riskForm.probability} onChange={e=>setRF("probability",+e.target.value)} style={iw}>
-                    {[{v:1,l:"1 — Very unlikely (0–1%)"},{v:2,l:"2 — Unlikely (1–5%)"},{v:3,l:"3 — Possible (5–25%)"},{v:4,l:"4 — Likely (25–50%)"},{v:5,l:"5 — Very likely (50–100%)"}].map(o=>(
-                      <option key={o.v} value={o.v}>{o.l}</option>
-                    ))}
-                  </select>
-                </Fld>
-                <Fld label="Legal threshold"><select value={riskForm.legalThreshold} onChange={e=>setRF("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
-                <Fld label="Stakeholder concern"><select value={riskForm.stakeholderConcern} onChange={e=>setRF("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
-              </div>
-              {riskScore !== null && (
-                <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
-                              display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
-                    Risk score:{" "}
-                    <strong style={{ fontSize:22,
-                      color: riskSig==="SIGNIFICANT" ? T.red : riskSig==="MEDIUM" ? T.amber : T.green }}>
-                      {riskScore}
-                    </strong>
-
-                  </span>
-                  <span style={sigStyle(riskSig)}>{riskSig}</span>
-                  {riskForm.legalThreshold==="Y"&&<span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
-                  {riskForm.stakeholderConcern==="Y"&&<span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
-                </div>
-              )}
-            </Card>
-            <Card style={{ marginBottom:"1rem" }}>
-              <SectionLabel>Controls &amp; management</SectionLabel>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-                <Fld label="Key control measure" wide><textarea value={riskForm.control} onChange={e=>setRF("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
-                <Fld label="Legal / regulatory reference" wide><input value={riskForm.legalRef} onChange={e=>setRF("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7" style={iw}/></Fld>
-                <Fld label="Owner"><input value={riskForm.owner} onChange={e=>setRF("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
-                <Fld label="Status"><select value={riskForm.status} onChange={e=>setRF("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-              </div>
-            </Card>
+            <AspectFormFields form={riskForm} set={setRF}/>
             <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
               <Btn onClick={() => setRiskForm(emptyAspect())}>Clear</Btn>
               <button onClick={saveRisk} disabled={!riskForm.aspect.trim()}
@@ -2662,6 +2568,14 @@ function WasteTab({ project, onChange }) {
 
 function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
+  // One toast system for the whole project shell (D3). Children call notify(msg).
+  const [toast, setToast]                 = useState("");
+  const toastTimer = React.useRef(null);
+  const notify = (msg) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2500);
+  };
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
   const [dashFilter, setDashFilter]       = useState("all");
@@ -3029,10 +2943,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         };
 
         onChange(imported);
-        alert(
-          `✓ Project "${imported.name || "Untitled"}" imported.\n` +
-          `${imported.aspects.length} risks · ${imported.opportunities.length} opportunities · ` +
-          `${imported.attendeeSessions.length} attendee sessions.`
+        notify(
+          `Project "${imported.name || "Untitled"}" imported — ` +
+          `${imported.aspects.length} risks · ${imported.opportunities.length} opportunities`
         );
       } catch (err) {
         alert("Could not read file:\n" + err.message + "\n\nMake sure it is a valid .envproject JSON file.");
@@ -3181,7 +3094,6 @@ This cannot be undone.`)) return;
   const sigCount   = aspects.filter(a=>calcSig(a)==="SIGNIFICANT").length;
   const watchCount = aspects.filter(a=>calcSig(a)==="MEDIUM").length;
   const lowCount   = aspects.filter(a=>calcSig(a)==="Low").length;
-  const highOpps   = opps.filter(o=>calcOppScore(o)>=75).length;
   const totalGhgSaving = opps.reduce((s,o)=>{ const g=calcGhgTotal(o); return s+(g||0); }, 0);
   const fmtGhg = kg => kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t CO₂e":kg>0?kg.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg CO₂e":"—";
   const statusCounts = STATUSES.reduce((acc,s) => {
@@ -3224,7 +3136,7 @@ This cannot be undone.`)) return;
     if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
     if (oppSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(oppSort.col==="score"){va=calcOppScore(a);vb=calcOppScore(b);}
-      else if(oppSort.col==="priority"){const pRank=s=>{const sc=calcOppScore(s);return sc>=75?2:sc>=30?1:0;};va=pRank(a);vb=pRank(b);}
+      else if(oppSort.col==="priority"){va=oppQuadrant(a).rank;vb=oppQuadrant(b).rank;}
       else if(oppSort.col==="ghgSaving"){va=calcGhgTotal(a)||0;vb=calcGhgTotal(b)||0;}
       else{va=(a[oppSort.col]||"").toLowerCase();vb=(b[oppSort.col]||"").toLowerCase();}
       return oppSort.dir==="asc"?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); });
@@ -3486,7 +3398,7 @@ This cannot be undone.`)) return;
         <tbody>
           {rows.map((o) => {
             const score  = calcOppScore(o);
-            const sc     = score>=75?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}:score>=30?{bg:T.tealBg,c:T.teal,bd:T.tealBd}:{bg:T.purpleBg,c:T.purple,bd:T.purpleBd};
+            const sc     = oppQuadrant(o);
             const matC   = o.materiality&&o.materiality.startsWith("Inside")?{bg:T.tealBg,c:T.teal}:o.materiality&&o.materiality.startsWith("Outside")?{bg:T.blueBg,c:T.blue}:{bg:T.purpleBg,c:T.purple};
             const rc     = rowColor(o);
             const leftBd = rc ? "3px solid "+rc.head : "3px solid transparent";
@@ -3517,7 +3429,7 @@ This cannot be undone.`)) return;
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
-                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{(()=>{const hEt=(o.envValue||1)>=4,hFt=(o.feasibility||1)>=4;return hEt&&hFt?"Quick win":(!hEt&&hFt)?"Pursue":(hEt&&!hFt)?"Plan":"Deprioritize";})()}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
@@ -3554,6 +3466,16 @@ This cannot be undone.`)) return;
 
   return (
     <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
+      {/* One shared toast, rendered once above every tab */}
+      {toast && (
+        <div role="status" aria-live="polite"
+          style={{ position:"fixed", right:16, bottom:16, background:T.surface,
+                   border:"1px solid "+T.tealBd, borderLeft:"3px solid "+T.teal,
+                   borderRadius:7, padding:"9px 14px", fontSize:12, color:T.text,
+                   boxShadow:"0 4px 16px rgba(0,0,0,0.18)", zIndex:80, maxWidth:340 }}>
+          {toast}
+        </div>
+      )}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
                     marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
         <div role="tablist" aria-label="Project sections"
@@ -3577,7 +3499,10 @@ This cannot be undone.`)) return;
             </button>
           ))}
         </div>
-        <div style={{ display:"flex", gap:6 }}>
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          {/* Instant-save tabs write on every change — reassure instead of toasting each keystroke */}
+          {(tab==="settings"||tab==="waste"||tab==="attendees") &&
+            <span style={{ fontFamily:T.mono, fontSize:9, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em" }}>All changes saved</span>}
           {project.type  && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, letterSpacing:"0.05em" }}>{project.type}</span>}
           {project.phase && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.blueBg,  color:T.blue,  border:"1px solid "+T.blueBd,  letterSpacing:"0.05em" }}>{project.phase}</span>}
         </div>
@@ -3841,11 +3766,9 @@ This cannot be undone.`)) return;
                     );
                     return topOpps.map((o, i) => {
                       const score  = calcOppScore(o);
-                      const hE = (o.envValue||1)>=4, hF = (o.feasibility||1)>=4;
-            const pLabel = hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";
-                      const pC     = score>=75?{bg:T.tealBg,c:T.tealDark,bd:T.tealBd}
-                                    :score>=30?{bg:T.tealBg,c:T.teal,bd:T.tealBd}
-                                    :           {bg:T.slateBg,c:T.slate,bd:T.slateBd};
+                      const pq     = oppQuadrant(o);
+                      const pLabel = pq.label;
+                      const pC     = { bg:pq.bg, c:pq.c, bd:pq.bd };
                       const ghg    = calcGhgTotal(o);
                       return (
                         <div key={o.id} onClick={()=>setEditOpp(o)}
@@ -3889,7 +3812,7 @@ This cannot be undone.`)) return;
       )}
 
       {tab === "screening" && (
-        <ScreeningTab project={project} onChange={onChange} onAddAspect={saveAspect} onAddOpp={saveOpp}/>
+        <ScreeningTab project={project} onChange={onChange} onAddAspect={saveAspect} onAddOpp={saveOpp} notify={notify}/>
       )}
 
       {tab === "risks" && (
@@ -4188,13 +4111,8 @@ This cannot be undone.`)) return;
               </div>
             ) : (() => {
               const CELL = 70;
-              const oppQ = (ev, feas) => {
-                const hE = ev >= 4, hF = feas >= 4;
-                if  (!hE && hF)  return { bg:T.purpleBg, bd:T.purpleBd, label:"Pursue",       c:T.purple };
-                if  (hE  && hF)  return { bg:T.greenBg,  bd:T.greenBd,  label:"Quick win",    c:T.green  };
-                if  (!hE && !hF) return { bg:T.slateBg,  bd:T.slateBd,  label:"Deprioritize", c:T.slate  };
-                return                   { bg:T.blueBg,   bd:T.blueBd,   label:"Plan",         c:T.blue   };
-              };
+              // One source: cell coords map to a synthetic opp so the matrix uses the same quadrant helper
+              const oppQ = (ev, feas) => oppQuadrant({ envValue: ev, feasibility: feas });
               const isQCorner = (ev, feas) =>
                 (ev===1&&feas===5)||(ev===5&&feas===5)||(ev===1&&feas===1)||(ev===5&&feas===1);
               const oGrid = {};
@@ -4746,7 +4664,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const openN=asp.filter(a=>a.status==="Action").length;
     const inProg=0;
     const closed=asp.filter(a=>a.status==="Info").length;
-    const hi=opp.filter(o=>calcOppScore(o)>=75).length;
+    const hi=opp.filter(o=>oppQuadrant(o).label==="Quick win").length;
     const tot=asp.length;
     return (
       <div {...clickable(()=>{onSelect(p.id);onClose();}, "Open project "+(p.name||"Unnamed"))}
@@ -4790,8 +4708,8 @@ function PortfolioView({ projects, onClose, onSelect }) {
             <span style={{ fontSize:10,color:"var(--muted)",fontWeight:500 }}>Opportunities:</span>
             <span style={{ fontSize:10,color:"var(--muted)" }}>Total <strong style={{ color:"var(--text)" }}>{opp.length}</strong></span>
             <span style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:3 }}>
-              <span style={{ width:7,height:7,borderRadius:"50%",background:"var(--teal)",display:"inline-block" }}/>
-              High <strong style={{ color:"var(--text)" }}>{hi}</strong>
+              <span style={{ width:7,height:7,borderRadius:"50%",background:"var(--green)",display:"inline-block" }}/>
+              Quick wins <strong style={{ color:"var(--text)" }}>{hi}</strong>
             </span>
           </div>}
           {p.footprintSummary && (() => {
@@ -4852,8 +4770,14 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const openN=asp.filter(a=>a.status==="Action").length;
     const inP=0;
     const cls=asp.filter(a=>a.status==="Info").length;
-    const hiOpp=opp.filter(o=>calcOppScore(o)>=75).length;
-    const medOpp=opp.filter(o=>{const s=calcOppScore(o);return s>=30&&s<75;}).length;
+    const oppQuadDefs = [
+      {key:"Quick win",    l:"Quick win",    bg:"var(--green-bg)", c:"var(--green)",  bd:"var(--green-bd)"},
+      {key:"Pursue",       l:"Pursue",       bg:"var(--purple-bg)",c:"var(--purple)", bd:"var(--purple-bd)"},
+      {key:"Plan",         l:"Plan",         bg:"var(--blue-bg)",  c:"var(--blue)",   bd:"var(--blue-bd)"},
+      {key:"Deprioritize", l:"Deprioritize", bg:"var(--slate-bg)", c:"var(--slate)",  bd:"var(--slate-bd)"},
+    ];
+    const oppQuadCounts = opp.reduce((m,o)=>{ const l=oppQuadrant(o).label; m[l]=(m[l]||0)+1; return m; }, {});
+    const oppQuad = oppQuadDefs.map(d=>({...d, v:oppQuadCounts[d.key]||0}));
     const ghg=opp.reduce((s,o)=>{const g=calcGhgTotal(o);return s+(g||0);},0);
     const sc=calcPortfolioScopeSavings(opp);
     const fpProjects=ps.filter(p=>p.footprintSummary);
@@ -4922,14 +4846,12 @@ function PortfolioView({ projects, onClose, onSelect }) {
             </div>
             {opp.length>0?<>
               <div style={{ display:"flex",height:8,borderRadius:4,overflow:"hidden",gap:"1px",marginBottom:6 }}>
-                {hiOpp>0&&<div style={{ flex:hiOpp,background:"var(--teal-bd)",minWidth:4 }}/>}
-                {medOpp>0&&<div style={{ flex:medOpp,background:"var(--amber-bd)",minWidth:4 }}/>}
-                {opp.length-hiOpp-medOpp>0&&<div style={{ flex:opp.length-hiOpp-medOpp,background:"var(--border)",minWidth:3 }}/>}
+                {oppQuad.filter(x=>x.v>0).map(x=>(
+                  <div key={x.l} style={{ flex:x.v,background:x.bd,minWidth:4 }}/>
+                ))}
               </div>
               <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
-                {[{l:"High",v:hiOpp,bg:"var(--teal-bg)",c:"var(--teal)",bd:"var(--teal-bd)"},
-                  {l:"Medium",v:medOpp,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
-                  {l:"Low/None",v:opp.length-hiOpp-medOpp,bg:"var(--slate-bg)",c:"var(--slate)",bd:"var(--border)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                {oppQuad.filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
                   <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                     {l} <strong>{v}</strong>
                   </span>
