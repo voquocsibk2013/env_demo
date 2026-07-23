@@ -131,6 +131,10 @@
       :focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; } /* keyboard: ring */
       select option { background: var(--surface); color: var(--text); }
       button { cursor: pointer; }
+      /* Invisible ≥24px hit halo around small controls (WCAG 2.2 target size) — visual size unchanged */
+      .hit { position: relative; }
+      .hit::after { content: ""; position: absolute; inset: 50% auto auto 50%;
+        translate: -50% -50%; width: max(100%, 24px); height: max(100%, 24px); }
       ::-webkit-scrollbar { width: 4px; height: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
