@@ -454,6 +454,7 @@ const THEMES = {
     "--text":        "#1A1C1E",
     "--muted":       "#6B7280",
     "--faint":       "#9CA3AF",
+    "--bar-ink":     "#FFFFFF",   // ink on filled stacked-bar segments (dark ink in dark theme)
     "--border":      "#DDD9D0",
     "--row-bd":      "#F0EDE6",
     "--teal":        "#0F6E56",
@@ -502,8 +503,9 @@ const THEMES = {
     "--surface":     "#1A1D26",
     "--surface2":    "#151821",
     "--text":        "#E2DFD8",
-    "--muted":       "#7C8190",
-    "--faint":       "#4A4E5A",
+    "--muted":       "#868C9C",   // raised from #7C8190 → ≥4.5:1 on all dark surfaces incl. #1A1D26 (P21 contrast audit)
+    "--faint":       "#6E7382",   // ~4:1 on #0F1117 — decorative tier (up from 2.2:1); readable text uses --muted (P19)
+    "--bar-ink":     "#0F1117",   // dark ink on lifted amber/green/red segments (all ≥4.5:1)
     "--border":      "#252830",
     "--row-bd":      "#1E2028",
     "--teal":        "#1D9E75",
@@ -599,6 +601,11 @@ const T = {
   mono:     "var(--mono)",
   sans:     "var(--sans)",
 };
+
+// Type scale — 10px floor (P19/C3). Stop hand-picking sizes; chips/labels = data.
+// Convention: T.faint = decorative marks only (rules, dividers, ellipsis hints);
+// any text a user must READ uses T.muted or darker.
+const TYPE = { data:10, label:10, body:11, cell:12 };
 
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
@@ -834,7 +841,7 @@ function condStyle(cd) {
   const c = cd==="Emergency" ? {bg:T.redBg,   c:T.red}
            : cd==="Abnormal" ? {bg:T.amberBg, c:T.amber}
            :                    {bg:T.greenBg, c:T.green};
-  return { fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"2px 6px", borderRadius:3,
+  return { fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, padding:"2px 6px", borderRadius:3,
            display:"inline-block", background:c.bg, color:c.c, letterSpacing:"0.05em", textTransform:"uppercase" };
 }
 
@@ -856,7 +863,7 @@ function Card({ children, style, accent }) {
   );
 }
 function SectionLabel({ children }) {
-  return <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.faint,
+  return <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.muted,
                      letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 0 12px" }}>{children}</p>;
 }
 function Btn({ children, onClick, variant="default", size="md", disabled }) {
@@ -883,7 +890,7 @@ function ThemeToggle({ isDark, onToggle }) {
     <button onClick={onToggle} title={isDark?"Switch to light theme":"Switch to dark theme"}
       style={{ background:"transparent", border:"1px solid var(--sb-bd)", borderRadius:5,
                cursor:"pointer", padding:"5px 8px", display:"flex", alignItems:"center", gap:6,
-               color:"var(--sb-muted)", fontFamily:T.mono, fontSize:9 }}>
+               color:"var(--sb-muted)", fontFamily:T.mono, fontSize:TYPE.data }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         {isDark
           ? <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>
@@ -931,10 +938,10 @@ const AspectFormFields = ({ form, set }) => {
           <Fld label="Environmental aspect" wide><input value={form.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
           <Fld label="Potential environmental impact" wide><textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
           <Fld label="Abnormal condition" wide>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+            <label className="hit" style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
               <input type="checkbox" checked={!!form.isAbnormal}
                 onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) { set("abnormalType",""); set("abnormalDesc",""); } }}
-                style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }}/>
+                style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:T.teal }}/>
               <span style={{ fontSize:12, color:T.text }}>Abnormal condition</span>
             </label>
             {form.isAbnormal && (
@@ -1089,7 +1096,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                     {visibleScopes.length>1&&li===0&&<td rowSpan={totalRows}
                       style={{padding:"5px 7px",verticalAlign:"top",paddingTop:8,borderBottom:"1px solid "+T.rowBd,
                               borderRight:"1px solid "+T.border,width:82}}>
-                      <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,
+                      <span style={{fontSize:TYPE.data,fontWeight:700,padding:"2px 6px",borderRadius:3,
                         background:sc2.bg,color:sc2.c,border:"1px solid "+sc2.bd,display:"inline-block",whiteSpace:"nowrap"}}>{scope}</span>
                     </td>}
                     <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,color:T.text,fontWeight:500}}>{l.type}</td>
@@ -1194,9 +1201,9 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                         <input value={cr.ref||""} onChange={e=>onSetCustomRow(si,crid,"ref",e.target.value)}
                           placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
                             border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                        <button onClick={()=>{ if(armedDel===crid){ armDel(null); onDelCustomRow(si,crid); } else armDel(crid); }}
+                        <button className="hit" onClick={()=>{ if(armedDel===crid){ armDel(null); onDelCustomRow(si,crid); } else armDel(crid); }}
                           style={{fontSize:armedDel===crid?10:11,fontWeight:armedDel===crid?600:400,minWidth:34,whiteSpace:"nowrap",
-                            color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px"}}>
+                            color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"4px 6px"}}>
                           {armedDel===crid?"Sure?":"×"}</button>
                       </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
                     </td>
@@ -1272,10 +1279,10 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
                        fontFamily:T.sans,background:"transparent",border:"none",
                        color:active?"#fff":T.muted}}>
                 {qph.label}
-                {qph.note&&<span style={{marginLeft:4,fontSize:9,opacity:0.6}}>●</span>}
+                {qph.note&&<span style={{marginLeft:4,fontSize:TYPE.data,opacity:0.6}}>●</span>}
               </button>
               {latest&&(
-                <button onClick={delQualPhase} title="Delete this phase"
+                <button className="hit" onClick={delQualPhase} title="Delete this phase"
                   style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
                          fontFamily:T.sans,background:"transparent",border:"none",
                          color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
@@ -1306,10 +1313,10 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
                   style={{flex:1,padding:"3px 8px",fontSize:13,fontWeight:700,color:T.slate,
                     border:"1px solid "+T.slateBd,borderRadius:5,background:"transparent"}}/>
               :<span style={{fontSize:13,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
-            <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+            <span style={{fontFamily:T.mono,fontSize:10,color:T.muted}}>
               {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
             </span>
-            {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
+            {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.muted,fontStyle:"italic"}}>read-only</span>}
           </div>
           {/* Note body */}
           <div style={{padding:"10px 12px",background:T.surface}}>
@@ -1318,12 +1325,12 @@ function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases
                   placeholder="Describe expected savings for this phase — approach, methodology, estimated reduction range"
                   style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
               :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
-                 {activeQP.note||<span style={{color:T.faint,fontStyle:"italic"}}>No note recorded</span>}
+                 {activeQP.note||<span style={{color:T.muted,fontStyle:"italic"}}>No note recorded</span>}
                </p>}
           </div>
         </div>
       ) : (
-        <p style={{fontSize:11,color:T.faint,margin:0,fontStyle:"italic"}}>
+        <p style={{fontSize:11,color:T.muted,margin:0,fontStyle:"italic"}}>
           No phases — click "+ Add phase" to start.
         </p>
       )}
@@ -1399,7 +1406,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     "Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},
     "Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd},
   };
-  const thS={padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,
+  const thS={padding:"5px 8px",textAlign:"left",fontSize:TYPE.data,fontWeight:600,color:T.muted,
              borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
   const tdS=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
 
@@ -1414,7 +1421,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     const pT=snapKg(prev),cT=snapKg(curr);
     const dI=cT.identified-pT.identified;
     const dA=cT.actual-pT.actual;
-    if(dI===0&&dA===0) return <span style={{fontSize:11,color:T.faint}}>Values carried forward.</span>;
+    if(dI===0&&dA===0) return <span style={{fontSize:11,color:T.muted}}>Values carried forward.</span>;
     const fmtD = v => {
       const kg=Math.abs(v); const sign=v>=0?"+":"−";
       return sign+(kg>=1000?(kg/1000).toLocaleString("nb-NO",{maximumFractionDigits:1})+" t CO₂e":Math.round(kg)+" kg CO₂e");
@@ -1525,7 +1532,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                 </select>
               </Fld>
               <div style={{marginTop:6}}>
-                <p style={{margin:"0 0 3px",fontSize:10,fontWeight:600,color:T.faint,
+                <p style={{margin:"0 0 3px",fontSize:10,fontWeight:600,color:T.muted,
                            letterSpacing:"0.07em",textTransform:"uppercase"}}>{bl}</p>
                 <textarea value={f[bk]||""} onChange={e=>set(bk,e.target.value)} rows={2}
                   style={{...iw,resize:"vertical",fontSize:12}}/>
@@ -1616,7 +1623,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                       </span>}
                     </button>
                     {latest&&(
-                      <button onClick={deleteLatestPhase}
+                      <button className="hit" onClick={deleteLatestPhase}
                         title="Delete this phase"
                         style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
                                fontFamily:T.sans,background:"transparent",border:"none",
@@ -1640,7 +1647,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
             {safeIdx > 0 && activeSnap && (
               <div style={{padding:"5px 10px",borderRadius:5,background:T.slateBg,
                            border:"1px solid "+T.border,marginBottom:"0.5rem",fontSize:11}}>
-                <span style={{color:T.faint,marginRight:6}}>vs {snaps[safeIdx-1].label}:</span>
+                <span style={{color:T.muted,marginRight:6}}>vs {snaps[safeIdx-1].label}:</span>
                 <SnapDiff prev={snaps[safeIdx-1]} curr={activeSnap}/>
               </div>
             )}
@@ -1652,10 +1659,10 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                       style={{padding:"3px 8px",fontSize:13,fontWeight:700,color:T.teal,
                         border:"1px solid "+T.tealBd,borderRadius:5,background:"transparent"}}/>
                   : <span style={{fontSize:13,fontWeight:600,color:T.muted}}>{activeSnap.label}</span>}
-                <span style={{fontFamily:T.mono,fontSize:10,color:T.faint}}>
+                <span style={{fontFamily:T.mono,fontSize:10,color:T.muted}}>
                   {new Date(activeSnap.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
                 </span>
-                {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.faint,fontStyle:"italic"}}>read-only</span>}
+                {!isActive(safeIdx)&&<span style={{fontSize:10,color:T.muted,fontStyle:"italic"}}>read-only</span>}
               </div>
             )}
             {activeSnap && (() => {
@@ -1674,7 +1681,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               });
               const scopeGroups=visibleScopes.reduce((acc,sc)=>{acc[sc]=mergedLines.filter(l=>l.scope===sc);return acc;},{});
               const SCOPE_COLORS={"Scope 1":{bg:T.redBg,c:T.red,bd:T.redBd},"Scope 2":{bg:T.blueBg,c:T.blue,bd:T.blueBd},"Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},"Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}};
-              const thS2={padding:"5px 8px",textAlign:"left",fontSize:9,fontWeight:600,color:T.muted,borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
+              const thS2={padding:"5px 8px",textAlign:"left",fontSize:TYPE.data,fontWeight:600,color:T.muted,borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
               const tdS2=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
               return <GhgSnapTable
                 snap={activeSnap} si={safeIdx} editable={isActive(safeIdx)}
@@ -1686,7 +1693,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                 onSetLine={setLine} onSetCustomRow={setCustomRow}
                 onAddCustomRow={addCustomRow} onDelCustomRow={delCustomRow}/>;
             })()}
-            <p style={{fontSize:11,color:T.faint,margin:"0.5rem 0 0"}}>
+            <p style={{fontSize:11,color:T.muted,margin:"0.5rem 0 0"}}>
               Phase snapshots preserve all historical data. Identified savings are never deleted when actual values are added.
               Fixed CFs: CO₂=1, NOₓ=296, CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2, material=1.5 kg CO₂e/kg.
             </p>
@@ -1734,7 +1741,7 @@ function OppForm({ opp, onSave, onCancel }) {
 // ── Shared table ─────────────────────────────────────────────────────────────
 const TH = ({ children }) => (
   <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:"var(--mono)",
-               fontWeight:500, fontSize:9, color:"var(--muted)", borderBottom:"1px solid var(--border)",
+               fontWeight:500, fontSize:TYPE.data, color:"var(--muted)", borderBottom:"1px solid var(--border)",
                whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase",
                background:"var(--surface2)" }}>
     {children}
@@ -1885,12 +1892,12 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                   <div style={{ height:4, width:pct+"%", background:T.teal, borderRadius:2, transition:"width 0.3s" }}/>
                 </div>
                 <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ fontSize:11, color:T.faint }}>{addedAll+skippedAll} of {totalAll} risks addressed</span>
-                  {skippedAll>0&&<span style={{ fontSize:11, color:T.faint }}>{skippedAll} skipped</span>}
+                  <span style={{ fontSize:11, color:T.muted }}>{addedAll+skippedAll} of {totalAll} risks addressed</span>
+                  {skippedAll>0&&<span style={{ fontSize:11, color:T.muted }}>{skippedAll} skipped</span>}
                 </div>
               </div>
 
-              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.faint, fontSize:12 }}>No risks match your search.</div>}
+              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.muted, fontSize:12 }}>No risks match your search.</div>}
 
               {filtered.map(cat=>{
                 const col=COLOR_MAP[cat.color]||COLOR_MAP.gray;
@@ -1940,7 +1947,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
                                                marginRight:8 }}>{item.sub}</span>
-                                <span style={{ fontSize:11, color:T.faint }}>{item.hint}</span>
+                                <span style={{ fontSize:11, color:T.muted }}>{item.hint}</span>
                               </div>
                               {/* Reference badge or actions */}
                               {isAdded&&addedItems[item.id]&&(
@@ -2022,7 +2029,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                     marginBottom:open?2:0}}>
                   <div style={{flex:1,minWidth:0}}>
                     <span style={{fontSize:13,fontWeight:600,color:col.head}}>{title}</span>
-                    <span style={{fontSize:11,color:T.faint,marginLeft:10}}>{scopeSub}</span>
+                    <span style={{fontSize:11,color:T.muted,marginLeft:10}}>{scopeSub}</span>
                   </div>
                   <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,flexShrink:0,
                     background:addr===filtered2.length&&filtered2.length>0?T.greenBg:addr>0?T.tealBg:T.slateBg,
@@ -2051,7 +2058,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                               textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
                               {btn.label.replace("\n"," ")}
                             </span>
-                            <span style={{fontSize:11,color:T.faint}}>{btn.sub}</span>
+                            <span style={{fontSize:11,color:T.muted}}>{btn.sub}</span>
                           </div>
                           {isAdded&&addedOpp2&&(
                             <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
@@ -2088,7 +2095,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
           };
 
           if(q&&!OPP_SCOPE1_BUTTONS.some(matchBtn)&&!OPP_SCOPE2_BUTTONS.some(matchBtn)&&!OPP_SCOPE3_BUTTONS.some(matchBtn))
-            return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.faint,fontSize:12}}>No opportunities match your search.</div>;
+            return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.muted,fontSize:12}}>No opportunities match your search.</div>;
 
           return(
             <div>
@@ -2098,8 +2105,8 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                   <div style={{height:4,width:pctOpp+"%",background:T.purple,borderRadius:2,transition:"width 0.3s"}}/>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between"}}>
-                  <span style={{fontSize:11,color:T.faint}}>{addedOpp+skippedOpp} of {totalOpp} opportunities addressed</span>
-                  {skippedOpp>0&&<span style={{fontSize:11,color:T.faint}}>{skippedOpp} skipped</span>}
+                  <span style={{fontSize:11,color:T.muted}}>{addedOpp+skippedOpp} of {totalOpp} opportunities addressed</span>
+                  {skippedOpp>0&&<span style={{fontSize:11,color:T.muted}}>{skippedOpp} skipped</span>}
                 </div>
               </div>
               {renderScopeChecklist("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",OPP_SCOPE1_BUTTONS,
@@ -2288,7 +2295,7 @@ function WasteTab({ project, onChange }) {
   const card = { background:T.surface, border:"1px solid "+T.border, borderRadius:9, padding:"12px 14px" };
   const iw = { padding:"7px 10px", fontSize:13, borderRadius:6, border:"1px solid "+T.border,
     background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
-  const lbl = { display:"block", fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+  const lbl = { display:"block", fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
     textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 };
 
   const editing = editId ? rows.find(r => r.id === editId) : null;
@@ -2340,7 +2347,7 @@ function WasteTab({ project, onChange }) {
             <tr style={{ background:T.surface2, borderBottom:"1px solid "+T.border }}>
               {["Material / waste stream","Class","Est. qty","Treatment","Methods",""].map((h,i) => (
                 <th key={i} style={{ padding:"8px 12px", textAlign: i>=1&&i<=2?"center":"left",
-                  color:T.muted, fontFamily:T.mono, fontSize:9, fontWeight:600,
+                  color:T.muted, fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600,
                   textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>{h}</th>
               ))}
             </tr>
@@ -2367,12 +2374,12 @@ function WasteTab({ project, onChange }) {
                       onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                       onMouseLeave={e => e.currentTarget.style.background="transparent"}>
                       <td style={{ padding:"8px 12px", color:T.text }}>
-                        {r.product || <span style={{ color:T.faint, fontStyle:"italic" }}>Unnamed stream</span>}
+                        {r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}
                       </td>
                       <td style={{ padding:"8px 12px", textAlign:"center" }}>
                         {r.hazardous
-                          ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:T.redBg, color:T.red, border:"1px solid "+T.redBd }}>HAZ</span>
-                          : <span style={{ fontFamily:T.mono, fontSize:9, color:T.faint }}>non-haz</span>}
+                          ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:T.redBg, color:T.red, border:"1px solid "+T.redBd }}>HAZ</span>
+                          : <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.faint }}>non-haz</span>}
                       </td>
                       <td style={{ padding:"8px 12px", textAlign:"center", fontFamily:T.mono, color: tot?T.text:T.faint }}>
                         {tot ? tot.toLocaleString("en-GB",{maximumFractionDigits:2})+" "+r.unit : "—"}
@@ -2384,7 +2391,7 @@ function WasteTab({ project, onChange }) {
                       </td>
                       <td style={{ padding:"8px 12px" }}>
                         {r.methods && r.methods.length
-                          ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>{r.methods.length} method{r.methods.length!==1?"s":""}</span>
+                          ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>{r.methods.length} method{r.methods.length!==1?"s":""}</span>
                           : <span style={{ color:T.faint }}>—</span>}
                       </td>
                       <td style={{ padding:"8px 12px", textAlign:"right", whiteSpace:"nowrap" }}>
@@ -2405,7 +2412,7 @@ function WasteTab({ project, onChange }) {
       <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
         <div {...clickable(() => setRefOpen(v=>!v), "Waste hierarchy & reduction principles")} aria-expanded={refOpen}
           style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
-          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em" }}>
+          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em" }}>
             Waste hierarchy &amp; reduction principles
           </span>
           <span style={{ color:T.muted, fontSize:12, transform: refOpen?"rotate(180deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▾</span>
@@ -2419,7 +2426,7 @@ function WasteTab({ project, onChange }) {
                   <span style={{ width:18, height:18, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
                   <div>
                     <span style={{ fontSize:11, fontWeight:600, color:h.color }}>{h.label}</span>
-                    <span style={{ fontSize:10, color:T.faint }}> — {h.desc}</span>
+                    <span style={{ fontSize:10, color:T.muted }}> — {h.desc}</span>
                   </div>
                 </div>
               ))}
@@ -2494,13 +2501,13 @@ function WasteTab({ project, onChange }) {
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:8, alignItems:"end" }}>
                   {[["construction","Construction /\nInstallation"],["startup","Start-up /\nShut-down"],["operation","Normal\nOperation"]].map(([f,l])=>(
                     <div key={f}>
-                      <div style={{ fontSize:9, color:T.faint, marginBottom:4, lineHeight:1.3, whiteSpace:"pre-line", minHeight:24 }}>{l}</div>
+                      <div style={{ fontSize:TYPE.data, color:T.muted, marginBottom:4, lineHeight:1.3, whiteSpace:"pre-line", minHeight:24 }}>{l}</div>
                       <input type="number" min="0" value={editing[f]||""} placeholder="0"
                         onChange={e=>updateRow(editId,{[f]:e.target.value})} style={{...iw, textAlign:"center"}}/>
                     </div>
                   ))}
                   <div>
-                    <div style={{ fontSize:9, color:T.faint, marginBottom:4, minHeight:24 }}>Unit</div>
+                    <div style={{ fontSize:TYPE.data, color:T.faint, marginBottom:4, minHeight:24 }}>Unit</div>
                     <select value={editing.unit||"kg"} onChange={e=>updateRow(editId,{unit:e.target.value})} style={{...iw, width:72}}>
                       {WASTE_UNITS.map(u=> <option key={u} value={u}>{u}</option>)}
                     </select>
@@ -2518,7 +2525,7 @@ function WasteTab({ project, onChange }) {
                         background: editing.treatment===h.key?h.bg:"transparent", fontFamily:T.sans }}>
                       <span style={{ width:20, height:20, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
                       <span style={{ fontSize:12, fontWeight:600, color: editing.treatment===h.key?h.color:T.text, width:120, flexShrink:0 }}>{h.label}</span>
-                      <span style={{ fontSize:10, color:T.faint }}>{h.desc}</span>
+                      <span style={{ fontSize:10, color:T.muted }}>{h.desc}</span>
                     </button>
                   ))}
                 </div>
@@ -2538,7 +2545,7 @@ function WasteTab({ project, onChange }) {
                             const cur = editing.methods||[];
                             updateRow(editId,{ methods: sel ? cur.filter(x=>x!==i) : [...cur,i] });
                           }}
-                          style={{ width:15, height:15, flexShrink:0, margin:"1px 0 0", padding:0, accentColor:T.teal }}/>
+                          style={{ width:16, height:16, flexShrink:0, margin:"1px 0 0", padding:0, accentColor:T.teal }}/>
                         <span style={{ fontSize:11, color: sel?T.text:T.muted, lineHeight:1.45 }}>{m}</span>
                       </label>
                     );
@@ -2807,15 +2814,15 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'.lrow{display:flex;gap:8px;margin-bottom:6px}'
         +'.lsw{width:13px;height:13px;border-radius:3px;flex-shrink:0;margin-top:1px;border:1.5px solid}'
         +'.ldot{width:11px;height:11px;border-radius:50%;flex-shrink:0}'
-        +'.ltx{font-size:9px;color:var(--muted);line-height:1.45}'
+        +'.ltx{font-size:10px;color:var(--muted);line-height:1.45}'
         +'.ltx strong{font-weight:600}'
-        +'.scale{margin-bottom:4px;font-size:9px;line-height:1.45}'
+        +'.scale{margin-bottom:4px;font-size:10px;line-height:1.45}'
         +'.scale strong{font-weight:600;color:var(--text)}'
         +'.scale span{color:var(--muted)}'
         +'</style></head><body>'
         +'<div class="np"><button class="prim" onclick="window.print()">Print / Save as PDF</button>'
         +'<button class="close" onclick="window.close()">&#215; Close</button>'
-        +'<span>Choose &ldquo;Save as PDF&rdquo; as printer</span></div>'
+        +'<span style="color:var(--muted)">Choose &ldquo;Save as PDF&rdquo; as printer</span></div>'
         +'<div class="rhead">'
         +'<div><div class="pname">'+pName+'</div>'
         +'<div class="pmeta">'
@@ -3164,7 +3171,7 @@ This cannot be undone.`)) return;
                  border: active ? "2px solid "+color : "1px solid "+(border||T.border),
                  cursor:"pointer", transition:"all 0.15s",
                  boxShadow: active ? "0 0 0 1px "+(color||T.teal) : "none" }}>
-        <p style={{ fontFamily:T.mono, fontSize:9, color:color||T.muted, margin:"0 0 6px",
+        <p style={{ fontFamily:T.mono, fontSize:TYPE.data, color:color||T.muted, margin:"0 0 6px",
                     letterSpacing:"0.08em", textTransform:"uppercase" }}>{label}</p>
         <p style={{ fontFamily:T.mono, fontSize:22, fontWeight:500, margin:0,
                     color:color||T.text, lineHeight:1 }}>{value}</p>
@@ -3227,7 +3234,7 @@ This cannot be undone.`)) return;
     const active = aspSort.col === col;
     return (
       <th onClick={()=>setAspSort(p=>({col, dir:p.col===col&&p.dir==="asc"?"desc":"asc"}))}
-        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data,
                  color:active?T.teal:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
                  letterSpacing:"0.07em", textTransform:"uppercase", cursor:"pointer", userSelect:"none",
                  background:active?T.tealBg:undefined }}>
@@ -3239,7 +3246,7 @@ This cannot be undone.`)) return;
     );
   };
   const PlainTH = ({ children }) => (
-    <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+    <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data,
                  color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
                  letterSpacing:"0.07em", textTransform:"uppercase" }}>{children}</th>
   );
@@ -3248,10 +3255,12 @@ This cannot be undone.`)) return;
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
         <thead><tr>
           <th style={{ padding:"8px 8px 8px 12px", borderBottom:"1px solid "+T.border, width:32 }}>
-            <input type="checkbox"
-              checked={rows.length>0 && rows.every(a=>selection&&selection.has(a.id))}
-              onChange={()=>onToggleAll&&onToggleAll(rows)}
-              style={{ cursor:"pointer", width:13, height:13 }}/>
+            <label className="hit" style={{ display:"inline-flex", cursor:"pointer" }}>
+              <input type="checkbox"
+                checked={rows.length>0 && rows.every(a=>selection&&selection.has(a.id))}
+                onChange={()=>onToggleAll&&onToggleAll(rows)}
+                style={{ cursor:"pointer", width:16, height:16, accentColor:T.teal }}/>
+            </label>
           </th>
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
@@ -3275,9 +3284,11 @@ This cannot be undone.`)) return;
               <tr key={a.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd,
                                  background: selection&&selection.has(a.id) ? T.tealBg : undefined }}>
                 <td style={{ padding:"9px 8px 9px 12px" }}>
-                  <input type="checkbox" checked={!!(selection&&selection.has(a.id))}
-                    onChange={()=>onToggle&&onToggle(a.id)}
-                    style={{ cursor:"pointer", width:13, height:13 }}/>
+                  <label className="hit" style={{ display:"inline-flex", cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!(selection&&selection.has(a.id))}
+                      onChange={()=>onToggle&&onToggle(a.id)}
+                      style={{ cursor:"pointer", width:16, height:16, accentColor:T.teal }}/>
+                  </label>
                 </td>
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
@@ -3290,7 +3301,7 @@ This cannot be undone.`)) return;
                     return (
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(2, auto)", gap:2, width:"fit-content" }}>
                         {phases.map(p => (
-                          <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:9, padding:"1px 5px",
+                          <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"1px 5px",
                             borderRadius:3, background:T.slateBg, color:T.slate, textAlign:"center" }}>
                             {ABBR[p]||p.slice(0,3)}
                           </span>
@@ -3305,7 +3316,7 @@ This cannot be undone.`)) return;
                     const rc2 = rowColor(a);
                     if (!cat) return <span style={{ color:T.faint }}>—</span>;
                     const shortCat = CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */, "");
-                    return <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                    return <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3,
                       background: rc2 ? rc2.bg : T.slateBg, color: rc2 ? rc2.head : T.slate,
                       border: "1px solid " + (rc2 ? rc2.border : T.border),
                       display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word"
@@ -3313,7 +3324,7 @@ This cannot be undone.`)) return;
                   })()}
                 </td>
                 <td style={{ padding:"9px 12px", minWidth:140, maxWidth:220 }}>
-                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.faint,
+                  {a.area && <div style={{ fontFamily:T.mono, fontSize:10, color: rc ? rc.text : T.muted,
                     marginBottom:2 }}>{a.area}</div>}
                   <div style={{ fontWeight:500, color: rc ? rc.head : T.text,
                     whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.35 }}
@@ -3322,11 +3333,11 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px" }}>
                   {a.isAbnormal && (
                     <div>
-                      <span style={{ fontFamily:"var(--mono,monospace)", fontSize:9, padding:"2px 6px", borderRadius:3,
+                      <span style={{ fontFamily:"var(--mono,monospace)", fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
                         background:"var(--amber-bg)", color:"var(--amber)", border:"1px solid var(--amber-bd)",
                         display:"inline-block", marginBottom:2 }}>Abnormal</span>
-                      {a.abnormalType && <div style={{ fontFamily:"var(--mono,monospace)", fontSize:9, color:"var(--muted)", marginTop:2 }}>{a.abnormalType}</div>}
-                      {a.abnormalDesc && <div style={{ fontSize:9, color:"var(--faint)", marginTop:1, maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.abnormalDesc}>{a.abnormalDesc}</div>}
+                      {a.abnormalType && <div style={{ fontFamily:"var(--mono,monospace)", fontSize:TYPE.data, color:"var(--muted)", marginTop:2 }}>{a.abnormalType}</div>}
+                      {a.abnormalDesc && <div style={{ fontSize:TYPE.data, color:"var(--muted)", marginTop:1, maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.abnormalDesc}>{a.abnormalDesc}</div>}
                     </div>
                   )}
                 </td>
@@ -3338,13 +3349,13 @@ This cannot be undone.`)) return;
                 </td>
                 <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span>
+                  <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span>
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(a.createdAt)}</span>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>{fmtDate(a.createdAt)}</span>
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(a.updatedAt||a.createdAt)}</span>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>{fmtDate(a.updatedAt||a.createdAt)}</span>
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(a)}>Edit</Btn>{" "}
@@ -3363,7 +3374,7 @@ This cannot be undone.`)) return;
     const active = oppSort.col === col;
     return (
       <th onClick={()=>setOppSort(p=>({col, dir:p.col===col&&p.dir==="asc"?"desc":"asc"}))}
-        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9,
+        style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data,
                  color:active?T.purple:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap",
                  letterSpacing:"0.07em", textTransform:"uppercase", cursor:"pointer", userSelect:"none",
                  background:active?T.purpleBg:undefined }}>
@@ -3379,21 +3390,23 @@ This cannot be undone.`)) return;
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:T.sans }}>
         <thead><tr>
           <th style={{ padding:"8px 8px 8px 12px", borderBottom:"1px solid "+T.border, width:32 }}>
-            <input type="checkbox"
-              checked={rows.length>0 && rows.every(o=>selection&&selection.has(o.id))}
-              onChange={()=>onToggleAll&&onToggleAll(rows)}
-              style={{ cursor:"pointer", width:13, height:13 }}/>
+            <label className="hit" style={{ display:"inline-flex", cursor:"pointer" }}>
+              <input type="checkbox"
+                checked={rows.length>0 && rows.every(o=>selection&&selection.has(o.id))}
+                onChange={()=>onToggleAll&&onToggleAll(rows)}
+                style={{ cursor:"pointer", width:16, height:16, accentColor:T.teal }}/>
+            </label>
           </th>
-          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
           <OSTH col="type" label="Type"/>
           <OSTH col="description" label="Description"/>
           <OSTH col="score" label="Score"/>
           <OSTH col="priority" label="Priority"/>
           <OSTH col="ghgSaving" label="GHG saving"/>
-          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Materiality</th>
           <OSTH col="createdAt" label="Created"/>
           <OSTH col="updatedAt" label="Modified"/>
-          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:9, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}></th>
+          <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}></th>
         </tr></thead>
         <tbody>
           {rows.map((o) => {
@@ -3406,14 +3419,16 @@ This cannot be undone.`)) return;
               <tr key={o.id} style={{ borderBottom:"1px solid "+T.rowBd, borderLeft:leftBd,
                                  background: selection&&selection.has(o.id) ? T.purpleBg : undefined }}>
                 <td style={{ padding:"9px 8px 9px 12px" }}>
-                  <input type="checkbox" checked={!!(selection&&selection.has(o.id))}
-                    onChange={()=>onToggle&&onToggle(o.id)}
-                    style={{ cursor:"pointer", width:13, height:13 }}/>
+                  <label className="hit" style={{ display:"inline-flex", cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!(selection&&selection.has(o.id))}
+                      onChange={()=>onToggle&&onToggle(o.id)}
+                      style={{ cursor:"pointer", width:16, height:16, accentColor:T.teal }}/>
+                  </label>
                 </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
                 <td style={{ padding:"9px 12px", minWidth:80, maxWidth:140 }}>
                   {o.type
-                    ? <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3,
+                    ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3,
                         background:rc?rc.bg:T.purpleBg, color:rc?rc.head:T.purple,
                         border:"1px solid "+(rc?rc.border:T.purpleBd),
                         display:"inline", whiteSpace:"normal", lineHeight:1.4, wordBreak:"break-word" }}>
@@ -3429,15 +3444,15 @@ This cannot be undone.`)) return;
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
-                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<span style={{ color:T.faint }}>—</span>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
-                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.createdAt)}</span>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>{fmtDate(o.createdAt)}</span>
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{fmtDate(o.updatedAt||o.createdAt)}</span>
+                  <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>{fmtDate(o.updatedAt||o.createdAt)}</span>
                 </td>
                 <td style={{ padding:"9px 12px", whiteSpace:"nowrap" }}>
                   <Btn size="sm" onClick={()=>onEdit(o)}>Edit</Btn>{" "}
@@ -3502,9 +3517,9 @@ This cannot be undone.`)) return;
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
           {/* Instant-save tabs write on every change — reassure instead of toasting each keystroke */}
           {(tab==="settings"||tab==="waste"||tab==="attendees") &&
-            <span style={{ fontFamily:T.mono, fontSize:9, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em" }}>All changes saved</span>}
-          {project.type  && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, letterSpacing:"0.05em" }}>{project.type}</span>}
-          {project.phase && <span style={{ fontFamily:T.mono, fontSize:9, padding:"3px 8px", borderRadius:3, background:T.blueBg,  color:T.blue,  border:"1px solid "+T.blueBd,  letterSpacing:"0.05em" }}>{project.phase}</span>}
+            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em" }}>All changes saved</span>}
+          {project.type  && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"3px 8px", borderRadius:3, background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, letterSpacing:"0.05em" }}>{project.type}</span>}
+          {project.phase && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"3px 8px", borderRadius:3, background:T.blueBg,  color:T.blue,  border:"1px solid "+T.blueBd,  letterSpacing:"0.05em" }}>{project.phase}</span>}
         </div>
       </div>
 
@@ -3541,7 +3556,7 @@ This cannot be undone.`)) return;
                   borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text,
                     textTransform:"uppercase", letterSpacing:"0.08em" }}>Environmental Budget</span>
-                  {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.faint }}>{d}</span>}
+                  {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>{d}</span>}
                   <button onClick={()=>setTab("footprint")}
                     style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5,
                       border:"1px solid "+T.tealBd, background:"transparent",
@@ -3555,14 +3570,14 @@ This cannot be undone.`)) return;
                 </div>
                 <div style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
                   {s3c1>0 && <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                    <span style={{ fontFamily:T.mono, fontSize:8, color:T.teal, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 3 Cat 1</span>
+                    <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.teal, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 3 Cat 1</span>
                     <span style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:T.teal }}>{fmtT(s3c1)}</span>
                     {(np>0||rp>0) && <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:T.border, width:140, marginTop:2 }}>
                       <div style={{ width:npPct+"%", background:T.teal }}/><div style={{ width:rpPct+"%", background:T.blue }}/>
                     </div>}
                     {(np>0||rp>0) && <div style={{ display:"flex", gap:8 }}>
-                      {np>0&&<span style={{ fontSize:9, color:T.teal }}>NP {fmtT(np)}</span>}
-                      {rp>0&&<span style={{ fontSize:9, color:T.blue }}>RP {fmtT(rp)}</span>}
+                      {np>0&&<span style={{ fontSize:TYPE.data, color:T.teal }}>NP {fmtT(np)}</span>}
+                      {rp>0&&<span style={{ fontSize:TYPE.data, color:T.blue }}>RP {fmtT(rp)}</span>}
                     </div>}
                   </div>}
                   {cats.length>1 && <div style={{ flex:1, minWidth:160 }}>
@@ -3571,8 +3586,8 @@ This cannot be undone.`)) return;
                       const pct=s3c1>0?Math.min(100,(tco2e/s3c1)*100):0;
                       return (<div key={cat} style={{ marginBottom:4 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:1 }}>
-                          <span style={{ fontSize:9, color:T.muted }}>{cat}</span>
-                          <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:col }}>{tco2e.toFixed(2)}t</span>
+                          <span style={{ fontSize:TYPE.data, color:T.muted }}>{cat}</span>
+                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:col }}>{tco2e.toFixed(2)}t</span>
                         </div>
                         <div style={{ height:3, borderRadius:2, background:T.border, overflow:"hidden" }}>
                           <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
@@ -3617,7 +3632,7 @@ This cannot be undone.`)) return;
           })()}
 
           {aspects.length === 0 && opps.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint }}>
+            <div style={{ textAlign:"center", padding:"2.5rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted }}>
               <p style={{ margin:"0 0 6px", fontSize:14, color:T.muted }}>No aspects or opportunities yet.</p>
               <p style={{ margin:"0 0 16px", fontSize:12 }}>Use the Screening tab to get started.</p>
               <Btn variant="primary" onClick={()=>setTab("screening")}>Open Screening</Btn>
@@ -3630,7 +3645,7 @@ This cannot be undone.`)) return;
                 <div style={{ padding:"12px 16px", background:T.surface2, borderBottom:"1px solid "+T.border,
                   display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   <div>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                    <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 2px" }}>Risk Profile by Category</p>
                     <p style={{ fontSize:11, color:T.muted, margin:0 }}>
                       {aspects.length} aspect{aspects.length!==1?"s":""} across{" "}
@@ -3639,7 +3654,7 @@ This cannot be undone.`)) return;
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", gap:3, alignItems:"flex-end" }}>
                     {[{l:"Sig",bg:T.redBg,c:T.red,bd:T.redBd},{l:"Medium",bg:T.amberBg,c:T.amber,bd:T.amberBd},{l:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd}].map(({l,bg,c,bd})=>(
-                      <span key={l} style={{ fontSize:9, padding:"1px 7px", borderRadius:3,
+                      <span key={l} style={{ fontSize:TYPE.data, padding:"1px 7px", borderRadius:3,
                         background:bg, color:c, border:"1px solid "+bd, whiteSpace:"nowrap" }}>{l}</span>
                     ))}
                   </div>
@@ -3667,13 +3682,13 @@ This cannot be undone.`)) return;
                         <div style={{ flex:1, height:24, display:"flex", borderRadius:5,
                           overflow:"hidden", gap:"1px", background:T.border, minWidth:0 }}>
                           {sig>0   && <div style={{ flex:sig,   background:T.red,   display:"flex", alignItems:"center", justifyContent:"center", minWidth:22 }}>
-                            <span style={{ fontSize:10, fontWeight:700, color:"#fff" }}>{sig}</span></div>}
+                            <span style={{ fontSize:10, fontWeight:700, color:"var(--bar-ink)" }}>{sig}</span></div>}
                           {watch>0 && <div style={{ flex:watch, background:T.amber, display:"flex", alignItems:"center", justifyContent:"center", minWidth:22 }}>
-                            <span style={{ fontSize:10, fontWeight:700, color:"#fff" }}>{watch}</span></div>}
+                            <span style={{ fontSize:10, fontWeight:700, color:"var(--bar-ink)" }}>{watch}</span></div>}
                           {low>0   && <div style={{ flex:low,   background:T.green, display:"flex", alignItems:"center", justifyContent:"center", minWidth:22 }}>
-                            <span style={{ fontSize:10, fontWeight:700, color:"#fff" }}>{low}</span></div>}
-                          {unsc>0  && <div style={{ flex:unsc,  background:T.faint, display:"flex", alignItems:"center", justifyContent:"center", minWidth:18 }}>
-                            <span style={{ fontSize:9, color:"#fff" }}>{unsc}</span></div>}
+                            <span style={{ fontSize:10, fontWeight:700, color:"var(--bar-ink)" }}>{low}</span></div>}
+                          {unsc>0  && <div style={{ flex:unsc,  background:T.muted, display:"flex", alignItems:"center", justifyContent:"center", minWidth:18 }}>
+                            <span style={{ fontSize:TYPE.data, color:"var(--bar-ink)" }}>{unsc}</span></div>}
                         </div>
                         <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.muted,
                           width:28, textAlign:"right", flexShrink:0 }}>{catAsps.length}</span>
@@ -3691,7 +3706,7 @@ This cannot be undone.`)) return;
                   <div style={{ padding:"12px 16px", background:T.surface2, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <div>
-                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted,
                         textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 2px" }}>Top 5 Open Risks</p>
                       <p style={{ fontSize:11, color:T.muted, margin:0 }}>Highest-scoring open aspects</p>
                     </div>
@@ -3706,7 +3721,7 @@ This cannot be undone.`)) return;
                       .sort((a,b) => (calcScore(b)||0) - (calcScore(a)||0))
                       .slice(0, 5);
                     if (topRisks.length === 0) return (
-                      <div style={{ padding:"1.5rem", textAlign:"center", color:T.faint, fontSize:12 }}>No open scored aspects yet.</div>
+                      <div style={{ padding:"1.5rem", textAlign:"center", color:T.muted, fontSize:12 }}>No open scored aspects yet.</div>
                     );
                     return topRisks.map((a, i) => {
                       const score = calcScore(a); const sig = calcSig(a);
@@ -3723,16 +3738,16 @@ This cannot be undone.`)) return;
                             color:sigC, width:34, textAlign:"center", flexShrink:0, lineHeight:1 }}>{score}</span>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ display:"flex", gap:5, alignItems:"center", marginBottom:2 }}>
-                              <span style={{ fontFamily:T.mono, fontSize:9, color:T.teal, fontWeight:600 }}>{a.ref}</span>
+                              <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.teal, fontWeight:600 }}>{a.ref}</span>
                               <span style={sigStyle(sig)}>{sig}</span>
                             </div>
                             <p style={{ fontSize:12, fontWeight:500, color:T.text, margin:0,
                               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={a.aspect}>
                               {a.aspect||"—"}
                             </p>
-                            {a.area && <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"2px 0 0" }}>{a.area}</p>}
+                            {a.area && <p style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, margin:"2px 0 0" }}>{a.area}</p>}
                           </div>
-                          <span style={{ fontFamily:T.mono, fontSize:9, padding:"2px 6px", borderRadius:3,
+                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
                             background:a.status==="Action"?T.redBg:T.slateBg,
                             color:a.status==="Action"?T.red:T.slate,
                             border:"1px solid "+(a.status==="Action"?T.redBd:T.slateBd), flexShrink:0 }}>{a.status}</span>
@@ -3747,7 +3762,7 @@ This cannot be undone.`)) return;
                   <div style={{ padding:"12px 16px", background:T.surface2, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <div>
-                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:T.faint,
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted,
                         textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 2px" }}>Top 3 Opportunities</p>
                       <p style={{ fontSize:11, color:T.muted, margin:0 }}>Highest-priority open opportunities</p>
                     </div>
@@ -3762,7 +3777,7 @@ This cannot be undone.`)) return;
                       .sort((a,b) => calcOppScore(b) - calcOppScore(a))
                       .slice(0, 3);
                     if (topOpps.length === 0) return (
-                      <div style={{ padding:"1.5rem", textAlign:"center", color:T.faint, fontSize:12 }}>No open opportunities scored yet.</div>
+                      <div style={{ padding:"1.5rem", textAlign:"center", color:T.muted, fontSize:12 }}>No open opportunities scored yet.</div>
                     );
                     return topOpps.map((o, i) => {
                       const score  = calcOppScore(o);
@@ -3780,13 +3795,13 @@ This cannot be undone.`)) return;
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                           <div style={{ flexShrink:0, width:34, textAlign:"center" }}>
                             <div style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:pC.c, lineHeight:1 }}>{score}</div>
-                            <span style={{ fontFamily:T.mono, fontSize:8, padding:"1px 5px", borderRadius:3,
+                            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"1px 5px", borderRadius:3,
                               background:pC.bg, color:pC.c, border:"1px solid "+pC.bd, display:"inline-block", marginTop:2 }}>{pLabel}</span>
                           </div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ display:"flex", gap:5, alignItems:"center", marginBottom:2 }}>
-                              <span style={{ fontFamily:T.mono, fontSize:9, color:T.purple, fontWeight:600 }}>{o.ref}</span>
-                              {o.type && <span style={{ fontFamily:T.mono, fontSize:9, color:T.muted,
+                              <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.purple, fontWeight:600 }}>{o.ref}</span>
+                              {o.type && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted,
                                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{o.type}</span>}
                             </div>
                             <p style={{ fontSize:12, fontWeight:500, color:T.text, margin:0,
@@ -3835,7 +3850,7 @@ This cannot be undone.`)) return;
             </div>
           </div>
           {filteredAspects.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
               {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
@@ -3858,7 +3873,7 @@ This cannot be undone.`)) return;
           </div>
 
           {aspects.length === 0 ? (
-            <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+            <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
               No risks registered yet.
             </div>
           ) : (() => {
@@ -3903,7 +3918,7 @@ This cannot be undone.`)) return;
                   {/* Y-axis */}
                   <div style={{ display:"flex", flexShrink:0, marginTop:62 }}>
                     <div style={{ width:18, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <span style={{ fontSize:9, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                      <span style={{ fontSize:TYPE.data, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
                         whiteSpace:"nowrap", textTransform:"uppercase", letterSpacing:"0.07em" }}>
                         CONSEQUENCE →
                       </span>
@@ -3914,7 +3929,7 @@ This cannot be undone.`)) return;
                           justifyContent:"flex-end", paddingRight:10 }}>
                           <div style={{ textAlign:"right" }}>
                             <div style={{ fontSize:12, fontWeight:700, color:T.muted, lineHeight:1.25 }}>{v}</div>
-                            <div style={{ fontSize:9, color:T.faint, lineHeight:1.25 }}>{lbl}</div>
+                            <div style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.25 }}>{lbl}</div>
                           </div>
                         </div>
                       ))}
@@ -3928,8 +3943,8 @@ This cannot be undone.`)) return;
                       {PROB_COLS.map(({v,lbl,pct}) => (
                         <div key={v} style={{ width:CELL, textAlign:"center", flexShrink:0, paddingBottom:2 }}>
                           <div style={{ fontSize:12, fontWeight:700, color:T.muted,  lineHeight:1.3 }}>{v}</div>
-                          <div style={{ fontSize:9,  fontWeight:400, color:T.faint,  lineHeight:1.3 }}>{lbl}</div>
-                          <div style={{ fontSize:8,  fontWeight:400, color:T.faint,  lineHeight:1.3 }}>{pct}</div>
+                          <div style={{ fontSize:TYPE.data,  fontWeight:400, color:T.muted,  lineHeight:1.3 }}>{lbl}</div>
+                          <div style={{ fontSize:TYPE.data,  fontWeight:400, color:T.muted,  lineHeight:1.3 }}>{pct}</div>
                         </div>
                       ))}
                     </div>
@@ -3944,7 +3959,7 @@ This cannot be undone.`)) return;
                             <div key={pb} style={{ width:CELL, height:CELL, flexShrink:0,
                               background:c.bg, border:"1px solid "+c.bd,
                               position:"relative", boxSizing:"border-box" }}>
-                              <span style={{ position:"absolute", top:3, left:5, fontSize:9, fontWeight:700,
+                              <span style={{ position:"absolute", top:3, left:5, fontSize:TYPE.data, fontWeight:700,
                                 color:c.tc, opacity:0.4, lineHeight:1, userSelect:"none" }}>
                                 {sv*pb}
                               </span>
@@ -3955,7 +3970,7 @@ This cannot be undone.`)) return;
                                   const dotColor = a.status==="Info" ? T.slate
                                     : sig==="SIGNIFICANT"?T.red:sig==="MEDIUM"?T.amber:T.green;
                                   return (
-                                    <button key={i} onClick={()=>setEditAspect(a)}
+                                    <button key={i} className="hit" onClick={()=>setEditAspect(a)}
                                       title={"["+a.status+"] "+(a.ref||"")+" — "+(a.aspect||"")+"\nC"+sv+" × P"+pb+" = "+sv*pb}
                                       aria-label={(a.ref||"aspect")+" — "+(a.aspect||"")+", C"+sv+" × P"+pb+" = "+(sv*pb)+", "+sig}
                                       style={{ width:14, height:14, borderRadius:"50%", border:"none", padding:0,
@@ -3970,7 +3985,7 @@ This cannot be undone.`)) return;
                     ))}
 
                     <div style={{ textAlign:"center", paddingTop:7 }}>
-                      <span style={{ fontSize:9, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                      <span style={{ fontSize:TYPE.data, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
                         PROBABILITY OF OCCURRENCE →
                       </span>
                     </div>
@@ -3982,7 +3997,7 @@ This cannot be undone.`)) return;
 
                   {/* Significance + dots */}
                   <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px", minWidth:175 }}>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Zone key</p>
                     {[
                       {bg:T.redBg,  bd:T.redBd,  c:T.red,  z:"SIGNIFICANT",d:"Immediate action & senior sign-off"},
@@ -3993,12 +4008,12 @@ This cannot be undone.`)) return;
                         <div style={{ width:14, height:14, borderRadius:3, background:bg,
                           border:"2px solid "+bd, flexShrink:0, marginTop:1 }}/>
                         <div>
-                          <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:c }}>{z}</div>
-                          <div style={{ fontSize:9, color:T.faint, lineHeight:1.4 }}>{d}</div>
+                          <div style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:c }}>{z}</div>
+                          <div style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.4 }}>{d}</div>
                         </div>
                       </div>
                     ))}
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dots</p>
                     {[
                       {c:T.red,  l:"Significant — Action"},
@@ -4008,14 +4023,14 @@ This cannot be undone.`)) return;
                     ].map(({c,l})=>(
                       <div key={l} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
                         <div style={{ width:12, height:12, borderRadius:"50%", background:c, flexShrink:0 }}/>
-                        <span style={{ fontSize:9, color:T.muted }}>{l}</span>
+                        <span style={{ fontSize:TYPE.data, color:T.muted }}>{l}</span>
                       </div>
                     ))}
                   </div>
 
                   {/* Consequence */}
                   <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Consequence levels</p>
                     {[
                       {code:"5",label:"Catastrophic",desc:"Irreversible damage or ecosystem collapse; prosecution and/or licence revocation risk."},
@@ -4029,14 +4044,14 @@ This cannot be undone.`)) return;
                           <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{code}</span>
                           <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{label}</span>
                         </div>
-                        <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{desc}</p>
+                        <p style={{ fontSize:10, color:T.muted, margin:0, lineHeight:1.55 }}>{desc}</p>
                       </div>
                     ))}
                   </div>
 
                   {/* Probability */}
                   <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
-                    <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint,
+                    <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Probability levels</p>
                     {[
                       {code:"5",label:"Very likely",   range:"50–100%",desc:"Will almost certainly occur without controls in place."},
@@ -4049,9 +4064,9 @@ This cannot be undone.`)) return;
                         <div style={{ display:"flex", gap:6, alignItems:"baseline", marginBottom:2 }}>
                           <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{code}</span>
                           <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{label}</span>
-                          <span style={{ fontFamily:T.mono, fontSize:9, color:T.faint }}>{range}</span>
+                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted }}>{range}</span>
                         </div>
-                        <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{desc}</p>
+                        <p style={{ fontSize:10, color:T.muted, margin:0, lineHeight:1.55 }}>{desc}</p>
                       </div>
                     ))}
                   </div>
@@ -4059,7 +4074,7 @@ This cannot be undone.`)) return;
                 </div>
 
                 {unplotted.length > 0 && (
-                  <p style={{ fontSize:11, color:T.faint, margin:"0.75rem 0 0" }}>
+                  <p style={{ fontSize:11, color:T.muted, margin:"0.75rem 0 0" }}>
                     {unplotted.length} aspect{unplotted.length!==1?"s":""} not plotted — consequence or probability not yet set.
                   </p>
                 )}
@@ -4082,7 +4097,7 @@ This cannot be undone.`)) return;
           </div>
 
           {filteredOpps.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
               {opps.length===0?"No opportunities yet. Use the Screening tab or add one manually.":"No opportunities match your search."}
             </div>
           ) : (
@@ -4106,7 +4121,7 @@ This cannot be undone.`)) return;
             </div>
 
             {opps.length === 0 ? (
-              <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+              <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
                 No opportunities registered yet.
               </div>
             ) : (() => {
@@ -4137,7 +4152,7 @@ This cannot be undone.`)) return;
                     <div style={{ display:"flex", flexDirection:"column", width:"fit-content" }}>
                       <div style={{ display:"flex", flexDirection:"column", marginLeft:50 }}>
                         <div style={{ width:CELL*5, textAlign:"center", paddingBottom:4 }}>
-                          <span style={{ fontSize:9, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
+                          <span style={{ fontSize:TYPE.data, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.07em" }}>
                             ENVIRONMENTAL VALUE →
                           </span>
                         </div>
@@ -4152,7 +4167,7 @@ This cannot be undone.`)) return;
                       <div style={{ display:"flex" }}>
                         <div style={{ width:50, flexShrink:0, display:"flex" }}>
                           <div style={{ width:20, height:CELL*5, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            <span style={{ fontSize:9, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
+                            <span style={{ fontSize:TYPE.data, fontWeight:700, color:T.muted, transform:"rotate(-90deg)",
                               whiteSpace:"nowrap", textTransform:"uppercase", letterSpacing:"0.07em" }}>FEASIBILITY →</span>
                           </div>
                           <div style={{ width:30 }}>
@@ -4176,13 +4191,13 @@ This cannot be undone.`)) return;
                                     display:"flex", flexWrap:"wrap", alignContent:"center", justifyContent:"center",
                                     gap:4, padding:5, boxSizing:"border-box" }}>
                                     {items.length===0 && isC && (
-                                      <span style={{ fontSize:9, fontWeight:700, color:q.c, opacity:0.5, textAlign:"center", lineHeight:1.3, pointerEvents:"none" }}>{q.label}</span>
+                                      <span style={{ fontSize:TYPE.data, fontWeight:700, color:q.c, opacity:0.5, textAlign:"center", lineHeight:1.3, pointerEvents:"none" }}>{q.label}</span>
                                     )}
                                     {items.map((o, i) => {
                                       const bv = Math.min(5,Math.max(1,parseInt(o.bizValue)||1));
                                       const sz = 10 + (bv-1)*3;
                                       return (
-                                        <button key={i} onClick={()=>setEditOpp(o)}
+                                        <button key={i} className="hit" onClick={()=>setEditOpp(o)}
                                           title={(o.ref||"")+" — "+(o.description||"").slice(0,55)+"\nEnv: "+ev+" · Feas: "+feas+" · Biz: "+bv}
                                           aria-label={(o.ref||"opportunity")+" — "+(o.type||(o.description||"").slice(0,40))+", "+q.label}
                                           style={{ width:sz, height:sz, borderRadius:"50%", background:q.c, border:"none", padding:0,
@@ -4202,7 +4217,7 @@ This cannot be undone.`)) return;
                   {/* Legend panels */}
                   <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 1fr", gap:12, marginTop:"1.25rem" }}>
                     <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px", minWidth:180 }}>
-                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Quadrant guide</p>
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 8px" }}>Quadrant guide</p>
                       {[
                         {l:"Pursue",      c:T.purple,bd:T.purpleBd,bg:T.purpleBg,d:"Low environmental effort, high feasibility"},
                         {l:"Quick win",   c:T.green, bd:T.greenBd, bg:T.greenBg, d:"High value and achievable"},
@@ -4212,24 +4227,24 @@ This cannot be undone.`)) return;
                         <div key={l} style={{ display:"flex", gap:7, alignItems:"flex-start", marginBottom:8 }}>
                           <div style={{ width:14, height:14, borderRadius:3, background:bg, border:"2px solid "+bd, flexShrink:0, marginTop:1 }}/>
                           <div>
-                            <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:700, color:c }}>{l}</div>
-                            <div style={{ fontSize:9, color:T.faint, lineHeight:1.4 }}>{d}</div>
+                            <div style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:c }}>{l}</div>
+                            <div style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.4 }}>{d}</div>
                           </div>
                         </div>
                       ))}
-                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dot size = Business Value</p>
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em", margin:"10px 0 7px" }}>Dot size = Business Value</p>
                       {[{bv:1,sz:10,l:"Low (1–2)"},{bv:3,sz:16,l:"Moderate (3)"},{bv:5,sz:22,l:"High (4–5)"}].map(({bv,sz,l})=>(
                         <div key={bv} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
                           <div style={{ width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                             <div style={{ width:sz, height:sz, borderRadius:"50%", background:T.purple, opacity:0.85 }}/>
                           </div>
-                          <span style={{ fontSize:9, color:T.muted }}>{l}</span>
+                          <span style={{ fontSize:TYPE.data, color:T.muted }}>{l}</span>
                         </div>
                       ))}
                     </div>
 
                     <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
-                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Environmental Value (x-axis)</p>
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Environmental Value (x-axis)</p>
                       {[
                         {v:5,l:"Major",      d:"Transformational environmental benefit; measurable at portfolio or regional scale."},
                         {v:4,l:"Significant",d:"Clear, quantifiable benefit; materially reduces impact or footprint."},
@@ -4242,13 +4257,13 @@ This cannot be undone.`)) return;
                             <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
                             <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
                           </div>
-                          <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
+                          <p style={{ fontSize:10, color:T.muted, margin:0, lineHeight:1.55 }}>{d}</p>
                         </div>
                       ))}
                     </div>
 
                     <div style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:8, padding:"12px 14px" }}>
-                      <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Implementation Feasibility (y-axis)</p>
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 10px" }}>Implementation Feasibility (y-axis)</p>
                       {[
                         {v:5,l:"Easy",         d:"Implementable with existing resources; no regulatory hurdles; quick payback."},
                         {v:4,l:"Achievable",   d:"Feasible within normal constraints; modest investment or process change."},
@@ -4261,7 +4276,7 @@ This cannot be undone.`)) return;
                             <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text }}>{v}</span>
                             <span style={{ fontSize:10, fontWeight:600, color:T.muted }}>{l}</span>
                           </div>
-                          <p style={{ fontSize:10, color:T.faint, margin:0, lineHeight:1.55 }}>{d}</p>
+                          <p style={{ fontSize:10, color:T.muted, margin:0, lineHeight:1.55 }}>{d}</p>
                         </div>
                       ))}
                     </div>
@@ -4325,7 +4340,7 @@ This cannot be undone.`)) return;
 
             {sessions.length === 0 && (
               <div style={{ padding:"3rem", textAlign:"center", background:T.surface, borderRadius:10,
-                border:"2px dashed "+T.border, color:T.faint }}>
+                border:"2px dashed "+T.border, color:T.muted }}>
                 <div style={{ fontSize:32, marginBottom:12 }}>👥</div>
                 <p style={{ fontSize:14, fontWeight:600, color:T.muted, margin:"0 0 6px" }}>No sessions yet</p>
                 <p style={{ fontSize:12, margin:"0 0 16px" }}>Create a session to start recording attendees by date.</p>
@@ -4342,7 +4357,7 @@ This cannot be undone.`)) return;
                   <div style={{ padding:"10px 14px", background:T.surface2,
                     borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:10 }}>
-                    <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.faint,
+                    <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.08em", flexShrink:0 }}>Session {si+1}</span>
                     <input type="date" value={sess.date}
                       onChange={e=>updateSession(sess.id,{date:e.target.value})}
@@ -4362,7 +4377,7 @@ This cannot be undone.`)) return;
                       : <button onClick={()=>armDelSession(sess.id)}
                           style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
                             border:"1px solid "+T.border, background:"transparent",
-                            color:T.faint, cursor:"pointer" }}>Remove session</button>}
+                            color:T.muted, cursor:"pointer" }}>Remove session</button>}
                   </div>
 
                   {/* Attendee table */}
@@ -4371,10 +4386,10 @@ This cannot be undone.`)) return;
                       <thead>
                         <tr style={{ background:T.surface2 }}>
                           <th style={{ padding:"7px 12px", textAlign:"left", fontFamily:T.mono,
-                            fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
+                            fontSize:TYPE.data, fontWeight:600, color:T.muted, textTransform:"uppercase",
                             letterSpacing:"0.07em", borderBottom:"1px solid "+T.border, width:"45%" }}>Name</th>
                           <th style={{ padding:"7px 12px", textAlign:"left", fontFamily:T.mono,
-                            fontSize:9, fontWeight:600, color:T.faint, textTransform:"uppercase",
+                            fontSize:TYPE.data, fontWeight:600, color:T.muted, textTransform:"uppercase",
                             letterSpacing:"0.07em", borderBottom:"1px solid "+T.border }}>Role / Title</th>
                           <th style={{ padding:"7px 12px", width:36,
                             borderBottom:"1px solid "+T.border }}></th>
@@ -4466,7 +4481,7 @@ This cannot be undone.`)) return;
             </div>
           </div>
           {filtered.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.faint, fontSize:12 }}>
+            <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
               No changes in this date range.{changelog.length>0?" Adjust the date range to see older entries.":""}
             </div>
           ) : (
@@ -4505,7 +4520,7 @@ This cannot be undone.`)) return;
                               <span style={{ color:T.faint, fontSize:10 }}>{f.k}</span>
                               {f.from!==undefined
                                 ? <><span style={{ color:T.muted, textDecoration:"line-through", fontSize:10 }}>{f.from}</span>
-                                    <span style={{ color:T.faint, fontSize:9 }}>→</span>
+                                    <span style={{ color:T.faint, fontSize:TYPE.data }}>→</span>
                                     <span style={{ color:T.text }}>{f.to}</span></>
                                 : <span style={{ color:T.text }}>{f.v}</span>}
                             </span>
@@ -4514,8 +4529,8 @@ This cannot be undone.`)) return;
                       )}
                     </div>
                     <div style={{ flexShrink:0, textAlign:"right" }}>
-                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:0 }}>{dateStr}</p>
-                      <p style={{ fontFamily:T.mono, fontSize:9, color:T.faint, margin:"1px 0 0" }}>{timeStr}</p>
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, margin:0 }}>{dateStr}</p>
+                      <p style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, margin:"1px 0 0" }}>{timeStr}</p>
                     </div>
                   </div>
                 );
@@ -4584,7 +4599,7 @@ This cannot be undone.`)) return;
                 <input type="file" accept=".envproject,.json" style={{ display:"none" }}
                   onChange={e=>{ importProjectFile(e.target.files[0]); e.target.value=""; }}/>
               </label>
-              <span style={{ fontSize:11, color:T.faint }}>Accepts <code style={{ fontFamily:T.mono }}>.envproject</code> files exported from this app.</span>
+              <span style={{ fontSize:11, color:T.muted }}>Accepts <code style={{ fontFamily:T.mono }}>.envproject</code> files exported from this app.</span>
             </div>
           </Card>
 
@@ -4679,8 +4694,8 @@ function PortfolioView({ projects, onClose, onSelect }) {
             {p.projectId&&<span style={{ fontFamily:"var(--mono,monospace)",fontSize:10,color:"var(--faint)" }}>{p.projectId}</span>}
             {p.company&&<span style={{ fontSize:12,color:"var(--muted)" }}>{p.company}</span>}
             <div style={{ display:"flex",gap:5,marginLeft:"auto" }}>
-              {p.type&&<span style={{ fontSize:9,padding:"2px 7px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)",border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
-              {p.phase&&<span style={{ fontSize:9,padding:"2px 7px",borderRadius:3,background:"var(--blue-bg)",color:"var(--blue)",border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
+              {p.type&&<span style={{ fontSize:TYPE.data,padding:"2px 7px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)",border:"1px solid var(--slate-bd)" }}>{p.type}</span>}
+              {p.phase&&<span style={{ fontSize:TYPE.data,padding:"2px 7px",borderRadius:3,background:"var(--blue-bg)",color:"var(--blue)",border:"1px solid var(--blue-bd)" }}>{p.phase}</span>}
             </div>
           </div>
           <div style={{ marginBottom:10 }}>
@@ -4725,22 +4740,22 @@ function PortfolioView({ projects, onClose, onSelect }) {
               <div style={{ padding:"8px 10px", borderRadius:6,
                 border:"1px solid var(--teal-bd)", background:"var(--teal-bg)" }}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:5 }}>
-                  <span style={{ fontSize:9, fontWeight:700, color:"var(--teal-dk)",
+                  <span style={{ fontSize:TYPE.data, fontWeight:700, color:"var(--teal-dk)",
                     fontFamily:"var(--mono)", textTransform:"uppercase", letterSpacing:"0.07em" }}>
                     {fp.scope || "Scope 3 Cat 1"}
                   </span>
                   <span style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:700, color:"var(--teal-dk)" }}>
                     {fmtF(tot)} tCO₂e
                   </span>
-                  {d && <span style={{ fontSize:9, color:"var(--teal)", opacity:0.7, marginLeft:"auto" }}>{d}</span>}
+                  {d && <span style={{ fontSize:TYPE.data, color:"var(--teal)", opacity:0.7, marginLeft:"auto" }}>{d}</span>}
                 </div>
                 <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:"var(--border)" }}>
                   <div style={{ width:npPct+"%", background:"var(--teal)" }} />
                   <div style={{ width:rpPct+"%", background:"var(--blue)" }} />
                 </div>
                 <div style={{ display:"flex", gap:10, marginTop:4 }}>
-                  {np > 0 && <span style={{ fontSize:9, color:"var(--teal)" }}>NP {fmtF(np)}</span>}
-                  {rp > 0 && <span style={{ fontSize:9, color:"var(--blue)" }}>RP {fmtF(rp)}</span>}
+                  {np > 0 && <span style={{ fontSize:TYPE.data, color:"var(--teal)" }}>NP {fmtF(np)}</span>}
+                  {rp > 0 && <span style={{ fontSize:TYPE.data, color:"var(--blue)" }}>RP {fmtF(rp)}</span>}
                 </div>
               </div>
             );
@@ -4754,7 +4769,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
                 <span style={{ fontSize:11,fontWeight:700,color:"var(--text)",lineHeight:1 }}>{tot}</span>
               </div>
             </div>
-            <span style={{ fontSize:9,color:"var(--faint)",textAlign:"center" }}>aspects</span>
+            <span style={{ fontSize:TYPE.data,color:"var(--faint)",textAlign:"center" }}>aspects</span>
           </div>
         )}
       </div>
@@ -4835,7 +4850,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
                   </span>
                 ))}
               </div>
-            </>:<span style={{ fontSize:11,color:"var(--faint)",fontStyle:"italic" }}>No aspects yet</span>}
+            </>:<span style={{ fontSize:11,color:"var(--muted)",fontStyle:"italic" }}>No aspects yet</span>}
           </div>
 
           {/* Opportunities bar */}
@@ -4866,7 +4881,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
                   ))}
                 </div>
               )}
-            </>:<span style={{ fontSize:11,color:"var(--faint)",fontStyle:"italic" }}>No opportunities yet</span>}
+            </>:<span style={{ fontSize:11,color:"var(--muted)",fontStyle:"italic" }}>No opportunities yet</span>}
           </div>
         </div>
 
@@ -4966,7 +4981,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
             <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
               <thead><tr style={{ background:"var(--surface2)" }}>
                 {["Contract","Project","ID","Ref","Aspect","Score","Phase","Status"].map(h=>(
-                  <th key={h} style={{ padding:"8px 12px",textAlign:"left",fontSize:9,fontWeight:600,color:"var(--muted)",borderBottom:"1px solid var(--border)",textTransform:"uppercase",letterSpacing:"0.07em",whiteSpace:"nowrap" }}>{h}</th>
+                  <th key={h} style={{ padding:"8px 12px",textAlign:"left",fontSize:TYPE.data,fontWeight:600,color:"var(--muted)",borderBottom:"1px solid var(--border)",textTransform:"uppercase",letterSpacing:"0.07em",whiteSpace:"nowrap" }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -4980,8 +4995,8 @@ function PortfolioView({ projects, onClose, onSelect }) {
                       <td style={{ padding:"8px 12px" }}><span style={{ fontSize:10,fontWeight:600,color:"var(--teal)" }}>{a.ref}</span></td>
                       <td style={{ padding:"8px 12px",fontWeight:500,color:"var(--text)",maxWidth:180 }}><div style={{ overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }} title={a.aspect}>{a.aspect||"--"}</div></td>
                       <td style={{ padding:"8px 12px",fontWeight:700,color:"var(--red)",whiteSpace:"nowrap" }}>{score!==null?score:"--"}</td>
-                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9,padding:"2px 5px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)" }}>{a.phase||"--"}</span></td>
-                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:9,padding:"2px 5px",borderRadius:3,background:"var(--red-bg)",color:"var(--red)" }}>{a.status||"Open"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:TYPE.data,padding:"2px 5px",borderRadius:3,background:"var(--slate-bg)",color:"var(--slate)" }}>{a.phase||"--"}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ fontSize:TYPE.data,padding:"2px 5px",borderRadius:3,background:"var(--red-bg)",color:"var(--red)" }}>{a.status||"Open"}</span></td>
                     </tr>
                   );
                 })}
@@ -5007,9 +5022,9 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
           <path d="M7 4v3.5l2 1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
       </div>
-      <button onClick={()=>setCollapsed(false)} title="Expand sidebar"
+      <button className="hit" onClick={()=>setCollapsed(false)} title="Expand sidebar"
         style={{ background:"transparent", border:"none", cursor:"pointer", color:T.sbMuted,
-                 fontSize:16, lineHeight:1, padding:"4px 0" }}>
+                 fontSize:16, lineHeight:1, padding:"6px 8px" }}>
         ›
       </button>
     </div>
@@ -5026,12 +5041,12 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
           </div>
           <div style={{ flex:1 }}>
             <p style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, color:T.sbText, margin:0, letterSpacing:"0.05em" }}>ENV·ASPECTS</p>
-            <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:0, letterSpacing:"0.07em" }}>TOOLKIT</p>
+            <p style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.sbFaint, margin:0, letterSpacing:"0.07em" }}>TOOLKIT</p>
           </div>
           <ThemeToggle isDark={isDark} onToggle={onToggleTheme}/>
-          <button onClick={()=>setCollapsed(true)} title="Collapse sidebar"
+          <button className="hit" onClick={()=>setCollapsed(true)} title="Collapse sidebar"
             style={{ background:"transparent", border:"none", cursor:"pointer", color:T.sbFaint,
-                     fontSize:16, lineHeight:1, padding:"2px 0", marginLeft:2 }}>
+                     fontSize:16, lineHeight:1, padding:"6px 8px", marginLeft:2 }}>
             ‹
           </button>
         </div>
@@ -5050,7 +5065,7 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
         </button>
       </div>
       <div style={{ flex:1, overflowY:"auto", padding:"10px 8px" }}>
-        <p style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, color:T.sbFaint, letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 8px 8px" }}>
+        <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.sbFaint, letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 8px 8px" }}>
           Projects ({projects.length})
         </p>
         {projects.length === 0 && <p style={{ fontFamily:T.mono, fontSize:10, color:T.sbFaint, padding:"0 8px", fontStyle:"italic" }}>No projects yet</p>}
@@ -5071,10 +5086,10 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
                                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {p.name || <span style={{ color:T.sbFaint, fontStyle:"italic" }}>Unnamed project</span>}
                   </span>
-                  {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:9, fontWeight:500, padding:"1px 5px",
+                  {sigC>0 && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, padding:"1px 5px",
                                             borderRadius:3, background:T.sbSig, color:T.sbSigTx, flexShrink:0 }}>{sigC}</span>}
                 </div>
-                <p style={{ fontFamily:T.mono, fontSize:9, color:T.sbFaint, margin:"2px 0 0",
+                <p style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.sbFaint, margin:"2px 0 0",
                             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {p.type||"No type"} · {(p.aspects||[]).length} aspects
                 </p>
@@ -6146,7 +6161,7 @@ function FootprintTab({ project, onChange }) {
                 const dataSamples = sm.sampleRows || [];
                 if (visHdrs.length === 0 && rawPrev.length === 0) {
                   return (
-                    <div style={{ padding: "1rem", color: T.faint, fontSize: 12, textAlign: "center" }}>
+                    <div style={{ padding: "1rem", color: T.muted, fontSize: 12, textAlign: "center" }}>
                       No columns detected — try a different file.
                     </div>
                   );
@@ -6178,7 +6193,7 @@ function FootprintTab({ project, onChange }) {
                                 color: isLit ? "#fff" : col ? f.color : miss ? T.red : T.faint }}>
                                 {f.label}
                               </span>
-                              {miss && <span style={{ fontSize: 9, color: T.red }}>*</span>}
+                              {miss && <span style={{ fontSize:TYPE.data, color: T.red }}>*</span>}
                               {col && <>
                                 <span style={{ fontSize: 10, fontFamily: T.mono,
                                   color: isLit ? "#ffffffcc" : f.color, opacity: 0.85,
@@ -6228,7 +6243,7 @@ function FootprintTab({ project, onChange }) {
                     <div style={{ padding: "4px 14px", background: T.surface2,
                       borderBottom: "1px solid " + T.border,
                       display: "flex", alignItems: "center", gap: 12 }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.faint,
+                      <span style={{ fontFamily: T.mono, fontSize:TYPE.data, color: T.muted,
                         letterSpacing: "0.07em" }}>
                         Click row № to set header · Click column title to highlight · Use dropdowns to assign
                       </span>
@@ -6263,7 +6278,7 @@ function FootprintTab({ project, onChange }) {
                                     display: "block", overflow: "hidden", textOverflow: "ellipsis",
                                     whiteSpace: "nowrap", maxWidth: 210 }} title={h}>{h}</span>
                                   {fDef && (
-                                    <span style={{ fontFamily: T.mono, fontSize: 8, color: fDef.color,
+                                    <span style={{ fontFamily: T.mono, fontSize:TYPE.data, color: fDef.color,
                                       textTransform: "uppercase", letterSpacing: "0.06em" }}>{fDef.label}</span>
                                   )}
                                 </button>
@@ -6314,7 +6329,7 @@ function FootprintTab({ project, onChange }) {
                               opacity: isA ? 0.45 : 1 }}>
                               {/* Row number — click to set this row as header */}
                               <td onClick={() => setHeaderRow(sm.name, ri)}
-                                style={{ padding: "4px 8px", fontFamily: T.mono, fontSize: 9, fontWeight: 700,
+                                style={{ padding: "4px 8px", fontFamily: T.mono, fontSize:TYPE.data, fontWeight: 700,
                                   color: isH ? T.teal : T.faint, cursor: "pointer", userSelect: "none",
                                   background: isH ? T.tealBg : T.surface2, textAlign: "center",
                                   borderRight: "2px solid " + (isH ? T.tealBd : T.border),
@@ -6378,7 +6393,7 @@ function FootprintTab({ project, onChange }) {
         })}
 
         {sheetMetas.length === 0 && (
-          <div style={{ padding: "2rem", textAlign: "center", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, color: T.faint }}>
+          <div style={{ padding: "2rem", textAlign: "center", background: T.surface, borderRadius: 8, border: "1px solid " + T.border, color: T.muted }}>
             No sheets detected.
           </div>
         )}
@@ -6509,7 +6524,7 @@ function FootprintTab({ project, onChange }) {
               { label: "Combined Total", val: displayResult.combined, cnt: validRows.length,                                  c: T.tealDark, bg: T.tealBg,   bd: T.tealBd },
             ].map(card => (
               <div key={card.label} style={{ background: card.bg, border: "1px solid " + card.bd, borderRadius: 8, padding: "16px 18px" }}>
-                <p style={{ fontFamily: T.mono, fontSize: 9, color: card.c, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.label}</p>
+                <p style={{ fontFamily: T.mono, fontSize:TYPE.data, color: card.c, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.label}</p>
                 <p style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 700, color: card.c, margin: "0 0 3px", lineHeight: 1 }}>
                   {Number(card.val) >= 1 ? Number(card.val).toFixed(3) : (Number(card.val) * 1000).toFixed(2)}
                 </p>
@@ -6530,7 +6545,7 @@ function FootprintTab({ project, onChange }) {
               <div style={{ background: T.surface, border: "1px solid " + T.border, borderRadius: 8, padding: "14px 16px", marginBottom: "1rem" }}>
                 {/* NP / RP totals header */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <p style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, color: T.faint, textTransform: "uppercase", letterSpacing: "0.1em", margin: 0, flex: 1 }}>By COR Category</p>
+                  <p style={{ fontFamily: T.mono, fontSize:TYPE.data, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "0.1em", margin: 0, flex: 1 }}>By COR Category</p>
                   <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 10, background: T.tealBg, color: T.teal, border: "1px solid " + T.tealBd, fontFamily: T.mono }}>NP {fmt(npTotal)}</span>
                   <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 10, background: T.blueBg, color: T.blue, border: "1px solid " + T.blueBd, fontFamily: T.mono }}>RP {fmt(rpTotal)}</span>
                 </div>
@@ -6594,7 +6609,7 @@ function FootprintTab({ project, onChange }) {
               <thead>
                 <tr style={{ background: T.surface2 }}>
                   {["Src","Sheet","Row","Description","COR","Category","MHC","Weight kg","EF","tCO₂e","Status"].map(h => (
-                    <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                    <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontFamily: T.mono, fontSize:TYPE.data,
                       fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
                       whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                   ))}
@@ -6607,18 +6622,18 @@ function FootprintTab({ project, onChange }) {
                     <tr key={i} style={{ borderBottom: "1px solid " + T.rowBd,
                       background: r._overridden ? T.purpleBg : r.status === "ERROR" ? T.redBg : undefined }}>
                       <td style={{ padding: "6px 10px" }}>
-                        <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 6px", borderRadius: 3,
+                        <span style={{ fontFamily: T.mono, fontSize:TYPE.data, padding: "2px 6px", borderRadius: 3,
                           background: r.source === "MTO" ? T.tealBg : T.blueBg,
                           color: r.source === "MTO" ? T.teal : T.blue }}>{r.source}</span>
                       </td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint, whiteSpace: "nowrap" }}>{r.sheet}</td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.faint }}>{r.rowNum}</td>
                       <td style={{ padding: "6px 10px", maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500, color: T.text }} title={r.desc}>
-                        {r._overridden && <span style={{ fontSize: 8, marginRight: 4, color: T.purple, fontFamily: T.mono }}>OVR</span>}
+                        {r._overridden && <span style={{ fontSize:TYPE.data, marginRight: 4, color: T.purple, fontFamily: T.mono }}>OVR</span>}
                         {r.desc || "—"}
                       </td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "—"}</td>
-                      <td style={{ padding: "6px 10px" }}>{r.category ? <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>—</span>}</td>
+                      <td style={{ padding: "6px 10px" }}>{r.category ? <span style={{ fontSize:TYPE.data, padding: "2px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>—</span>}</td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "—"}</td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "—"}</td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "—"}</td>
@@ -6626,7 +6641,7 @@ function FootprintTab({ project, onChange }) {
                         {r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "—"}
                       </td>
                       <td style={{ padding: "6px 10px" }}>
-                        <span style={{ fontFamily: T.mono, fontSize: 9, padding: "2px 7px", borderRadius: 3, fontWeight: 500,
+                        <span style={{ fontFamily: T.mono, fontSize:TYPE.data, padding: "2px 7px", borderRadius: 3, fontWeight: 500,
                           background: r.status === "VALID" ? T.greenBg : T.redBg,
                           color: r.status === "VALID" ? T.green : T.red,
                           border: "1px solid " + (r.status === "VALID" ? T.greenBd : T.redBd) }}>{r.status}</span>
@@ -6715,7 +6730,7 @@ function FootprintTab({ project, onChange }) {
                     <thead>
                       <tr style={{ background: T.surface2 }}>
                         {["Unknown code", "Rows / Samples", "Best-fit suggestions", "Replace with", "Action"].map(h => (
-                          <th key={h} style={{ padding: "7px 14px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                          <th key={h} style={{ padding: "7px 14px", textAlign: "left", fontFamily: T.mono, fontSize:TYPE.data,
                             fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
                             textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</th>
                         ))}
@@ -6763,7 +6778,7 @@ function FootprintTab({ project, onChange }) {
                                         transition: "all 0.1s" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                         <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 700, color: sc.c }}>{s.code}</span>
-                                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: sc.bg, color: sc.c, border: "1px solid " + sc.bd }}>{s.category}</span>
+                                        <span style={{ fontSize:TYPE.data, padding: "1px 6px", borderRadius: 3, background: sc.bg, color: sc.c, border: "1px solid " + sc.bd }}>{s.category}</span>
                                         <span style={{ fontFamily: T.mono, fontSize: 10, color: sc.c, marginLeft: "auto" }}>EF={s.ef}</span>
                                       </div>
                                       <div style={{ fontSize: 10, color: T.text, marginTop: 2 }}>{s.description}</div>
@@ -6841,7 +6856,7 @@ function FootprintTab({ project, onChange }) {
                     <thead>
                       <tr style={{ background: T.surface2 }}>
                         {["Sheet", "Row", "Description", "Error"].map(h => (
-                          <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontFamily: T.mono, fontSize: 9,
+                          <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontFamily: T.mono, fontSize:TYPE.data,
                             fontWeight: 600, color: T.muted, borderBottom: "1px solid " + T.border,
                             textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                         ))}
@@ -6856,7 +6871,7 @@ function FootprintTab({ project, onChange }) {
                           <td style={{ padding: "7px 12px" }}>
                             {(e.errs || []).filter(er => er.col !== "COR Code").map((er, j) => (
                               <div key={j} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
-                                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, padding: "1px 5px", borderRadius: 3, background: T.redBg }}>{er.col}</span>
+                                <span style={{ fontFamily: T.mono, fontSize:TYPE.data, color: T.red, padding: "1px 5px", borderRadius: 3, background: T.redBg }}>{er.col}</span>
                                 <span style={{ fontSize: 11, color: T.muted }}>{er.msg}</span>
                               </div>
                             ))}
@@ -7034,7 +7049,7 @@ export default function App() {
             <div style={{ padding:"14px 20px 0", background:T.surface, borderBottom:"1px solid "+T.border }}>
               <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:0 }}>
                 <h1 style={{ fontSize:17, fontWeight:600, margin:0, fontFamily:T.sans, color:T.text }}>
-                  {active.name || <span style={{ color:T.faint, fontStyle:"italic" }}>Unnamed project</span>}
+                  {active.name || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed project</span>}
                 </h1>
                 {active.company && <span style={{ fontSize:12, color:T.muted }}>{active.company}</span>}
               </div>
