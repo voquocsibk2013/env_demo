@@ -310,7 +310,7 @@ const OPP_SCOPE3_BUTTONS = [
 ];
 
 
-// ── Environmental risk categories (from aspects reference library) ──────────
+// ── Environmental aspect categories (from aspects reference library) ──────────
 const RISK_CATEGORIES = [
   {
     cat: '1. Emission to Air',
@@ -445,117 +445,8 @@ const COLOR_MAP = {
   darkred: { bg:"var(--cat-darkred-bg)", border:"var(--cat-darkred-bd)", text:"var(--cat-darkred-tx)", head:"var(--cat-darkred-hd)" },
 };
 
-// ── Theme definitions ─────────────────────────────────────────────────────────
-const THEMES = {
-  light: {
-    "--bg":          "#F5F3EE",
-    "--surface":     "#FFFFFF",
-    "--surface2":    "#FAFAF8",
-    "--text":        "#1A1C1E",
-    "--muted":       "#6B7280",
-    "--faint":       "#9CA3AF",
-    "--bar-ink":     "#FFFFFF",   // ink on filled stacked-bar segments (dark ink in dark theme)
-    "--border":      "#DDD9D0",
-    "--row-bd":      "#F0EDE6",
-    "--teal":        "#0F6E56",
-    "--teal-bg":     "#E1F5EE",
-    "--teal-bd":     "#9FE1CB",
-    "--teal-dk":     "#085041",
-    "--teal-hi":     "#1D9E75",
-    "--red":         "#A32D2D",
-    "--red-bg":      "#FCEBEB",
-    "--red-bd":      "#F09595",
-    "--amber":       "#856404",
-    "--amber-bg":    "#FFFBE6",
-    "--amber-bd":    "#FFD700",
-    "--green":       "#27500A",
-    "--green-bg":    "#EAF3DE",
-    "--green-bd":    "#97C459",
-    "--purple":      "#3C3489",
-    "--purple-bg":   "#EEEDFE",
-    "--purple-bd":   "#AFA9EC",
-    "--blue":        "#0C447C",
-    "--blue-bg":     "#E6F1FB",
-    "--blue-bd":     "#85B7EB",
-    "--slate":       "#455A64",
-    "--slate-bg":    "#ECEFF1",
-    "--slate-bd":    "#B0BEC5",
-    "--sb-bg":       "#EAE7DF",
-    "--sb-bg2":      "#DEDBD3",
-    "--sb-bd":       "#CBC7BF",
-    "--sb-text":     "#1A1C1E",
-    "--sb-muted":    "#4B5563",
-    "--sb-faint":    "#9CA3AF",
-    "--sb-sig":      "#FCEBEB",
-    "--sb-sig-text": "#A32D2D",
-    "--cat-teal-bg": "#E0F2F1", "--cat-teal-bd": "#80CBC4", "--cat-teal-tx": "#004D40", "--cat-teal-hd": "#00695C",
-    "--cat-purple-bg":"#EDE7F6","--cat-purple-bd":"#CE93D8","--cat-purple-tx":"#4527A0","--cat-purple-hd":"#6A1B9A",
-    "--cat-amber-bg": "#FFF8E1","--cat-amber-bd": "#FFE082","--cat-amber-tx": "#E65100","--cat-amber-hd": "#F57F17",
-    "--cat-red-bg":   "#FFEBEE","--cat-red-bd":   "#EF9A9A","--cat-red-tx":   "#B71C1C","--cat-red-hd":   "#C62828",
-    "--cat-green-bg": "#E8F5E9","--cat-green-bd": "#A5D6A7","--cat-green-tx": "#1B5E20","--cat-green-hd": "#2E7D52",
-    "--cat-blue-bg":  "#E3F2FD","--cat-blue-bd":  "#90CAF9","--cat-blue-tx":  "#0D47A1","--cat-blue-hd":  "#1565C0",
-    "--cat-gray-bg":  "#ECEFF1","--cat-gray-bd":  "#CFD8DC","--cat-gray-tx":  "#37474F","--cat-gray-hd":  "#455A64",
-    "--cat-brown-bg":"#EFEBE9","--cat-brown-bd":"#BCAAA4","--cat-brown-tx":"#3E2723","--cat-brown-hd":"#5D4037",
-    "--cat-darkred-bg":"#FCE4EC","--cat-darkred-bd":"#F48FB1","--cat-darkred-tx":"#880E4F","--cat-darkred-hd":"#AD1457",
-  },
-  dark: {
-    "--bg":          "#0F1117",
-    "--surface":     "#1A1D26",
-    "--surface2":    "#151821",
-    "--text":        "#E2DFD8",
-    "--muted":       "#868C9C",   // raised from #7C8190 → ≥4.5:1 on all dark surfaces incl. #1A1D26 (P21 contrast audit)
-    "--faint":       "#6E7382",   // ~4:1 on #0F1117 — decorative tier (up from 2.2:1); readable text uses --muted (P19)
-    "--bar-ink":     "#0F1117",   // dark ink on lifted amber/green/red segments (all ≥4.5:1)
-    "--border":      "#252830",
-    "--row-bd":      "#1E2028",
-    "--teal":        "#1D9E75",
-    "--teal-bg":     "#081E16",
-    "--teal-bd":     "#0F6E56",
-    "--teal-dk":     "#5DCAA5",
-    "--teal-hi":     "#5DCAA5",
-    "--red":         "#E24B4A",
-    "--red-bg":      "#1A0808",
-    "--red-bd":      "#7B2020",
-    "--amber":       "#FFD700",
-    "--amber-bg":    "#1A1800",
-    "--amber-bd":    "#A08000",
-    "--green":       "#97C459",
-    "--green-bg":    "#0A1505",
-    "--green-bd":    "#3B6D11",
-    "--purple":      "#AFA9EC",
-    "--purple-bg":   "#10101F",
-    "--purple-bd":   "#534AB7",
-    "--blue":        "#85B7EB",
-    "--blue-bg":     "#070F1A",
-    "--blue-bd":     "#1565C0",
-    "--slate":       "#8B8F9A",
-    "--slate-bg":    "#1A1D26",
-    "--slate-bd":    "#252830",
-    "--sb-bg":       "#0D1117",
-    "--sb-bg2":      "#141820",
-    "--sb-bd":       "#1E222C",
-    "--sb-text":     "#F8F8F8",
-    "--sb-muted":    "#B0BAC8",
-    "--sb-faint":    "#6B7A8D",
-    "--sb-sig":      "#3D0808",
-    "--sb-sig-text": "#E24B4A",
-    "--cat-teal-bg": "#081E16", "--cat-teal-bd": "#0F6E56", "--cat-teal-tx": "#5DCAA5", "--cat-teal-hd": "#1D9E75",
-    "--cat-purple-bg":"#10101F","--cat-purple-bd":"#534AB7","--cat-purple-tx":"#AFA9EC","--cat-purple-hd":"#7F77DD",
-    "--cat-amber-bg": "#1A1006","--cat-amber-bd": "#7A4F0A","--cat-amber-tx": "#FAC775","--cat-amber-hd": "#EF9F27",
-    "--cat-red-bg":   "#1A0808","--cat-red-bd":   "#7B2020","--cat-red-tx":   "#F09595","--cat-red-hd":   "#E24B4A",
-    "--cat-green-bg": "#0A1505","--cat-green-bd": "#3B6D11","--cat-green-tx": "#C0DD97","--cat-green-hd": "#639922",
-    "--cat-blue-bg":  "#070F1A","--cat-blue-bd":  "#1565C0","--cat-blue-tx":  "#85B7EB","--cat-blue-hd":  "#378ADD",
-    "--cat-gray-bg":  "#1A1D26","--cat-gray-bd":  "#252830","--cat-gray-tx":  "#8B8F9A","--cat-gray-hd":  "#5F5E5A",
-    "--cat-brown-bg":"#1A1108","--cat-brown-bd":"#6D4025","--cat-brown-tx":"#DDB07A","--cat-brown-hd":"#A0622E",
-    "--cat-darkred-bg":"#1A0612","--cat-darkred-bd":"#7B1248","--cat-darkred-tx":"#F4A0C8","--cat-darkred-hd":"#C2185B",
-  },
-};
-
-function applyTheme(name) {
-  const vars = THEMES[name] || THEMES.light;
-  const root = document.documentElement;
-  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
-}
+// Theme = one data-attribute; every token value lives in public/index.html (P25)
+function applyTheme(name) { document.documentElement.dataset.theme = name; }
 
 // ── Design tokens (CSS var references) ───────────────────────────────────────
 const T = {
@@ -865,6 +756,27 @@ function Card({ children, style, accent }) {
 function SectionLabel({ children }) {
   return <p style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.muted,
                      letterSpacing:"0.1em", textTransform:"uppercase", margin:"0 0 12px" }}>{children}</p>;
+}
+
+// One underline sub-tab treatment (E1): teal active, muted inactive, 2px underline, no pill styling.
+// tabs: [{ id, label, warn? }] — warn tints an inactive tab amber (e.g. Errors count).
+function SubTabs({ tabs, active, onChange, style }) {
+  return (
+    <div role="tablist" style={{ display:"flex", borderBottom:"2px solid "+T.border, ...style }}>
+      {tabs.map(tb => {
+        const on = active === tb.id;
+        return (
+          <button key={tb.id} role="tab" aria-selected={on} onClick={()=>onChange(tb.id)}
+            style={{ padding:"7px 18px", fontSize:12, cursor:"pointer", border:"none", background:"transparent",
+              fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap",
+              borderBottom:"2px solid "+(on?T.teal:"transparent"), marginBottom:"-2px",
+              color: on ? T.teal : (tb.warn ? T.amber : T.muted) }}>
+            {tb.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 function Btn({ children, onClick, variant="default", size="md", disabled }) {
   const v = {
@@ -1822,25 +1734,12 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
   );
 
   return (
-    <div style={{ height:"calc(100vh - 110px)", minHeight:500, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
+    <div style={{ flex:1, minHeight:0, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
       {/* ── Top bar ── */}
       <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-        <div style={{ display:"inline-flex", borderRadius:6, overflow:"hidden", border:"1px solid "+T.border }}>
-          <button onClick={() => { setMode("risks"); setView("guide"); setScreenSearch(""); }}
-            style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
-                     fontWeight:isRisks?600:400, border:"none",
-                     background:isRisks?T.redBg:T.surface, color:isRisks?T.red:T.muted,
-                     borderRight:"1px solid "+T.border }}>
-            Risks
-          </button>
-          <button onClick={() => { setMode("opps"); setView("guide"); setScreenSearch(""); }}
-            style={{ padding:"7px 20px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
-                     fontWeight:!isRisks?600:400, border:"none",
-                     background:!isRisks?T.purpleBg:T.surface, color:!isRisks?T.purple:T.muted }}>
-            Opportunities
-          </button>
-        </div>
+        <SubTabs tabs={[{id:"risks",label:"Risks"},{id:"opps",label:"Opportunities"}]}
+          active={mode} onChange={m=>{ setMode(m); setView("guide"); setScreenSearch(""); }}/>
         {view === "guide" && (
           <input value={screenSearch} onChange={e=>setScreenSearch(e.target.value)}
             placeholder={isRisks?"Search guide words...":"Search opportunity categories..."}
@@ -1964,7 +1863,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                              border:"1px solid "+T.border, background:"transparent",
                                              color:isSkipped?T.muted:T.faint, cursor:"pointer",
                                              flexShrink:0, fontFamily:T.sans }}>
-                                    {isSkipped?"undo":"skip"}
+                                    {isSkipped?"Undo":"Skip"}
                                   </button>
                                   {!isSkipped&&<button
                                     onClick={()=>{
@@ -2074,7 +1973,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                   border:"1px solid "+T.border,background:"transparent",
                                   color:isSkipped?T.muted:T.faint,cursor:"pointer",
                                   flexShrink:0,fontFamily:T.sans}}>
-                                {isSkipped?"undo":"skip"}
+                                {isSkipped?"Undo":"Skip"}
                               </button>
                               {!isSkipped&&<button onClick={mkOnClick(btn)}
                                 style={{fontSize:11,padding:"3px 10px",borderRadius:12,
@@ -2575,6 +2474,7 @@ function WasteTab({ project, onChange }) {
 
 function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
+  const [projMenuOpen, setProjMenuOpen]   = useState(false);  // "Project ▾" record-tab menu
   // One toast system for the whole project shell (D3). Children call notify(msg).
   const [toast, setToast]                 = useState("");
   const toastTimer = React.useRef(null);
@@ -2583,6 +2483,15 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 2500);
   };
+  // Close the "Project ▾" menu on Escape or outside click
+  useEffect(() => {
+    if (!projMenuOpen) return;
+    const onDown = e => { if (!e.target.closest("[data-projmenu]")) setProjMenuOpen(false); };
+    const onKey  = e => { if (e.key === "Escape") setProjMenuOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [projMenuOpen]);
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
   const [dashFilter, setDashFilter]       = useState("all");
@@ -3265,7 +3174,7 @@ This cannot be undone.`)) return;
           <PlainTH>Ref</PlainTH>
           <STH col="phase" label="Phase"/>
           <STH col="category" label="Category"/>
-          <STH col="aspect" label="Risk"/>
+          <STH col="aspect" label="Aspect"/>
           <PlainTH>Abnormal</PlainTH>
           <STH col="score" label="Risk score"/>
           <STH col="sig" label="Significance"/>
@@ -3466,7 +3375,20 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","risks","opportunities","footprint","waste","attendees","changes","settings"];
+  // Six primary work tabs on the strip; the three record-keeping tabs live behind a "Project ▾" menu (E1)
+  const WORK_TABS   = ["dashboard","screening","risks","opportunities","footprint","waste"];
+  const RECORD_TABS = ["attendees","changes","settings"];
+  const isRecordTab = RECORD_TABS.includes(tab);
+  const tabBtnStyle = active => ({ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
+    fontWeight:500, background:"transparent", border:"none", whiteSpace:"nowrap",
+    borderBottom: active ? "2px solid "+T.teal : "2px solid transparent",
+    marginBottom:"-2px", color: active ? T.teal : T.muted });
+  // ── Terminology glossary (E2 — canonical across the app) ──────────────────────
+  //   Environmental aspect  = a register entry (ISO 14001; replaces "risk"/"environmental risk")
+  //   Risks                 = tab name only (the register of aspects)
+  //   Environmental Budget  = the CO₂ tab AND its page title (replaces "CO₂ Footprint Calculator")
+  //   Action / Info         = the only status values, everywhere (replaces Open/In progress/Closed)
+  //   Skip / Undo           = sentence case, like every other button
   const TAB_LABELS = {
     dashboard:     "Dashboard",
     screening:     "Screening",
@@ -3480,7 +3402,7 @@ This cannot be undone.`)) return;
   };
 
   return (
-    <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%" }}>
+    <div style={{ padding:"1.25rem", background:T.bg, minHeight:"100%", display:"flex", flexDirection:"column" }}>
       {/* One shared toast, rendered once above every tab */}
       {toast && (
         <div role="status" aria-live="polite"
@@ -3495,24 +3417,44 @@ This cannot be undone.`)) return;
                     marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
         <div role="tablist" aria-label="Project sections"
           onKeyDown={e => {
-            const i = TABS.indexOf(tab);
+            const i = WORK_TABS.indexOf(tab);
+            if (i < 0) return;   // on a record tab — arrow nav starts once a work tab is focused
             let n = null;
-            if (e.key==="ArrowRight") n = (i+1) % TABS.length;
-            else if (e.key==="ArrowLeft") n = (i-1+TABS.length) % TABS.length;
+            if (e.key==="ArrowRight") n = (i+1) % WORK_TABS.length;
+            else if (e.key==="ArrowLeft") n = (i-1+WORK_TABS.length) % WORK_TABS.length;
             else if (e.key==="Home") n = 0;
-            else if (e.key==="End") n = TABS.length-1;
-            if (n!==null) { e.preventDefault(); setTab(TABS[n]); const el = document.getElementById("projtab-"+TABS[n]); if (el) el.focus(); }
+            else if (e.key==="End") n = WORK_TABS.length-1;
+            if (n!==null) { e.preventDefault(); setTab(WORK_TABS[n]); const el = document.getElementById("projtab-"+WORK_TABS[n]); if (el) el.focus(); }
           }}
-          style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border }}>
-          {TABS.map(t => (
-            <button key={t} id={"projtab-"+t} role="tab" aria-selected={tab===t} tabIndex={tab===t?0:-1} onClick={()=>setTab(t)}
-              style={{ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
-                       fontWeight:500, background:"transparent", border:"none",
-                       borderBottom: tab===t ? "2px solid "+T.teal : "2px solid transparent",
-                       marginBottom:"-2px", color: tab===t ? T.teal : T.muted }}>
+          style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border, overflowX:"auto", scrollbarWidth:"thin", maxWidth:"100%" }}>
+          {WORK_TABS.map(t => (
+            <button key={t} id={"projtab-"+t} role="tab" aria-selected={tab===t}
+              tabIndex={(tab===t || (isRecordTab && t===WORK_TABS[0])) ? 0 : -1} onClick={()=>setTab(t)}
+              style={tabBtnStyle(tab===t)}>
               {TAB_LABELS[t] || t.charAt(0).toUpperCase()+t.slice(1)}
             </button>
           ))}
+          {/* Record-keeping tabs behind a Project ▾ menu */}
+          <div data-projmenu style={{ position:"relative", display:"flex" }}>
+            <button onClick={()=>setProjMenuOpen(o=>!o)} aria-haspopup="menu" aria-expanded={projMenuOpen}
+              style={tabBtnStyle(isRecordTab)}>
+              {isRecordTab ? "Project · "+TAB_LABELS[tab] : "Project"} ▾
+            </button>
+            {projMenuOpen && (
+              <div role="menu" style={{ position:"absolute", top:"100%", right:0, marginTop:4, minWidth:150,
+                background:T.surface, border:"1px solid "+T.border, borderRadius:6,
+                boxShadow:"0 4px 16px rgba(0,0,0,0.18)", zIndex:50, overflow:"hidden" }}>
+                {RECORD_TABS.map(t => (
+                  <button key={t} role="menuitem" onClick={()=>{ setTab(t); setProjMenuOpen(false); }}
+                    style={{ display:"block", width:"100%", textAlign:"left", padding:"8px 14px", fontSize:12,
+                      fontFamily:T.sans, border:"none", cursor:"pointer",
+                      background: tab===t ? T.tealBg : "transparent", color: tab===t ? T.teal : T.text }}>
+                    {TAB_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
           {/* Instant-save tabs write on every change — reassure instead of toasting each keystroke */}
@@ -3851,7 +3793,7 @@ This cannot be undone.`)) return;
           </div>
           {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
-              {aspects.length===0?"No risks yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
+              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
             <div>
@@ -3874,7 +3816,7 @@ This cannot be undone.`)) return;
 
           {aspects.length === 0 ? (
             <div style={{ padding:"2rem", textAlign:"center", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
-              No risks registered yet.
+              No aspects registered yet.
             </div>
           ) : (() => {
             const CELL = 70;
@@ -4844,7 +4786,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
                 {cls>0&&<div style={{ flex:cls,background:"var(--green-bd)",minWidth:3 }}/>}
               </div>
               <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                {[{l:"Open",v:openN,c:"var(--red)"},{l:"In progress",v:inP,c:"var(--amber)"},{l:"Closed",v:cls,c:"var(--green)"}].filter(x=>x.v>0).map(({l,v,c})=>(
+                {[{l:"Action",v:openN,c:"var(--red)"},{l:"Info",v:cls,c:"var(--green)"}].filter(x=>x.v>0).map(({l,v,c})=>(
                   <span key={l} style={{ fontSize:10,color:"var(--muted)",display:"flex",alignItems:"center",gap:4 }}>
                     <span style={{ width:7,height:7,borderRadius:"50%",background:c,display:"inline-block" }}/>{l} <strong style={{ color:"var(--text)" }}>{v}</strong>
                   </span>
@@ -5117,9 +5059,9 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
           + New project
         </button>
         <div style={{ display:"flex", gap:4 }}>
-          {[[0.88,"A−"],[1.0,"A"],[1.15,"A+"]].map(([val,label]) => (
-            <button key={val} onClick={()=>onZoom(val)}
-              style={{ flex:1, padding:"4px 0", fontSize:val===1.15?12:val===1.0?11:10,
+          {[[0.8,"80"],[0.9,"90"],[1.0,"100"],[1.1,"110"],[1.2,"120"]].map(([val,label]) => (
+            <button key={val} onClick={()=>onZoom(val)} title={"Zoom "+label+"%"}
+              style={{ flex:1, padding:"4px 0", fontSize:10,
                        fontFamily:T.mono, fontWeight:500, cursor:"pointer", borderRadius:4,
                        border:"1px solid "+(Math.abs(zoom-val)<0.01?T.teal:"var(--sb-bd)"),
                        background:Math.abs(zoom-val)<0.01?T.teal:"transparent",
@@ -6052,7 +5994,7 @@ function FootprintTab({ project, onChange }) {
   if (step === "upload" && !result) {
     return (
       <div style={{ padding: "1.5rem" }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
+        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: T.teal }}>Environmental Budget</h2>
         <p style={{ margin: "0 0 1.5rem", fontSize: 12, color: T.muted }}>
           Upload any MTO or MEL workbook — column names are matched automatically.
         </p>
@@ -6454,7 +6396,7 @@ function FootprintTab({ project, onChange }) {
       {/* ── Header ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>CO₂ Footprint Calculator</h2>
+          <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Environmental Budget</h2>
           <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName}</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -6498,21 +6440,12 @@ function FootprintTab({ project, onChange }) {
       </div>
 
       {/* ── View tabs ── */}
-      <div style={{ display: "flex", borderBottom: "2px solid " + T.border, marginBottom: "1.25rem" }}>
-        {[
-          { id: "summary", label: "Summary" },
-          { id: "detail",  label: "Detail (" + allRows.length + ")" },
-          { id: "errors",  label: "Errors" + (errCount > 0 ? " (" + errCount + ")" : "") },
-        ].map(tb => (
-          <button key={tb.id} onClick={() => setView(tb.id)}
-            style={{ padding: "8px 18px", fontSize: 12, cursor: "pointer", border: "none",
-              background: "transparent", fontFamily: T.sans, fontWeight: 500, minHeight: 38,
-              borderBottom: "2px solid " + (view === tb.id ? T.teal : "transparent"), marginBottom: "-2px",
-              color: view === tb.id ? T.teal : (tb.id === "errors" && errCount > 0 ? T.amber : T.muted) }}>
-            {tb.label}
-          </button>
-        ))}
-      </div>
+      <SubTabs style={{ marginBottom:"1.25rem" }} active={view} onChange={setView}
+        tabs={[
+          { id:"summary", label:"Summary" },
+          { id:"detail",  label:"Detail (" + allRows.length + ")" },
+          { id:"errors",  label:"Errors" + (errCount > 0 ? " (" + errCount + ")" : ""), warn: errCount > 0 },
+        ]}/>
 
       {/* ════ SUMMARY ════ */}
       {view === "summary" && (
@@ -6949,7 +6882,9 @@ export default function App() {
     return () => clearTimeout(t);
   }, [projects, activeId, loaded, isDark, zoom]);
 
-  useEffect(() => { document.body.style.zoom = String(zoom); }, [zoom]);
+  // Zoom is applied on the content pane only (see <main> wrapper), not document.body —
+  // that kept the sidebar unscaled and works in current Firefox. Clear any legacy body zoom.
+  useEffect(() => { document.body.style.zoom = ""; }, []);
 
   const toggleTheme = () => {
     const next = !isDark;
@@ -7022,7 +6957,7 @@ export default function App() {
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
                isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}
                onPortfolio={()=>setShowPortfolio(v=>!v)} portfolioActive={showPortfolio}/>
-      <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column" }}>
+      <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column", zoom }}>
         {showPortfolio ? (
           <div style={{ flex:1, overflow:"auto" }}>
             <PortfolioView projects={projects} onClose={()=>setShowPortfolio(false)} onSelect={setActiveId}/>

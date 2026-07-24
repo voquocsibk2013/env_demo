@@ -22,6 +22,7 @@
         --text:        #1A1C1E;
         --muted:       #6B7280;
         --faint:       #9CA3AF;
+        --bar-ink:     #FFFFFF;   /* ink on filled stacked-bar segments (dark ink in dark theme) */
         --border:      #DDD9D0;
         --row-bd:      #F0EDE6;
         --teal:        #0F6E56;
@@ -62,16 +63,19 @@
         --cat-green-bg: #E8F5E9;--cat-green-bd: #A5D6A7;--cat-green-tx: #1B5E20;--cat-green-hd: #2E7D52;
         --cat-blue-bg:  #E3F2FD;--cat-blue-bd:  #90CAF9;--cat-blue-tx:  #0D47A1;--cat-blue-hd:  #1565C0;
         --cat-gray-bg:  #ECEFF1;--cat-gray-bd:  #CFD8DC;--cat-gray-tx:  #37474F;--cat-gray-hd:  #455A64;
+        --cat-brown-bg: #EFEBE9;--cat-brown-bd: #BCAAA4;--cat-brown-tx: #3E2723;--cat-brown-hd: #5D4037;
+        --cat-darkred-bg:#FCE4EC;--cat-darkred-bd:#F48FB1;--cat-darkred-tx:#880E4F;--cat-darkred-hd:#AD1457;
       }
 
       /* ── Dark theme ─────────────────────────────────────────────────────── */
-      [data-theme="dark"] {
+      :root[data-theme="dark"] {
         --bg:          #0F1117;
         --surface:     #1A1D26;
         --surface2:    #151821;
         --text:        #E2DFD8;
-        --muted:       #7C8190;
-        --faint:       #4A4E5A;
+        --muted:       #868C9C;   /* ≥4.5:1 on all dark surfaces incl. #1A1D26 (P21 contrast audit) */
+        --faint:       #6E7382;   /* ~4:1 on #0F1117 — decorative tier; readable text uses --muted (P19) */
+        --bar-ink:     #0F1117;   /* dark ink on lifted amber/green/red segments (all ≥4.5:1) */
         --border:      #252830;
         --row-bd:      #1E2028;
         --teal:        #1D9E75;
@@ -112,6 +116,8 @@
         --cat-green-bg: #0A1505;--cat-green-bd: #3B6D11;--cat-green-tx: #C0DD97;--cat-green-hd: #639922;
         --cat-blue-bg:  #070F1A;--cat-blue-bd:  #1565C0;--cat-blue-tx:  #85B7EB;--cat-blue-hd:  #378ADD;
         --cat-gray-bg:  #1A1D26;--cat-gray-bd:  #252830;--cat-gray-tx:  #8B8F9A;--cat-gray-hd:  #5F5E5A;
+        --cat-brown-bg: #1A1108;--cat-brown-bd: #6D4025;--cat-brown-tx: #DDB07A;--cat-brown-hd: #A0622E;
+        --cat-darkred-bg:#1A0612;--cat-darkred-bd:#7B1248;--cat-darkred-tx:#F4A0C8;--cat-darkred-hd:#C2185B;
       }
 
       /* ── Global resets ──────────────────────────────────────────────────── */
