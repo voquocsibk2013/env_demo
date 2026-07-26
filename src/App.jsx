@@ -2088,38 +2088,329 @@ const WASTE_PHILOSOPHY = [
   "For supplier contracts, make contractual demands of return schemes and reusable packaging",
   "Reduce the use of disposable items",
 ];
+// `solid` is the opaque fill for charts (funnel bands, tier bars) as opposed to
+// the `-bg` tint. In this palette the semantic token is already opaque, so it
+// equals `color` — the design mock only needed a separate mid-tone because it
+// had no dark theme. Pair a solid fill with var(--bar-ink) for text on it (P21).
 const WASTE_HIERARCHY = [
-  { key:"Prevention", label:"Prevention",           rank:1, color:"var(--green)", bg:"var(--green-bg)", bd:"var(--green-bd)", desc:"Avoid generating the waste in the first place" },
-  { key:"Reuse",      label:"Preparing for re-use", rank:2, color:"var(--teal)",  bg:"var(--teal-bg)",  bd:"var(--teal-bd)",  desc:"Reuse the material with little or no processing" },
-  { key:"Recycling",  label:"Recycling",            rank:3, color:"var(--blue)",  bg:"var(--blue-bg)",  bd:"var(--blue-bd)",  desc:"Reprocess into new materials or products" },
-  { key:"Recovery",   label:"Recovery",             rank:4, color:"var(--amber)", bg:"var(--amber-bg)", bd:"var(--amber-bd)", desc:"Energy recovery / incineration with energy capture" },
-  { key:"Disposal",   label:"Disposal",             rank:5, color:"var(--red)",   bg:"var(--red-bg)",   bd:"var(--red-bd)",   desc:"Landfill or other final disposal (least preferred)" },
+  { key:"Prevention", label:"Prevention",           rank:1, color:"var(--green)", bg:"var(--green-bg)", bd:"var(--green-bd)", solid:"var(--green)", desc:"Avoid generating the waste in the first place" },
+  { key:"Reuse",      label:"Preparing for re-use", rank:2, color:"var(--teal)",  bg:"var(--teal-bg)",  bd:"var(--teal-bd)",  solid:"var(--teal)",  desc:"Reuse the material with little or no processing" },
+  { key:"Recycling",  label:"Recycling",            rank:3, color:"var(--blue)",  bg:"var(--blue-bg)",  bd:"var(--blue-bd)",  solid:"var(--blue)",  desc:"Reprocess into new materials or products" },
+  { key:"Recovery",   label:"Recovery",             rank:4, color:"var(--amber)", bg:"var(--amber-bg)", bd:"var(--amber-bd)", solid:"var(--amber)", desc:"Energy recovery / incineration with energy capture" },
+  { key:"Disposal",   label:"Disposal",             rank:5, color:"var(--red)",   bg:"var(--red-bg)",   bd:"var(--red-bd)",   solid:"var(--red)",   desc:"Landfill or other final disposal (least preferred)" },
 ];
 const WASTE_UNITS = ["kg","tonne","m³","L","pcs"];
+// Only mass units convert to tonnes; m³/L/pcs are disclosed as excluded, never silently zeroed (W3).
+const WASTE_MASS_UNITS = ["kg","tonne"];
+const WASTE_CLASSES    = ["Hazardous","Non-hazardous","Inert"];
+const WASTE_DOMAINS    = ["Offshore","Onshore","Industrial"];
+const WASTE_STATUSES   = ["Active","Monitoring","Closed"];
+const wasteClassTone = {
+  "Hazardous":     { c:"var(--red)",   bg:"var(--red-bg)",   bd:"var(--red-bd)"   },
+  "Non-hazardous": { c:"var(--slate)", bg:"var(--slate-bg)", bd:"var(--slate-bd)" },
+  "Inert":         { c:"var(--green)", bg:"var(--green-bg)", bd:"var(--green-bd)" },
+};
+// The three quantity buckets are phase-scoped ("Construction / Installation",
+// "Start-up / Shut-down", "Normal Operation"). The EPCIC tag selects which one
+// the register grid types into; the drawer still exposes all three (W5).
+const bucketForPhase = (phase) =>
+  phase === "Commissioning"              ? "startup"
+  : phase === "Operations & Maintenance" ? "operation"
+  : "construction";
+
+// ── EWC waste catalogue (W4) ─────────────────────────────────────────────────
+// European Waste Catalogue. A trailing * marks a hazardous entry; `tier` is the
+// typical highest-achievable route (a smart default, still editable after pick).
+// Authored with the design mock's tier keys, translated once here to the app's
+// persisted WASTE_HIERARCHY keys — saved `treatment` strings are never rewritten (W2).
+const WASTE_TIER_FROM_CATALOGUE = { Prevent:"Prevention", Reuse:"Reuse", Recycle:"Recycling", Recover:"Recovery", Dispose:"Disposal" };
+const WASTE_CATALOGUE = [
+  // Construction & demolition (17)
+  { name:"Concrete", ewc:"17 01 01", cls:"Inert", tier:"Recycle" },
+  { name:"Bricks", ewc:"17 01 02", cls:"Inert", tier:"Recycle" },
+  { name:"Tiles & ceramics", ewc:"17 01 03", cls:"Inert", tier:"Recycle" },
+  { name:"Concrete & rubble (mixed inert)", ewc:"17 01 07", cls:"Inert", tier:"Recycle" },
+  { name:"Excavation spoil (clean soil & stones)", ewc:"17 05 04", cls:"Inert", tier:"Reuse" },
+  { name:"Soil & stones containing hazardous substances", ewc:"17 05 03*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Dredging spoil", ewc:"17 05 06", cls:"Inert", tier:"Reuse" },
+  { name:"Mixed construction & demolition waste", ewc:"17 09 04", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Timber & pallets", ewc:"17 02 01", cls:"Non-hazardous", tier:"Reuse" },
+  { name:"Glass", ewc:"17 02 02", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Plastic", ewc:"17 02 03", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Bituminous mixtures (asphalt)", ewc:"17 03 02", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Coal-tar-bound asphalt", ewc:"17 03 01*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Scrap steel & iron", ewc:"17 04 05", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Copper, bronze & brass", ewc:"17 04 01", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Aluminium", ewc:"17 04 02", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Mixed metals", ewc:"17 04 07", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Cables (non-hazardous)", ewc:"17 04 11", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Insulation containing asbestos", ewc:"17 06 01*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Gypsum / plasterboard", ewc:"17 08 02", cls:"Non-hazardous", tier:"Recycle" },
+  // Packaging & absorbents (15)
+  { name:"Paper & cardboard packaging", ewc:"15 01 01", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Plastic packaging", ewc:"15 01 02", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Wooden packaging", ewc:"15 01 03", cls:"Non-hazardous", tier:"Reuse" },
+  { name:"Mixed packaging", ewc:"15 01 06", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Packaging with hazardous residues", ewc:"15 01 10*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Oily rags & absorbents", ewc:"15 02 02*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Absorbents (uncontaminated)", ewc:"15 02 03", cls:"Non-hazardous", tier:"Recycle" },
+  // Drilling & hydrocarbon (01, 13, 16)
+  { name:"Drill cuttings (oil-based mud)", ewc:"01 05 05*", cls:"Hazardous", tier:"Recover" },
+  { name:"Drilling muds (hazardous)", ewc:"01 05 06*", cls:"Hazardous", tier:"Recover" },
+  { name:"Oil / water separator sludge", ewc:"13 05 02*", cls:"Hazardous", tier:"Recover" },
+  { name:"Produced-water slops (oily water)", ewc:"13 05 07*", cls:"Hazardous", tier:"Recover" },
+  { name:"Waste hydraulic oil", ewc:"13 01 10*", cls:"Hazardous", tier:"Recover" },
+  { name:"Waste engine / gear oil", ewc:"13 02 05*", cls:"Hazardous", tier:"Recover" },
+  { name:"Oil filters", ewc:"16 01 07*", cls:"Hazardous", tier:"Recover" },
+  // Chemicals & process (14, 16, 06, 08)
+  { name:"Spent halogenated solvents", ewc:"14 06 02*", cls:"Hazardous", tier:"Recover" },
+  { name:"Spent solvents (other)", ewc:"14 06 03*", cls:"Hazardous", tier:"Recover" },
+  { name:"Spent catalyst (hazardous metals)", ewc:"16 08 02*", cls:"Hazardous", tier:"Recycle" },
+  { name:"Laboratory chemicals", ewc:"16 05 06*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Waste acids", ewc:"06 01 06*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Waste alkalis", ewc:"06 02 05*", cls:"Hazardous", tier:"Dispose" },
+  { name:"Paint & varnish waste", ewc:"08 01 11*", cls:"Hazardous", tier:"Dispose" },
+  // Equipment, batteries, tyres (16)
+  { name:"WEEE — hazardous components", ewc:"16 02 13*", cls:"Hazardous", tier:"Recycle" },
+  { name:"WEEE / electronics (non-hazardous)", ewc:"16 02 14", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"Lead-acid batteries", ewc:"16 06 01*", cls:"Hazardous", tier:"Recycle" },
+  { name:"Ni-Cd batteries", ewc:"16 06 02*", cls:"Hazardous", tier:"Recycle" },
+  { name:"Alkaline batteries", ewc:"16 06 04", cls:"Non-hazardous", tier:"Recycle" },
+  { name:"End-of-life tyres", ewc:"16 01 03", cls:"Non-hazardous", tier:"Recover" },
+  // Blasting & inert process (12)
+  { name:"Sandblast grit (non-hazardous)", ewc:"12 01 17", cls:"Non-hazardous", tier:"Dispose" },
+  { name:"Blasting media (hazardous)", ewc:"12 01 16*", cls:"Hazardous", tier:"Dispose" },
+  // Municipal & organic (20)
+  { name:"Mixed non-recyclable / municipal", ewc:"20 03 01", cls:"Non-hazardous", tier:"Dispose" },
+  { name:"Food / canteen waste", ewc:"20 01 08", cls:"Non-hazardous", tier:"Recover" },
+  // Specialist
+  { name:"NORM scale (low-specific-activity)", ewc:"— (NORM)", cls:"Hazardous", tier:"Dispose" },
+].map(e => ({ ...e, tier: WASTE_TIER_FROM_CATALOGUE[e.tier] || e.tier }));
+
+// Token-AND over name + EWC + class, ranked by prefix / word-start / EWC match.
+// Empty query returns the head of the list.
+function searchCatalogue(q, limit = 8) {
+  const s = (q || "").trim().toLowerCase();
+  if (!s) return WASTE_CATALOGUE.slice(0, limit);
+  const toks = s.split(/\s+/);
+  const ewcQ = s.replace(/\s/g, "");
+  const out = [];
+  for (const e of WASTE_CATALOGUE) {
+    const name = e.name.toLowerCase();
+    const hay = name + " " + e.ewc.toLowerCase() + " " + e.cls.toLowerCase();
+    if (!toks.every(t => hay.includes(t))) continue;
+    let score = 30 - Math.min(26, name.length / 3);
+    if (name.startsWith(s)) score += 100;
+    else if (name.split(/[\s(/&]+/).some(w => w.startsWith(toks[0]))) score += 55;
+    if (e.ewc.toLowerCase().replace(/\s/g, "").startsWith(ewcQ)) score += 75;
+    out.push({ e, score });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out.slice(0, limit).map(x => x.e);
+}
+
+// ── Row schema (W1) ──────────────────────────────────────────────────────────
+// Additive only: the three phase-quantity buckets are the tonnage source and
+// are never dropped. New fields default to "" rather than undefined so no
+// consumer crashes on a project saved before this patch.
+const WASTE_ROW_DEFAULTS = {
+  ref:"", ewc:"", cls:"Non-hazardous", phase:"", domain:"", status:"Active",
+  carrier:"", consign:"", avoided:false,
+  construction:"", startup:"", operation:"", unit:"kg",
+  treatment:"", methods:[], measures:"",
+};
+function migrateWasteRow(r) {
+  const out = { ...WASTE_ROW_DEFAULTS, ...r };
+  // Retire the boolean: read `hazardous` once, map to the three-way class, drop it.
+  if (typeof r.hazardous === "boolean" && !r.cls) out.cls = r.hazardous ? "Hazardous" : "Non-hazardous";
+  delete out.hazardous;
+  if (!Array.isArray(out.methods)) out.methods = [];
+  return out;
+}
+// Prevention IS the avoided-at-source case — derived, so a stale flag can't disagree (W2).
+const isAvoidedRow = (r) => !!r.avoided || r.treatment === "Prevention";
+// WS-### from max, never count+1, so a delete cannot cause a collision (Band 1 P4).
+const nextWasteRef = (rows) => {
+  const max = (rows||[]).reduce((m,r) =>
+    Math.max(m, parseInt(String(r.ref||"").split("-").pop(), 10) || 0), 0);
+  return "WS-" + String(max+1).padStart(3,"0");
+};
 
 function initWasteRows(existing) {
   const byId = {};
-  (existing||[]).forEach(r => { byId[r.id] = r; });
+  (existing||[]).forEach(r => { if (r && r.id) byId[r.id] = r; });
   const rows = [];
   WASTE_FRACTIONS.forEach(({fraction, products}) => {
     products.forEach((product, pi) => {
       const id = "std_" + fraction.slice(0,8).replace(/\s+/g,"_").toLowerCase() + "_" + pi;
-      rows.push({ id, fraction, product, isStd:true,
-        construction:"", startup:"", operation:"", unit:"kg",
-        hazardous:false, treatment:"", methods:[], measures:"",
-        ...(byId[id] || {}) });
+      rows.push(migrateWasteRow({ id, fraction, product, isStd:true, ...(byId[id] || {}) }));
     });
   });
-  (existing||[]).filter(r => !r.isStd).forEach(r => rows.push(r));
+  (existing||[]).filter(r => r && !r.isStd).forEach(r => rows.push(migrateWasteRow(r)));
   return rows;
 }
 
+// ── Waste register shared controls (W4 · W5) ─────────────────────────────────
+// Highlight the matched query tokens inside a catalogue name.
+function CatHi({ text, q }) {
+  const toks = (q||"").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return text;
+  const esc = toks.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = String(text).split(new RegExp("("+esc.join("|")+")", "ig"));
+  const set = new Set(toks);
+  return parts.filter(p => p !== "").map((p,i) => set.has(p.toLowerCase())
+    ? <span key={i} style={{ color:T.teal, fontWeight:600 }}>{p}</span>
+    : <React.Fragment key={i}>{p}</React.Fragment>);
+}
+
+// Smart-search combobox over the EWC catalogue. Picking an entry auto-pairs
+// EWC code, hazard class and default hierarchy tier — all still editable after.
+// Free text is preserved as a custom stream, so this never blocks like a select.
+function CatalogueCombo({ value, onText, onPick, placeholder, compact, idBase="wcat" }) {
+  const [open, setOpen] = useState(false);
+  const [foc,  setFoc]  = useState(false);
+  const [hi,   setHi]   = useState(0);
+  const wrapRef  = React.useRef(null);
+  const inputRef = React.useRef(null);
+  const results  = searchCatalogue(value, 8);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const choose = (e) => { onPick(e); setOpen(false); if (inputRef.current) inputRef.current.focus(); };
+  const onKey = (ev) => {
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      if (!open) { setOpen(true); setHi(0); return; }
+      setHi(h => Math.min(results.length - 1, h + 1));
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault(); setHi(h => Math.max(0, h - 1));
+    } else if (ev.key === "Enter") {
+      if (open && results[hi]) { ev.preventDefault(); choose(results[hi]); }
+    } else if (ev.key === "Escape") {
+      if (open) { ev.preventDefault(); setOpen(false); if (inputRef.current) inputRef.current.focus(); }
+    }
+  };
+
+  const inputStyle = compact
+    ? { width:"100%", boxSizing:"border-box", fontFamily:T.sans, fontSize:11, color:T.text,
+        background: foc ? T.surface : "transparent",
+        border:"1px solid "+(foc ? T.teal : "transparent"), borderRadius:4, padding:"6px 7px",
+        transition:"border-color 0.15s" }
+    : { width:"100%", boxSizing:"border-box", fontFamily:T.sans, fontSize:13, color:T.text,
+        background:T.surface, border:"1px solid "+(foc ? T.teal : T.border), borderRadius:5,
+        padding:"6px 10px", transition:"border-color 0.15s" };
+
+  return (
+    <div ref={wrapRef} style={{ position:"relative" }}>
+      <input ref={inputRef} value={value||""} placeholder={placeholder}
+        role="combobox" aria-expanded={open} aria-controls={idBase+"-list"}
+        aria-autocomplete="list" aria-activedescendant={open && results[hi] ? idBase+"-opt-"+hi : undefined}
+        onChange={e => { onText(e.target.value); setOpen(true); setHi(0); }}
+        onFocus={() => { setFoc(true); setOpen(true); }}
+        onBlur={() => setFoc(false)}
+        onKeyDown={onKey} style={inputStyle}/>
+      {open && (
+        <div id={idBase+"-list"} role="listbox" aria-label="Waste catalogue"
+          style={{ position:"absolute", left:0, right:0, top:"calc(100% + 4px)", zIndex:40,
+            minWidth: compact ? 320 : 0, background:T.surface, border:"1px solid "+T.border,
+            borderRadius:7, boxShadow:"var(--shadow-menu)", overflow:"hidden" }}>
+          <div style={{ padding:"6px 11px", borderBottom:"1px solid "+T.rowBd, background:T.surface2,
+            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+              {(value||"").trim() ? results.length + " match" + (results.length===1?"":"es") : "Standard streams"}
+            </span>
+            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, letterSpacing:"0.06em" }}>STREAM · EWC</span>
+          </div>
+          <div style={{ maxHeight:264, overflowY:"auto" }}>
+            {results.length === 0 && (
+              <div style={{ padding:"11px 12px", fontSize:11, color:T.muted, lineHeight:1.5 }}>
+                No catalogue match — keep typing to record{" "}
+                <span style={{ color:T.text, fontWeight:500 }}>“{value}”</span> as a custom stream, then set its EWC manually.
+              </div>
+            )}
+            {results.map((e,i) => {
+              const hz = /\*/.test(e.ewc);
+              const h  = WASTE_HIERARCHY.find(x => x.key === e.tier);
+              return (
+                <div key={e.ewc + e.name} id={idBase+"-opt-"+i} role="option" aria-selected={i===hi}
+                  onMouseDown={ev => { ev.preventDefault(); choose(e); }} onMouseEnter={() => setHi(i)}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 11px", cursor:"pointer",
+                    background: i===hi ? T.tealBg : "transparent",
+                    borderLeft:"2px solid "+(i===hi ? T.teal : "transparent") }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:500, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      <CatHi text={e.name} q={value}/>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:3 }}>
+                      {h && <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:TYPE.data, fontWeight:500, color:h.color }}>
+                        <span style={{ width:6, height:6, borderRadius:3, background:h.solid }}/>{h.label}
+                      </span>}
+                      <span style={{ fontSize:TYPE.data, color:T.faint }}>·</span>
+                      <span style={{ fontSize:TYPE.data, color: hz ? T.red : T.muted }}>{e.cls}</span>
+                    </div>
+                  </div>
+                  <span style={{ fontFamily:T.mono, fontSize:11, fontWeight:500, letterSpacing:"0.05em",
+                    color: hz ? T.red : T.teal, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap" }}>{e.ewc}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Grid cells: borderless until focus, then a 1px teal border — no glow (W5).
+function CellInput({ value, onChange, num, placeholder, ariaLabel, onKeyDown }) {
+  const [f, setF] = useState(false);
+  return (
+    <input value={value==null?"":value} placeholder={placeholder} aria-label={ariaLabel}
+      type={num ? "number" : "text"} min={num ? "0" : undefined}
+      onFocus={()=>setF(true)} onBlur={()=>setF(false)} onKeyDown={onKeyDown}
+      onChange={e => onChange(e.target.value)}
+      style={{ width:"100%", boxSizing:"border-box", fontFamily:T.sans, fontSize:11,
+        fontWeight: num ? 500 : 400, color:T.text,
+        background: f ? T.surface : "transparent",
+        border:"1px solid "+(f ? T.teal : "transparent"), borderRadius:4, padding:"6px 7px",
+        textAlign: num ? "right" : "left", fontVariantNumeric:"tabular-nums",
+        transition:"border-color 0.15s" }}/>
+  );
+}
+function CellSelect({ value, opts, onChange, ariaLabel, short }) {
+  const [f, setF] = useState(false);
+  const label = v => (short && v === "Non-hazardous") ? "Non-haz" : v;
+  return (
+    <select value={value||""} aria-label={ariaLabel}
+      onFocus={()=>setF(true)} onBlur={()=>setF(false)}
+      onChange={e => onChange(e.target.value)}
+      style={{ width:"100%", boxSizing:"border-box", fontFamily:T.sans, fontSize:11, color:T.text,
+        background: f ? T.surface : "transparent",
+        border:"1px solid "+(f ? T.teal : "transparent"), borderRadius:4, padding:"5px 5px",
+        cursor:"pointer", transition:"border-color 0.15s" }}>
+      {opts.map(o => <option key={o} value={o}>{label(o)}</option>)}
+    </select>
+  );
+}
+
 // ── WasteTab component (needs useState, must be a real component not an IIFE) ──
-function WasteTab({ project, onChange }) {
-  const [editId, setEditId]   = React.useState(null);
-  const [refOpen, setRefOpen] = React.useState(false);
-  const [fracFilter, setFracFilter] = React.useState("All");
+function WasteTab({ project, onChange, notify }) {
+  const [editId, setEditId]         = useState(null);
+  const [fracFilter, setFracFilter] = useState("All");
+  const [tierFilter, setTierFilter] = useState(null);   // set by the funnel drill-down (W8)
+  const [drafts, setDrafts]         = useState({});     // per-fraction draft row (W5)
+  const [armedDel, armDel]          = useArmedConfirm();
   const dialogRef = React.useRef(null);
+
+  // The chosen view is a workshop decision, not view state — persist it on the
+  // project, same reasoning as screening skips (W7).
+  const view    = project.wasteView || "register";
+  const setView = (v) => onChange({ ...project, wasteView: v });
 
   // Modal behaviour for the stream-editor drawer: focus in on open, trap Tab,
   // Escape to close, restore focus to the trigger on close.
@@ -2153,39 +2444,63 @@ function WasteTab({ project, onChange }) {
   const rows = initWasteRows(project.wasteRows);
 
   const save = (next) => onChange({ ...project, wasteRows: next });
-  const updateRow = (id, patch) => save(rows.map(r => r.id === id ? { ...r, ...patch } : r));
+  // Any edit gives the row its register identity — WS-### from max, so a delete
+  // can never cause a collision (Band 1 P4).
+  const updateRow = (id, patch) => {
+    const fresh = nextWasteRef(rows);
+    save(rows.map(r => r.id === id ? { ...r, ...patch, ref: r.ref || fresh } : r));
+  };
   const addStream = () => {
     const id = "custom_" + Date.now();
-    save([...rows, { id, fraction:"", product:"", isStd:false,
-      construction:"", startup:"", operation:"", unit:"kg",
-      hazardous:false, treatment:"", methods:[], measures:"" }]);
+    save([...rows, migrateWasteRow({ id, fraction:"", product:"", isStd:false, ref: nextWasteRef(rows) })]);
     setEditId(id);
   };
   const delStream = (id) => {
     const r = rows.find(x => x.id === id);
-    if (!window.confirm(`Delete waste stream${r?.fraction ? " \"" + r.fraction + "\"" : ""}? This cannot be undone.`)) return;
-    save(rows.filter(x => x.id !== id)); setEditId(null);
+    save(rows.filter(x => x.id !== id));
+    setEditId(null);
+    if (notify) notify((r && r.ref ? r.ref : "Stream") + " deleted");
   };
 
   const rowTotal = (r) => ["construction","startup","operation"]
     .reduce((s,f) => s + (parseFloat(r[f]) || 0), 0);
-  const isLogged = (r) => rowTotal(r) > 0 || r.treatment || (r.methods && r.methods.length) || r.measures;
+  const isLogged = (r) => rowTotal(r) > 0 || r.treatment || (r.methods && r.methods.length) || r.measures || r.ewc;
   const hier = (key) => WASTE_HIERARCHY.find(h => h.key === key);
 
-  const logged = rows.filter(isLogged);
-  const toTonnes = (r) => {
+  // ── Tonnage-weighted aggregates (W3) ──────────────────────────────────────
+  // Volumetric and count units cannot be summed into tonnes — they are excluded
+  // and the exclusion is disclosed, never silently zeroed.
+  const inTonnage = (r) => WASTE_MASS_UNITS.includes(r.unit || "kg");
+  const toTonnes  = (r) => {
+    if (!inTonnage(r)) return 0;
     const q = rowTotal(r);
-    if (r.unit === "tonne") return q;
-    if (r.unit === "kg")    return q / 1000;
-    return 0;
+    return r.unit === "tonne" ? q : q / 1000;
   };
-  const totalTonnes = logged.reduce((s,r) => s + toTonnes(r), 0);
-  const hazCount    = logged.filter(r => r.hazardous).length;
-  const withTreat   = logged.filter(r => r.treatment);
-  const diverted    = withTreat.filter(r => r.treatment !== "Disposal").length;
-  const diversionPct = withTreat.length ? Math.round(diverted / withTreat.length * 100) : 0;
+  const fmtNb = (n, dp = 1) => Number(n || 0)
+    .toLocaleString("nb-NO", { maximumFractionDigits: dp })
+    .replace(/\s/g, " ");   // nb-NO groups with a (narrow) nbsp; \s covers both
+  const fmtT = (n) => fmtNb(n, Math.abs(n) >= 100 ? 0 : 1) + " t";
 
-  const visible = fracFilter === "All" ? rows : rows.filter(r => (r.fraction||"Other") === fracFilter);
+  const logged   = rows.filter(isLogged);
+  const physical = logged.filter(r => !isAvoidedRow(r));
+  const totalT   = physical.reduce((a,r) => a + toTonnes(r), 0);
+  const disposeT = physical.filter(r => r.treatment === "Disposal").reduce((a,r) => a + toTonnes(r), 0);
+  const divertedT = totalT - disposeT;
+  const diversionRate = totalT ? Math.round((divertedT / totalT) * 1000) / 10 : 0;
+  const hazRows  = logged.filter(r => r.cls === "Hazardous");
+  const hazT     = physical.filter(r => r.cls === "Hazardous").reduce((a,r) => a + toTonnes(r), 0);
+  const avoidedT = logged.filter(isAvoidedRow).reduce((a,r) => a + toTonnes(r), 0);
+  const excluded = logged.filter(r => !inTonnage(r) && rowTotal(r) > 0);
+  const tierTotals = {}, tierCounts = {};
+  WASTE_HIERARCHY.forEach(h => {
+    const set = logged.filter(r => r.treatment === h.key);
+    tierTotals[h.key] = set.reduce((a,r) => a + toTonnes(r), 0);
+    tierCounts[h.key] = set.length;
+  });
+  const maxTier = Math.max(1, ...WASTE_HIERARCHY.map(h => tierTotals[h.key]));
+
+  const byFraction = fracFilter === "All" ? rows : rows.filter(r => (r.fraction||"Other") === fracFilter);
+  const visible    = tierFilter ? byFraction.filter(r => r.treatment === tierFilter) : byFraction;
   const fractionOrder = [...WASTE_FRACTIONS.map(f => f.fraction), "Other"];
   const groups = {};
   visible.forEach(r => { const k = r.fraction || "Other"; (groups[k] = groups[k]||[]).push(r); });
@@ -2196,8 +2511,39 @@ function WasteTab({ project, onChange }) {
     background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
   const lbl = { display:"block", fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
     textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 };
+  const th = { padding:"8px 10px", textAlign:"left", color:T.muted, fontFamily:T.mono,
+    fontSize:TYPE.data, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" };
+  const td = { padding:"1px 3px", borderBottom:"1px solid "+T.rowBd, verticalAlign:"middle" };
 
   const editing = editId ? rows.find(r => r.id === editId) : null;
+
+  // ── Draft row (W5) ────────────────────────────────────────────────────────
+  const emptyDraft = () => ({ name:"", ewc:"", cls:"Non-hazardous", tier:"", phase:"", qty:"" });
+  const draftFor = (f) => drafts[f] || emptyDraft();
+  const setDraft = (f, patch) => setDrafts(p => ({ ...p, [f]: { ...draftFor(f), ...patch } }));
+  const commitDraft = (fraction) => {
+    const d = draftFor(fraction);
+    if (!d.name || !d.name.trim()) return;
+    const id = "custom_" + Date.now();
+    const bucket = bucketForPhase(d.phase);
+    const row = migrateWasteRow({
+      id, fraction: fraction === "Other" ? "" : fraction, product: d.name.trim(), isStd:false,
+      ref: nextWasteRef(rows), ewc: d.ewc || "", cls: d.cls || "Non-hazardous",
+      phase: d.phase || "", treatment: d.tier || "", [bucket]: d.qty || "",
+    });
+    save([...rows, row]);
+    setDrafts(p => ({ ...p, [fraction]: emptyDraft() }));
+    if (notify) notify(row.ref + " added");
+  };
+  const draftKey = (fraction) => (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commitDraft(fraction); }
+  };
+
+  const VIEWS = [
+    { id:"register",  label:"Register" },
+    { id:"hierarchy", label:"Hierarchy" },
+    { id:"streams",   label:"Streams" },
+  ];
 
   return (
     <div>
@@ -2211,26 +2557,45 @@ function WasteTab({ project, onChange }) {
         <Btn variant="primary" onClick={addStream}>+ Add waste stream</Btn>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:"1.25rem" }}>
+      {/* KPI row — tonnage-weighted (W3). Applies to every view. */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:"0.75rem" }}>
         <div style={card}>
-          <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1 }}>{logged.length}</div>
-          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Streams logged</div>
+          <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+            {fmtNb(totalT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
+          </div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Total tonnage</div>
+          {excluded.length > 0 && (
+            <div style={{ fontSize:TYPE.data, color:T.amber, marginTop:3 }}
+              title={excluded.map(r => (r.product||r.fraction||"stream") + " (" + r.unit + ")").join(", ")}>
+              {excluded.length} stream{excluded.length!==1?"s":""} not in tonnage
+            </div>
+          )}
+        </div>
+        <div style={{ ...card, background: diversionRate>=50?T.greenBg:T.surface, borderColor: diversionRate>=50?T.greenBd:T.border }}>
+          <div style={{ fontSize:22, fontWeight:700, color: diversionRate>=50?T.green:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+            {fmtNb(diversionRate, 1)}<span style={{ fontSize:13 }}>%</span>
+          </div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diversion rate</div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3 }}>{fmtT(divertedT)} of {fmtT(totalT)}</div>
+        </div>
+        <div style={{ ...card, background: hazRows.length?T.redBg:T.surface, borderColor: hazRows.length?T.redBd:T.border }}>
+          <div style={{ fontSize:22, fontWeight:700, color: hazRows.length?T.red:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+            {fmtNb(hazT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
+          </div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Hazardous</div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3 }}>{hazRows.length} stream{hazRows.length!==1?"s":""}</div>
         </div>
         <div style={card}>
-          <div style={{ fontSize:22, fontWeight:700, color:T.teal, lineHeight:1 }}>{totalTonnes.toLocaleString("en-GB",{maximumFractionDigits:2})}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span></div>
-          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Est. mass (kg/t)</div>
-        </div>
-        <div style={{ ...card, background: hazCount?T.redBg:T.surface, borderColor: hazCount?T.redBd:T.border }}>
-          <div style={{ fontSize:22, fontWeight:700, color: hazCount?T.red:T.text, lineHeight:1 }}>{hazCount}</div>
-          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Hazardous</div>
-        </div>
-        <div style={{ ...card, background: diversionPct>=50?T.greenBg:T.surface, borderColor: diversionPct>=50?T.greenBd:T.border }}>
-          <div style={{ fontSize:22, fontWeight:700, color: diversionPct>=50?T.green:T.text, lineHeight:1 }}>{diversionPct}<span style={{ fontSize:13 }}>%</span></div>
-          <div style={{ fontSize:10, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diverted from disposal</div>
+          <div style={{ fontSize:22, fontWeight:700, color: avoidedT?T.teal:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+            {fmtNb(avoidedT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
+          </div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Avoided at source</div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3 }}>Prevention — excluded from tonnage</div>
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:"0.75rem" }}>
+      {/* Fraction filter — applies to every view */}
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:"0.75rem", alignItems:"center" }}>
         {["All", ...fractionOrder.filter(f => rows.some(r => (r.fraction||"Other")===f))].map(f => (
           <button key={f} onClick={() => setFracFilter(f)}
             style={{ fontSize:11, padding:"4px 11px", borderRadius:14, cursor:"pointer", fontFamily:T.sans,
@@ -2238,113 +2603,289 @@ function WasteTab({ project, onChange }) {
               background: fracFilter===f?T.tealBg:"transparent",
               color: fracFilter===f?T.teal:T.muted, whiteSpace:"nowrap" }}>{f}</button>
         ))}
-      </div>
-
-      <div style={{ borderRadius:9, overflow:"hidden", border:"1px solid "+T.border, marginBottom:"1.5rem" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-          <thead>
-            <tr style={{ background:T.surface2, borderBottom:"1px solid "+T.border }}>
-              {["Material / waste stream","Class","Est. qty","Treatment","Methods",""].map((h,i) => (
-                <th key={i} style={{ padding:"8px 12px", textAlign: i>=1&&i<=2?"center":"left",
-                  color:T.muted, fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600,
-                  textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {orderedGroups.map(([fraction, frows]) => (
-              <React.Fragment key={fraction}>
-                <tr>
-                  <td colSpan={6} style={{ padding:"6px 12px", background:T.surface2,
-                    fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.muted,
-                    textTransform:"uppercase", letterSpacing:"0.06em",
-                    borderTop:"1px solid "+T.border, borderBottom:"1px solid "+T.border }}>
-                    {fraction} <span style={{ color:T.faint, fontWeight:400 }}>· {frows.length}</span>
-                  </td>
-                </tr>
-                {frows.map(r => {
-                  const rlogged = isLogged(r);
-                  const h = hier(r.treatment);
-                  const tot = rowTotal(r);
-                  return (
-                    <tr key={r.id} onClick={() => setEditId(r.id)}
-                      style={{ borderBottom:"1px solid "+T.rowBd, cursor:"pointer",
-                        opacity: rlogged?1:0.55 }}
-                      onMouseEnter={e => e.currentTarget.style.background=T.surface2}
-                      onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                      <td style={{ padding:"8px 12px", color:T.text }}>
-                        {r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}
-                      </td>
-                      <td style={{ padding:"8px 12px", textAlign:"center" }}>
-                        {r.hazardous
-                          ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:T.redBg, color:T.red, border:"1px solid "+T.redBd }}>HAZ</span>
-                          : <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.faint }}>non-haz</span>}
-                      </td>
-                      <td style={{ padding:"8px 12px", textAlign:"center", fontFamily:T.mono, color: tot?T.text:T.faint }}>
-                        {tot ? tot.toLocaleString("en-GB",{maximumFractionDigits:2})+" "+r.unit : "—"}
-                      </td>
-                      <td style={{ padding:"8px 12px" }}>
-                        {h
-                          ? <span style={{ fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:4, background:h.bg, color:h.color, border:"1px solid "+h.bd, whiteSpace:"nowrap" }}>{h.label}</span>
-                          : <span style={{ color:T.faint }}>—</span>}
-                      </td>
-                      <td style={{ padding:"8px 12px" }}>
-                        {r.methods && r.methods.length
-                          ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>{r.methods.length} method{r.methods.length!==1?"s":""}</span>
-                          : <span style={{ color:T.faint }}>—</span>}
-                      </td>
-                      <td style={{ padding:"8px 12px", textAlign:"right", whiteSpace:"nowrap" }}>
-                        <button onClick={e=>{ e.stopPropagation(); setEditId(r.id); }}
-                          aria-label={"Edit "+(r.product||r.fraction||"waste stream")}
-                          style={{ fontSize:11, color:T.teal, background:"transparent", border:"none",
-                            padding:"2px 4px", cursor:"pointer", fontFamily:T.sans }}>Edit ›</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ border:"1px solid "+T.border, borderRadius:8, overflow:"hidden" }}>
-        <div {...clickable(() => setRefOpen(v=>!v), "Waste hierarchy & reduction principles")} aria-expanded={refOpen}
-          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer", background:T.surface2, userSelect:"none" }}>
-          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em" }}>
-            Waste hierarchy &amp; reduction principles
-          </span>
-          <span style={{ color:T.muted, fontSize:12, transform: refOpen?"rotate(180deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▾</span>
-        </div>
-        {refOpen && (
-          <div style={{ padding:"16px", display:"grid", gridTemplateColumns:"auto 1fr", gap:24 }}>
-            <div>
-              <p style={lbl}>Waste hierarchy (best → worst)</p>
-              {WASTE_HIERARCHY.map(h => (
-                <div key={h.key} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
-                  <span style={{ width:18, height:18, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
-                  <div>
-                    <span style={{ fontSize:11, fontWeight:600, color:h.color }}>{h.label}</span>
-                    <span style={{ fontSize:10, color:T.muted }}> — {h.desc}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div>
-              <p style={lbl}>Reduction principles (philosophy)</p>
-              <div style={{ columns:2, columnGap:20 }}>
-                {WASTE_PHILOSOPHY.map((item,i) => (
-                  <div key={i} style={{ display:"flex", gap:6, marginBottom:4, breakInside:"avoid" }}>
-                    <span style={{ color:T.green, fontSize:10, flexShrink:0 }}>✓</span>
-                    <span style={{ fontSize:10, color:T.muted, lineHeight:1.5 }}>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        {tierFilter && (
+          <button className="hit" onClick={() => setTierFilter(null)}
+            aria-label={"Clear " + tierFilter + " filter"}
+            style={{ fontSize:11, padding:"4px 11px", borderRadius:14, cursor:"pointer", fontFamily:T.sans,
+              border:"1px solid "+(hier(tierFilter)||{}).bd, background:(hier(tierFilter)||{}).bg,
+              color:(hier(tierFilter)||{}).color, whiteSpace:"nowrap", marginLeft:"auto" }}>
+            {(hier(tierFilter)||{}).label} ×
+          </button>
         )}
       </div>
 
+      {/* View switcher — the shared sub-tab grammar (W7) */}
+      <SubTabs style={{ marginBottom:"1rem" }} tabs={VIEWS} active={view} onChange={setView}/>
+
+      {/* ── Register (the only view that writes freely) ── */}
+      {view === "register" && (
+        <div style={{ borderRadius:9, overflow:"auto", border:"1px solid "+T.border, marginBottom:"1.5rem" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr style={{ background:T.surface2, borderBottom:"1px solid "+T.border }}>
+                <th style={{ ...th, width:64 }}>Ref</th>
+                <th style={{ ...th, minWidth:190 }}>Material / waste stream</th>
+                <th style={{ ...th, width:86 }}>EWC</th>
+                <th style={{ ...th, width:118 }}>Class</th>
+                <th style={{ ...th, width:150 }}>Phase</th>
+                <th style={{ ...th, width:104, textAlign:"right" }}>Est. qty</th>
+                <th style={{ ...th, width:130 }}>Treatment</th>
+                <th style={{ ...th, width:96 }}>Methods</th>
+                <th style={{ ...th, width:92 }}/>
+              </tr>
+            </thead>
+            <tbody>
+              {orderedGroups.map(([fraction, frows]) => (
+                <React.Fragment key={fraction}>
+                  <tr>
+                    <td colSpan={9} style={{ padding:"6px 10px", background:T.surface2,
+                      fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted,
+                      textTransform:"uppercase", letterSpacing:"0.06em",
+                      borderTop:"1px solid "+T.border, borderBottom:"1px solid "+T.border }}>
+                      {fraction} <span style={{ color:T.faint, fontWeight:400 }}>· {frows.length}</span>
+                    </td>
+                  </tr>
+                  {frows.map(r => {
+                    const rlogged = isLogged(r);
+                    const h = hier(r.treatment);
+                    const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
+                    const bucket = bucketForPhase(r.phase);
+                    const bucketVal = r[bucket] || "";
+                    const otherBuckets = rowTotal(r) - (parseFloat(bucketVal) || 0);
+                    return (
+                      <tr key={r.id} style={{ opacity: rlogged?1:0.62, boxShadow:"inset 3px 0 0 "+tone.bd }}>
+                        <td style={{ ...td, padding:"7px 10px" }}>
+                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal, whiteSpace:"nowrap" }}>
+                            {r.ref || "—"}
+                          </span>
+                        </td>
+                        <td style={td}>
+                          {r.isStd
+                            ? <span style={{ display:"block", padding:"7px 8px", color:T.text }}>{r.product}</span>
+                            : <CellInput value={r.product} placeholder="Stream name…"
+                                ariaLabel="Waste stream name"
+                                onChange={v => updateRow(r.id, { product:v })}/>}
+                        </td>
+                        <td style={td}>
+                          <CellInput value={r.ewc} placeholder="EWC" ariaLabel="EWC code"
+                            onChange={v => updateRow(r.id, { ewc:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect short value={r.cls} opts={WASTE_CLASSES} ariaLabel="Hazard classification"
+                            onChange={v => updateRow(r.id, { cls:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={r.phase} opts={["", ...PHASES]} ariaLabel="EPCIC phase"
+                            onChange={v => updateRow(r.id, { phase:v })}/>
+                        </td>
+                        <td style={{ ...td, whiteSpace:"nowrap" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:3 }}
+                            title={otherBuckets > 0
+                              ? "Editing the " + bucket + " bucket; " + fmtNb(otherBuckets,2) + " " + r.unit + " recorded in other phases (row total " + fmtNb(rowTotal(r),2) + " " + r.unit + ")"
+                              : undefined}>
+                            <CellInput num value={bucketVal} placeholder="0"
+                              ariaLabel={"Quantity (" + bucket + ")"}
+                              onChange={v => updateRow(r.id, { [bucket]: v })}/>
+                            <span style={{ fontSize:TYPE.data, color:T.muted }}>{r.unit}</span>
+                            {otherBuckets > 0 && <span style={{ fontSize:TYPE.data, color:T.amber }}>+</span>}
+                          </div>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={r.treatment} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
+                            ariaLabel="Treatment route"
+                            onChange={v => updateRow(r.id, { treatment:v })}/>
+                        </td>
+                        <td style={{ ...td, padding:"7px 10px" }}>
+                          {r.methods && r.methods.length
+                            ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>{r.methods.length}</span>
+                            : <span style={{ color:T.faint }}>—</span>}
+                        </td>
+                        <td style={{ ...td, padding:"4px 8px", textAlign:"right", whiteSpace:"nowrap" }}>
+                          <button className="hit" onClick={() => setEditId(r.id)}
+                            aria-label={"Edit " + (r.product || r.fraction || "waste stream")}
+                            style={{ fontSize:11, color:T.teal, background:"transparent", border:"none",
+                              padding:"4px 6px", cursor:"pointer", fontFamily:T.sans }}>Edit ›</button>
+                          {!r.isStd && (
+                            <button className="hit"
+                              onClick={() => { if (armedDel === r.id) { armDel(null); delStream(r.id); } else armDel(r.id); }}
+                              aria-label={"Delete " + (r.product || "waste stream")}
+                              style={{ fontSize: armedDel===r.id ? 10 : 13, fontWeight: armedDel===r.id ? 600 : 400,
+                                color:T.red, background:"transparent", border:"none", padding:"4px 6px",
+                                cursor:"pointer", fontFamily:T.sans, whiteSpace:"nowrap" }}>
+                              {armedDel===r.id ? "Sure?" : "×"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Persistent draft row — Enter commits and clears for the next entry */}
+                  {(() => {
+                    const d = draftFor(fraction);
+                    return (
+                      <tr style={{ background:T.surface2, boxShadow:"inset 3px 0 0 "+T.tealBd }}>
+                        <td style={{ ...td, padding:"7px 10px" }}>
+                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.faint }}>new</span>
+                        </td>
+                        <td style={td}>
+                          <CatalogueCombo compact idBase={"wcat-"+fraction.replace(/\W+/g,"")}
+                            value={d.name} placeholder="Search waste stream…"
+                            onText={v => setDraft(fraction, { name:v })}
+                            onPick={e => setDraft(fraction, { name:e.name, ewc:e.ewc, cls:e.cls, tier:e.tier })}/>
+                        </td>
+                        <td style={td}>
+                          <CellInput value={d.ewc} placeholder="EWC" ariaLabel="New stream EWC code"
+                            onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { ewc:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect short value={d.cls} opts={WASTE_CLASSES} ariaLabel="New stream class"
+                            onChange={v => setDraft(fraction, { cls:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={d.phase} opts={["", ...PHASES]} ariaLabel="New stream phase"
+                            onChange={v => setDraft(fraction, { phase:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellInput num value={d.qty} placeholder="0" ariaLabel="New stream quantity"
+                            onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { qty:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={d.tier} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
+                            ariaLabel="New stream treatment"
+                            onChange={v => setDraft(fraction, { tier:v })}/>
+                        </td>
+                        <td colSpan={2} style={{ ...td, padding:"4px 8px", textAlign:"right" }}>
+                          <Btn size="sm" variant="primary" onClick={() => commitDraft(fraction)}>+ Add</Btn>
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Hierarchy funnel — the signature view (W8) ── */}
+      {view === "hierarchy" && (
+        logged.length === 0 ? (
+          <div style={{ ...card, textAlign:"center", padding:"3rem" }}>
+            <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:600, color:T.muted }}>No waste streams logged</p>
+            <p style={{ margin:0, fontSize:12, color:T.muted }}>Add a stream to see the hierarchy.</p>
+          </div>
+        ) : (
+          <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:12, marginBottom:"1.5rem" }}>
+            <div style={card}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
+                <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste-management hierarchy</span>
+                <span style={{ fontSize:TYPE.data, color:T.muted }}>by mass · select a tier</span>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+                {WASTE_HIERARCHY.map(h => {
+                  const v = tierTotals[h.key];
+                  const w = Math.max(0.13, v / maxTier);
+                  const pct = totalT ? Math.round((v / totalT) * 100) : 0;
+                  const n = tierCounts[h.key];
+                  return (
+                    <button key={h.key} className="hit"
+                      onClick={() => { setTierFilter(h.key); setView("register"); }}
+                      aria-label={h.label + " — " + fmtT(v) + ", " + n + " stream" + (n!==1?"s":"")}
+                      style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer",
+                        background:"transparent", border:"none", padding:"2px 0", width:"100%", fontFamily:T.sans }}>
+                      <span style={{ width:78, textAlign:"right", flexShrink:0, fontSize:11,
+                        fontWeight: tierFilter===h.key ? 700 : 500, color:h.color }}>{h.label}</span>
+                      <span style={{ flex:1, display:"flex", justifyContent:"center", minWidth:0 }}>
+                        <span style={{ width:(w*100)+"%", height:38, background:h.solid, borderRadius:6,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          outline: tierFilter===h.key ? "2px solid "+h.color : "none", outlineOffset:2 }}>
+                          <span style={{ fontSize:13, fontWeight:600, color:"var(--bar-ink)", fontVariantNumeric:"tabular-nums" }}>
+                            {fmtNb(v, 1)}
+                          </span>
+                        </span>
+                      </span>
+                      <span style={{ width:66, flexShrink:0, textAlign:"left" }}>
+                        <span style={{ display:"block", fontSize:12, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums" }}>
+                          {h.key === "Prevention" ? "avoided" : pct + "%"}
+                        </span>
+                        <span style={{ display:"block", fontSize:TYPE.data, color:T.muted }}>
+                          {n} stream{n!==1?"s":""}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ margin:"12px 0 0", fontSize:11, color:T.muted }}>
+                Diversion rate {fmtNb(diversionRate,1)}% — {fmtT(divertedT)} kept from disposal of {fmtT(totalT)} logged.
+              </p>
+            </div>
+            {/* In this view the reduction principles are content, not a disclosure */}
+            <div style={card}>
+              <p style={lbl}>Reduction principles (philosophy)</p>
+              {WASTE_PHILOSOPHY.map((item,i) => (
+                <div key={i} style={{ display:"flex", gap:6, marginBottom:5 }}>
+                  <span style={{ color:T.green, fontSize:TYPE.data, flexShrink:0 }}>✓</span>
+                  <span style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* ── Stream cards (W9 · first reading) ── */}
+      {view === "streams" && (
+        logged.length === 0 ? (
+          <div style={{ ...card, textAlign:"center", padding:"3rem" }}>
+            <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:600, color:T.muted }}>No waste streams logged</p>
+            <p style={{ margin:0, fontSize:12, color:T.muted }}>Add a stream to see the cards.</p>
+          </div>
+        ) : (
+          <div style={{ marginBottom:"1.5rem" }}>
+            {orderedGroups.map(([fraction, frows]) => {
+              const shown = frows.filter(isLogged);
+              if (!shown.length) return null;
+              return (
+                <div key={fraction} style={{ marginBottom:"1rem" }}>
+                  <p style={{ ...lbl, marginBottom:8 }}>{fraction} · {shown.length}</p>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:8 }}>
+                    {shown.map(r => {
+                      const h = hier(r.treatment);
+                      const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
+                      return (
+                        <div key={r.id} {...clickable(() => setEditId(r.id), "Edit " + (r.product || "waste stream"))}
+                          style={{ background:T.surface, border:"1px solid "+T.border,
+                            borderLeft:"3px solid "+((h && h.solid) || T.border), borderRadius:8,
+                            padding:"10px 12px", cursor:"pointer" }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:8 }}>
+                            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal }}>{r.ref || "—"}</span>
+                            <span style={{ fontSize:12, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>
+                              {inTonnage(r) ? fmtT(toTonnes(r)) : fmtNb(rowTotal(r),2) + " " + r.unit}
+                            </span>
+                          </div>
+                          <div style={{ fontSize:12, fontWeight:500, color:T.text, margin:"3px 0 6px" }}>
+                            {r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}
+                          </div>
+                          <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
+                            {r.ewc && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{r.ewc}</span>}
+                            <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
+                              background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>{r.cls}</span>
+                            {h && <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
+                              background:h.bg, color:h.color, border:"1px solid "+h.bd }}>{h.label}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* ── Full record drawer (W6) ── */}
       {editing && (
         <div onClick={() => setEditId(null)}
           style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:1000,
@@ -2353,121 +2894,217 @@ function WasteTab({ project, onChange }) {
             ref={dialogRef} tabIndex={-1}
             role="dialog" aria-modal="true"
             aria-label={editing.isStd ? "Edit waste stream" : "Custom waste stream"}
-            style={{ background:T.bg, borderRadius:12, width:"100%", maxWidth:600,
-              boxShadow:"0 20px 60px rgba(0,0,0,0.35)", overflow:"hidden", outline:"none" }}>
+            style={{ background:T.bg, borderRadius:12, width:"100%", maxWidth:640,
+              boxShadow:"var(--shadow-menu)", overflow:"hidden", outline:"none" }}>
             <div style={{ padding:"14px 18px", borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surface }}>
               <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.text }}>
-                {editing.isStd ? "Edit waste stream" : "Custom waste stream"}
+                {editing.ref ? editing.ref + " · " : ""}{editing.isStd ? "Edit waste stream" : "Custom waste stream"}
               </h3>
-              <button onClick={() => setEditId(null)} style={{ fontSize:18, lineHeight:1, padding:"2px 8px", borderRadius:6, border:"none", background:"transparent", color:T.muted, cursor:"pointer" }}>×</button>
+              <button className="hit" onClick={() => setEditId(null)} aria-label="Close"
+                style={{ fontSize:18, lineHeight:1, padding:"2px 8px", borderRadius:6, border:"none", background:"transparent", color:T.muted, cursor:"pointer" }}>×</button>
             </div>
 
-            <div style={{ padding:"18px", display:"flex", flexDirection:"column", gap:16, maxHeight:"72vh", overflowY:"auto" }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <div style={{ padding:"18px", display:"flex", flexDirection:"column", gap:18, maxHeight:"72vh", overflowY:"auto" }}>
+              {/* 1 · Identification */}
+              <WasteFormSection n="1" title="Identification">
                 <div>
-                  <label style={lbl}>Waste fraction</label>
-                  {editing.isStd
-                    ? <div style={{ ...iw, background:T.surface2, color:T.muted }}>{editing.fraction}</div>
-                    : <select value={editing.fraction||""} onChange={e=>updateRow(editId,{fraction:e.target.value})} style={iw}>
-                        <option value="">Select…</option>
-                        {WASTE_FRACTIONS.map(f=> <option key={f.fraction} value={f.fraction}>{f.fraction}</option>)}
-                        <option value="Other">Other</option>
-                      </select>}
-                </div>
-                <div>
-                  <label style={lbl}>Material / product</label>
+                  <label style={lbl}>Waste stream</label>
                   {editing.isStd
                     ? <div style={{ ...iw, background:T.surface2, color:T.muted }}>{editing.product}</div>
-                    : <input value={editing.product||""} onChange={e=>updateRow(editId,{product:e.target.value})} placeholder="e.g. used hydraulic oil" style={iw}/>}
+                    : <CatalogueCombo idBase="wcat-drawer" value={editing.product||""}
+                        placeholder="Type a few cues — e.g. solvent, oily, 14 06…"
+                        onText={v => updateRow(editId, { product:v })}
+                        onPick={e => updateRow(editId, { product:e.name, ewc:e.ewc, cls:e.cls, treatment: editing.treatment || e.tier })}/>}
                 </div>
-              </div>
-
-              <div>
-                <label style={lbl}>Classification</label>
-                <div style={{ display:"flex", gap:8 }}>
-                  {[{v:false,l:"Non-hazardous"},{v:true,l:"Hazardous"}].map(({v,l})=>(
-                    <button key={l} onClick={()=>updateRow(editId,{hazardous:v})}
-                      style={{ flex:1, padding:"8px", fontSize:12, borderRadius:6, cursor:"pointer", fontFamily:T.sans, fontWeight:500,
-                        border:"1px solid "+(editing.hazardous===v?(v?T.redBd:T.greenBd):T.border),
-                        background: editing.hazardous===v?(v?T.redBg:T.greenBg):"transparent",
-                        color: editing.hazardous===v?(v?T.red:T.green):T.muted }}>{l}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label style={lbl}>Estimated quantity by phase</label>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:8, alignItems:"end" }}>
-                  {[["construction","Construction /\nInstallation"],["startup","Start-up /\nShut-down"],["operation","Normal\nOperation"]].map(([f,l])=>(
-                    <div key={f}>
-                      <div style={{ fontSize:TYPE.data, color:T.muted, marginBottom:4, lineHeight:1.3, whiteSpace:"pre-line", minHeight:24 }}>{l}</div>
-                      <input type="number" min="0" value={editing[f]||""} placeholder="0"
-                        onChange={e=>updateRow(editId,{[f]:e.target.value})} style={{...iw, textAlign:"center"}}/>
-                    </div>
-                  ))}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                   <div>
-                    <div style={{ fontSize:TYPE.data, color:T.faint, marginBottom:4, minHeight:24 }}>Unit</div>
-                    <select value={editing.unit||"kg"} onChange={e=>updateRow(editId,{unit:e.target.value})} style={{...iw, width:72}}>
-                      {WASTE_UNITS.map(u=> <option key={u} value={u}>{u}</option>)}
+                    <label style={lbl}>EWC code</label>
+                    <input value={editing.ewc||""} onChange={e => updateRow(editId, { ewc:e.target.value })}
+                      placeholder="e.g. 12 01 17 or 14 06 03*"
+                      style={{ ...iw, letterSpacing:"0.04em", fontVariantNumeric:"tabular-nums" }}/>
+                  </div>
+                  <div>
+                    <label style={lbl}>Register reference</label>
+                    <div style={{ ...iw, background:T.surface2, color:T.muted, fontFamily:T.mono }}>{editing.ref || "—"}</div>
+                  </div>
+                </div>
+                <div>
+                  <label style={lbl}>Hazard classification</label>
+                  <div style={{ display:"flex", gap:6 }}>
+                    {WASTE_CLASSES.map(c => {
+                      const on = editing.cls === c;
+                      const tone = wasteClassTone[c];
+                      return (
+                        <button key={c} onClick={() => updateRow(editId, { cls:c })}
+                          style={{ flex:1, padding:"8px 6px", fontSize:11, fontWeight:500, borderRadius:6, cursor:"pointer",
+                            fontFamily:T.sans, border:"1px solid "+(on?tone.bd:T.border),
+                            background: on?tone.bg:"transparent", color: on?tone.c:T.muted }}>{c}</button>
+                      );
+                    })}
+                  </div>
+                  {/\*/.test(editing.ewc||"") && editing.cls !== "Hazardous" && (
+                    <p style={{ margin:"6px 0 0", fontSize:11, color:T.red }}>
+                      EWC carries a hazardous entry (*) — classification should be Hazardous and a consignment note is required.
+                    </p>
+                  )}
+                </div>
+              </WasteFormSection>
+
+              {/* 2 · Origin */}
+              <WasteFormSection n="2" title="Origin">
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div>
+                    <label style={lbl}>Waste fraction</label>
+                    {editing.isStd
+                      ? <div style={{ ...iw, background:T.surface2, color:T.muted }}>{editing.fraction}</div>
+                      : <select value={editing.fraction||""} onChange={e=>updateRow(editId,{fraction:e.target.value})} style={iw}>
+                          <option value="">Select…</option>
+                          {WASTE_FRACTIONS.map(f=> <option key={f.fraction} value={f.fraction}>{f.fraction}</option>)}
+                          <option value="Other">Other</option>
+                        </select>}
+                  </div>
+                  <div>
+                    <label style={lbl}>EPCIC phase</label>
+                    <select value={editing.phase||""} onChange={e=>updateRow(editId,{phase:e.target.value})} style={iw}>
+                      <option value="">Select…</option>
+                      {PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Project context</label>
+                    <select value={editing.domain||""} onChange={e=>updateRow(editId,{domain:e.target.value})} style={iw}>
+                      <option value="">Select…</option>
+                      {WASTE_DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Status</label>
+                    <select value={editing.status||"Active"} onChange={e=>updateRow(editId,{status:e.target.value})} style={iw}>
+                      {WASTE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 </div>
-              </div>
+              </WasteFormSection>
 
-              <div>
-                <label style={lbl}>Treatment route (waste hierarchy)</label>
-                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                  {WASTE_HIERARCHY.map(h=>(
-                    <button key={h.key} onClick={()=>updateRow(editId,{treatment: editing.treatment===h.key?"":h.key})}
-                      style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:6, cursor:"pointer", textAlign:"left",
-                        border:"1px solid "+(editing.treatment===h.key?h.bd:T.border),
-                        background: editing.treatment===h.key?h.bg:"transparent", fontFamily:T.sans }}>
-                      <span style={{ width:20, height:20, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
-                      <span style={{ fontSize:12, fontWeight:600, color: editing.treatment===h.key?h.color:T.text, width:120, flexShrink:0 }}>{h.label}</span>
-                      <span style={{ fontSize:10, color:T.muted }}>{h.desc}</span>
-                    </button>
-                  ))}
+              {/* 3 · Quantity — the three phase buckets, unchanged */}
+              <WasteFormSection n="3" title="Quantity">
+                <div>
+                  <label style={lbl}>Estimated quantity by phase</label>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:8, alignItems:"end" }}>
+                    {[["construction","Construction /\nInstallation"],["startup","Start-up /\nShut-down"],["operation","Normal\nOperation"]].map(([f,l])=>(
+                      <div key={f}>
+                        <div style={{ fontSize:TYPE.data, color:T.muted, marginBottom:4, lineHeight:1.3, whiteSpace:"pre-line", minHeight:24 }}>{l}</div>
+                        <input type="number" min="0" value={editing[f]||""} placeholder="0"
+                          onChange={e=>updateRow(editId,{[f]:e.target.value})} style={{...iw, textAlign:"center"}}/>
+                      </div>
+                    ))}
+                    <div>
+                      <div style={{ fontSize:TYPE.data, color:T.muted, marginBottom:4, minHeight:24 }}>Unit</div>
+                      <select value={editing.unit||"kg"} onChange={e=>updateRow(editId,{unit:e.target.value})} style={{...iw, width:78}}>
+                        {WASTE_UNITS.map(u=> <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {!WASTE_MASS_UNITS.includes(editing.unit||"kg") && rowTotal(editing) > 0 && (
+                    <p style={{ margin:"6px 0 0", fontSize:11, color:T.amber }}>
+                      {editing.unit} cannot be summed into tonnes — this stream is excluded from the tonnage totals and disclosed on the KPI card.
+                    </p>
+                  )}
                 </div>
-              </div>
+              </WasteFormSection>
 
-              <div>
-                <label style={lbl}>Reduction methods applied ({(editing.methods||[]).length} selected)</label>
-                <div style={{ border:"1px solid "+T.border, borderRadius:6, maxHeight:170, overflowY:"auto" }}>
-                  {WASTE_PHILOSOPHY.map((m,i)=>{
-                    const sel = (editing.methods||[]).includes(i);
-                    return (
-                      <label key={i} style={{ display:"flex", gap:9, padding:"7px 10px", cursor:"pointer", alignItems:"flex-start",
-                        borderBottom: i<WASTE_PHILOSOPHY.length-1?"1px solid "+T.rowBd:"none",
-                        background: sel?T.tealBg:"transparent" }}>
-                        <input type="checkbox" checked={sel}
-                          onChange={()=>{
-                            const cur = editing.methods||[];
-                            updateRow(editId,{ methods: sel ? cur.filter(x=>x!==i) : [...cur,i] });
-                          }}
-                          style={{ width:16, height:16, flexShrink:0, margin:"1px 0 0", padding:0, accentColor:T.teal }}/>
-                        <span style={{ fontSize:11, color: sel?T.text:T.muted, lineHeight:1.45 }}>{m}</span>
-                      </label>
-                    );
-                  })}
+              {/* 4 · Management */}
+              <WasteFormSection n="4" title="Management">
+                <div>
+                  <label style={lbl}>Treatment route (waste hierarchy)</label>
+                  <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                    {WASTE_HIERARCHY.map(h=>(
+                      <button key={h.key} onClick={()=>updateRow(editId,{treatment: editing.treatment===h.key?"":h.key})}
+                        style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:6, cursor:"pointer", textAlign:"left",
+                          border:"1px solid "+(editing.treatment===h.key?h.bd:T.border),
+                          background: editing.treatment===h.key?h.bg:"transparent", fontFamily:T.sans }}>
+                        <span style={{ width:20, height:20, borderRadius:4, background:h.bg, border:"1px solid "+h.bd, color:h.color, fontSize:TYPE.data, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{h.rank}</span>
+                        <span style={{ fontSize:12, fontWeight:600, color: editing.treatment===h.key?h.color:T.text, width:120, flexShrink:0 }}>{h.label}</span>
+                        <span style={{ fontSize:TYPE.data, color:T.muted }}>{h.desc}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                <div>
+                  <label style={lbl}>Reduction methods applied ({(editing.methods||[]).length} selected)</label>
+                  <div style={{ border:"1px solid "+T.border, borderRadius:6, maxHeight:170, overflowY:"auto" }}>
+                    {WASTE_PHILOSOPHY.map((m,i)=>{
+                      const sel = (editing.methods||[]).includes(i);
+                      return (
+                        <label key={i} style={{ display:"flex", gap:9, padding:"7px 10px", cursor:"pointer", alignItems:"flex-start",
+                          borderBottom: i<WASTE_PHILOSOPHY.length-1?"1px solid "+T.rowBd:"none",
+                          background: sel?T.tealBg:"transparent" }}>
+                          <input type="checkbox" checked={sel}
+                            onChange={()=>{
+                              const cur = editing.methods||[];
+                              updateRow(editId,{ methods: sel ? cur.filter(x=>x!==i) : [...cur,i] });
+                            }}
+                            style={{ width:16, height:16, flexShrink:0, margin:"1px 0 0", padding:0, accentColor:T.teal }}/>
+                          <span style={{ fontSize:11, color: sel?T.text:T.muted, lineHeight:1.45 }}>{m}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </WasteFormSection>
 
-              <div>
-                <label style={lbl}>Notes / handling requirements</label>
-                <textarea value={editing.measures||""} onChange={e=>updateRow(editId,{measures:e.target.value})}
-                  rows={2} placeholder="Disposal route, contractor, special handling, EWC code…" style={{...iw, resize:"vertical", lineHeight:1.5}}/>
-              </div>
+              {/* 5 · Compliance */}
+              <WasteFormSection n="5" title="Compliance">
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div>
+                    <label style={lbl}>Registered carrier</label>
+                    <input value={editing.carrier||""} onChange={e=>updateRow(editId,{carrier:e.target.value})}
+                      placeholder="Carrier name + licence" style={iw}/>
+                  </div>
+                  <div>
+                    <label style={lbl}>Consignment note ref</label>
+                    <input value={editing.consign||""} onChange={e=>updateRow(editId,{consign:e.target.value})}
+                      placeholder="CN-26-000" style={iw}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={lbl}>Notes / handling requirements</label>
+                  <textarea value={editing.measures||""} onChange={e=>updateRow(editId,{measures:e.target.value})}
+                    rows={2} placeholder="Disposal route, contractor, special handling…" style={{...iw, resize:"vertical", lineHeight:1.5}}/>
+                </div>
+              </WasteFormSection>
             </div>
 
-            <div style={{ padding:"12px 18px", borderTop:"1px solid "+T.border, display:"flex", justifyContent:"space-between", background:T.surface }}>
+            <div style={{ padding:"12px 18px", borderTop:"1px solid "+T.border, display:"flex", justifyContent:"space-between", alignItems:"center", background:T.surface }}>
               {!editing.isStd
-                ? <Btn variant="danger" onClick={()=>delStream(editId)}>Delete stream</Btn>
+                ? (armedDel === editId
+                    ? <span style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontFamily:T.mono, fontSize:11, color:T.red }}>Are you sure?</span>
+                        <Btn variant="danger" onClick={()=>{ armDel(null); delStream(editId); }}>Yes, delete</Btn>
+                        <Btn onClick={()=>armDel(null)}>Cancel</Btn>
+                      </span>
+                    : <Btn variant="danger" onClick={()=>armDel(editId)}>Delete stream</Btn>)
                 : <span/>}
-              <Btn variant="primary" onClick={()=>setEditId(null)}>Done</Btn>
+              <Btn variant="primary" onClick={()=>{ if (notify) notify((editing.ref||"Stream") + " saved"); setEditId(null); }}>Done</Btn>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Numbered section header for the waste record form (W6).
+function WasteFormSection({ n, title, children }) {
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:11 }}>
+        <span style={{ width:18, height:18, borderRadius:9, background:T.tealBg, color:T.teal,
+          fontSize:TYPE.data, fontWeight:600, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{n}</span>
+        <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>{title}</span>
+        <span style={{ flex:1, height:1, background:T.rowBd }}/>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:12 }}>{children}</div>
     </div>
   );
 }
@@ -4235,7 +4872,7 @@ This cannot be undone.`)) return;
       </div>
 
 
-      {tab === "waste" && <WasteTab project={project} onChange={onChange}/>}
+      {tab === "waste" && <WasteTab project={project} onChange={onChange} notify={notify}/>}
 
       {tab === "attendees" && (() => {
         const sessions    = project.attendeeSessions || [];
