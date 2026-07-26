@@ -65,6 +65,8 @@
         --cat-gray-bg:  #ECEFF1;--cat-gray-bd:  #CFD8DC;--cat-gray-tx:  #37474F;--cat-gray-hd:  #455A64;
         --cat-brown-bg: #EFEBE9;--cat-brown-bd: #BCAAA4;--cat-brown-tx: #3E2723;--cat-brown-hd: #5D4037;
         --cat-darkred-bg:#FCE4EC;--cat-darkred-bd:#F48FB1;--cat-darkred-tx:#880E4F;--cat-darkred-hd:#AD1457;
+        /* Elevation — flat by default; the only shadow in the system is on floating menus */
+        --shadow-menu: 0 4px 14px rgba(0,0,0,0.08);
       }
 
       /* ── Dark theme ─────────────────────────────────────────────────────── */
@@ -118,6 +120,8 @@
         --cat-gray-bg:  #1A1D26;--cat-gray-bd:  #252830;--cat-gray-tx:  #8B8F9A;--cat-gray-hd:  #5F5E5A;
         --cat-brown-bg: #1A1108;--cat-brown-bd: #6D4025;--cat-brown-tx: #DDB07A;--cat-brown-hd: #A0622E;
         --cat-darkred-bg:#1A0612;--cat-darkred-bd:#7B1248;--cat-darkred-tx:#F4A0C8;--cat-darkred-hd:#C2185B;
+        /* A 0.08-alpha shadow is invisible on a dark surface — lift it so the popover still detaches */
+        --shadow-menu: 0 4px 14px rgba(0,0,0,0.45);
       }
 
       /* ── Global resets ──────────────────────────────────────────────────── */
