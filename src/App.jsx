@@ -2215,10 +2215,34 @@ function searchCatalogue(q, limit = 8) {
 // consumer crashes on a project saved before this patch.
 const WASTE_ROW_DEFAULTS = {
   ref:"", ewc:"", cls:"Non-hazardous", phase:"", domain:"", status:"Active",
-  carrier:"", consign:"", avoided:false,
+  carrier:"", consign:"", route:"", avoided:false,
   construction:"", startup:"", operation:"", unit:"kg",
   treatment:"", methods:[], measures:"",
 };
+
+// Seeded register — the standard streams a mixed-domain capital project carries
+// (offshore O&G · onshore infra · industrial). Quantities are tonnes, landed in
+// the bucket implied by the stream's EPCIC phase. `fraction` keeps the app's
+// grouping and filter working over the new content.
+const WASTE_SEED_STREAMS = [
+  { n:1,  product:"Drill cuttings (oil-based mud)", fraction:"Hydrocarbons",                  ewc:"01 05 05*", cls:"Hazardous",     treatment:"Recovery",  phase:"Operations & Maintenance", domain:"Offshore",   qty:4200, route:"Skip & ship · re-injection",    status:"Active" },
+  { n:2,  product:"Produced-water slops",           fraction:"Hydrocarbons",                  ewc:"13 05 07*", cls:"Hazardous",     treatment:"Recovery",  phase:"Operations & Maintenance", domain:"Offshore",   qty:1850, route:"Slops treatment · SAR",         status:"Active" },
+  { n:3,  product:"Scrap steel & metals",           fraction:"Metals",                        ewc:"17 04 05",  cls:"Non-hazardous", treatment:"Recycling", phase:"Construction",             domain:"Onshore",    qty:980,  route:"Metals reclaim · Stena",        status:"Active" },
+  { n:4,  product:"Excavation spoil (clean)",       fraction:"Other",                         ewc:"17 05 04",  cls:"Inert",         treatment:"Reuse",     phase:"Construction",             domain:"Onshore",    qty:5200, route:"On-site reuse · earthworks",    status:"Active" },
+  { n:5,  product:"Timber & pallets",               fraction:"Packaging",                     ewc:"15 01 03",  cls:"Non-hazardous", treatment:"Reuse",     phase:"Construction",             domain:"Onshore",    qty:200,  route:"Reuse · adjacent project",      status:"Active" },
+  { n:6,  product:"Mixed packaging",                fraction:"Packaging",                     ewc:"15 01 06",  cls:"Non-hazardous", treatment:"Recycling", phase:"Procurement",              domain:"Onshore",    qty:90,   route:"MRF · Norsk Gjenvinning",       status:"Active" },
+  { n:7,  product:"Spent solvents",                 fraction:"Chemicals",                     ewc:"14 06 03*", cls:"Hazardous",     treatment:"Recovery",  phase:"Operations & Maintenance", domain:"Industrial", qty:64,   route:"Energy recovery · Returkraft",  status:"Monitoring" },
+  { n:8,  product:"Oily rags & absorbents",         fraction:"Chemicals",                     ewc:"15 02 02*", cls:"Hazardous",     treatment:"Disposal",  phase:"Operations & Maintenance", domain:"Industrial", qty:39,   route:"Hazardous incineration",        status:"Monitoring" },
+  { n:9,  product:"Spent catalyst",                 fraction:"Chemicals",                     ewc:"16 08 02*", cls:"Hazardous",     treatment:"Recycling", phase:"Operations & Maintenance", domain:"Industrial", qty:210,  route:"Metals reclaim · BASF",         status:"Active" },
+  { n:10, product:"NORM scale",                     fraction:"Pipes and systems",             ewc:"— (NORM)",  cls:"Hazardous",     treatment:"Disposal",  phase:"Operations & Maintenance", domain:"Offshore",   qty:27,   route:"Specialist · NORM disposal",    status:"Monitoring" },
+  { n:11, product:"Concrete & rubble",              fraction:"Other",                         ewc:"17 01 01",  cls:"Inert",         treatment:"Recycling", phase:"Construction",             domain:"Onshore",    qty:3400, route:"Crush & recycle · aggregate",   status:"Active" },
+  { n:12, product:"Food / canteen waste",           fraction:"Other",                         ewc:"20 01 08",  cls:"Non-hazardous", treatment:"Recovery",  phase:"Operations & Maintenance", domain:"Offshore",   qty:56,   route:"Anaerobic digestion",           status:"Active" },
+  { n:13, product:"WEEE / electronics",             fraction:"WEEE",                          ewc:"16 02 14",  cls:"Hazardous",     treatment:"Recycling", phase:"Decommissioning",          domain:"Offshore",   qty:18,   route:"WEEE reclaim · Stena",          status:"Active" },
+  { n:14, product:"Spent batteries",                fraction:"Material containing heavy metals", ewc:"16 06 01*", cls:"Hazardous",  treatment:"Recycling", phase:"Operations & Maintenance", domain:"Industrial", qty:9,    route:"Battery reclaim",               status:"Closed" },
+  { n:15, product:"Sandblast grit",                 fraction:"Other",                         ewc:"12 01 17",  cls:"Non-hazardous", treatment:"Disposal",  phase:"Construction",             domain:"Onshore",    qty:860,  route:"Inert landfill · NOAH",         status:"Active" },
+  { n:16, product:"Avoided single-use formwork",    fraction:"Other",                         ewc:"—",         cls:"Inert",         treatment:"Prevention",phase:"Engineering",              domain:"Onshore",    qty:320,  route:"Design substitution (avoided)", status:"Active" },
+  { n:17, product:"Mixed non-recyclable",           fraction:"Other",                         ewc:"20 03 01",  cls:"Non-hazardous", treatment:"Disposal",  phase:"Construction",             domain:"Onshore",    qty:524,  route:"Residual landfill",             status:"Active" },
+];
 function migrateWasteRow(r) {
   const out = { ...WASTE_ROW_DEFAULTS, ...r };
   // Retire the boolean: read `hazardous` once, map to the three-way class, drop it.
@@ -2239,14 +2263,30 @@ const nextWasteRef = (rows) => {
 function initWasteRows(existing) {
   const byId = {};
   (existing||[]).forEach(r => { if (r && r.id) byId[r.id] = r; });
+  const seedIds = new Set();
   const rows = [];
-  WASTE_FRACTIONS.forEach(({fraction, products}) => {
-    products.forEach((product, pi) => {
-      const id = "std_" + fraction.slice(0,8).replace(/\s+/g,"_").toLowerCase() + "_" + pi;
-      rows.push(migrateWasteRow({ id, fraction, product, isStd:true, ...(byId[id] || {}) }));
-    });
+  WASTE_SEED_STREAMS.forEach(s => {
+    const num = String(s.n).padStart(3,"0");
+    const id = "ws_" + num;
+    seedIds.add(id);
+    const bucket = bucketForPhase(s.phase);
+    rows.push(migrateWasteRow({
+      id, isStd:true, ref:"WS-"+num,
+      product:s.product, fraction:s.fraction, ewc:s.ewc, cls:s.cls,
+      treatment:s.treatment, phase:s.phase, domain:s.domain,
+      route:s.route, status:s.status, unit:"tonne", [bucket]:String(s.qty),
+      ...(byId[id] || {}),   // anything the user edited on this row wins
+    }));
   });
   (existing||[]).filter(r => r && !r.isStd).forEach(r => rows.push(migrateWasteRow(r)));
+  // Rows seeded by the PREVIOUS fraction/product taxonomy are no longer part of
+  // the seed. Keep every one that carries data — as a user row, so it can be
+  // edited or deleted — and drop only the empty placeholders. Nothing logged is lost.
+  (existing||[]).filter(r => r && r.isStd && !seedIds.has(r.id)).forEach(r => {
+    const hasData = ["construction","startup","operation"].some(f => parseFloat(r[f]) > 0)
+      || r.treatment || (r.methods && r.methods.length) || r.measures || r.ewc;
+    if (hasData) rows.push(migrateWasteRow({ ...r, isStd:false }));
+  });
   return rows;
 }
 
@@ -2402,8 +2442,11 @@ function CellSelect({ value, opts, onChange, ariaLabel, short }) {
 function WasteTab({ project, onChange, notify }) {
   const [editId, setEditId]         = useState(null);
   const [fracFilter, setFracFilter] = useState("All");
-  const [tierFilter, setTierFilter] = useState(null);   // set by the funnel drill-down (W8)
+  const [tierFilter, setTierFilter] = useState(null);   // register filter, set from the funnel (W8)
+  const [funnelTier, setFunnelTier] = useState(null);   // tier selected for the funnel's drill-down strip
   const [drafts, setDrafts]         = useState({});     // per-fraction draft row (W5)
+  const [dragId, setDragId]         = useState(null);   // board: stream being dragged
+  const [dragOver, setDragOver]     = useState(null);   // board: tier column under the pointer
   const [armedDel, armDel]          = useArmedConfirm();
   const dialogRef = React.useRef(null);
 
@@ -2518,7 +2561,7 @@ function WasteTab({ project, onChange, notify }) {
   const editing = editId ? rows.find(r => r.id === editId) : null;
 
   // ── Draft row (W5) ────────────────────────────────────────────────────────
-  const emptyDraft = () => ({ name:"", ewc:"", cls:"Non-hazardous", tier:"", phase:"", qty:"" });
+  const emptyDraft = () => ({ name:"", ewc:"", cls:"Non-hazardous", tier:"", phase:"", domain:"", qty:"", route:"" });
   const draftFor = (f) => drafts[f] || emptyDraft();
   const setDraft = (f, patch) => setDrafts(p => ({ ...p, [f]: { ...draftFor(f), ...patch } }));
   const commitDraft = (fraction) => {
@@ -2529,7 +2572,8 @@ function WasteTab({ project, onChange, notify }) {
     const row = migrateWasteRow({
       id, fraction: fraction === "Other" ? "" : fraction, product: d.name.trim(), isStd:false,
       ref: nextWasteRef(rows), ewc: d.ewc || "", cls: d.cls || "Non-hazardous",
-      phase: d.phase || "", treatment: d.tier || "", [bucket]: d.qty || "",
+      phase: d.phase || "", domain: d.domain || "", treatment: d.tier || "",
+      route: d.route || "", [bucket]: d.qty || "",
     });
     save([...rows, row]);
     setDrafts(p => ({ ...p, [fraction]: emptyDraft() }));
@@ -2543,7 +2587,52 @@ function WasteTab({ project, onChange, notify }) {
     { id:"register",  label:"Register" },
     { id:"hierarchy", label:"Hierarchy" },
     { id:"streams",   label:"Streams" },
+    { id:"board",     label:"Board" },
+    { id:"flow",      label:"Flow" },
   ];
+
+  // Board (W9) — drag to reclassify. Drag is an accelerator only; the per-card
+  // tier select is the keyboard path, so no function is drag-only (Band 4 C2).
+  const moveToTier = (id, tierKey) => updateRow(id, { treatment: tierKey });
+
+  // Flow (W9) — two-stage tonnage-weighted Sankey, project context → hierarchy
+  // tier, computed from the register. No fabricated series.
+  const sankey = (() => {
+    const W = 560, H = 300, pad = 18, nodeW = 13, gap = 13;
+    const domainsUsed = WASTE_DOMAINS.filter(d => physical.some(r => r.domain === d));
+    const unset = physical.some(r => !r.domain);
+    const cols = unset ? [...domainsUsed, "Unassigned"] : domainsUsed;
+    const inDom = (r, d) => d === "Unassigned" ? !r.domain : r.domain === d;
+    const tiersUsed = WASTE_HIERARCHY.filter(h => physical.some(r => r.treatment === h.key));
+    const all = physical.reduce((a,r) => a + toTonnes(r), 0);
+    if (!all || !cols.length || !tiersUsed.length) return null;
+    const innerH = H - 2*pad;
+    const scale = Math.min(
+      (innerH - Math.max(0, cols.length-1)*gap) / all,
+      (innerH - Math.max(0, tiersUsed.length-1)*gap) / all);
+    const domTotal = {}; cols.forEach(d => { domTotal[d] = physical.filter(r => inDom(r,d)).reduce((a,r)=>a+toTonnes(r),0); });
+    const tierTot  = {}; tiersUsed.forEach(h => { tierTot[h.key] = physical.filter(r => r.treatment===h.key).reduce((a,r)=>a+toTonnes(r),0); });
+    const lH = cols.reduce((a,d)=>a+domTotal[d]*scale,0) + Math.max(0,cols.length-1)*gap;
+    const rH = tiersUsed.reduce((a,h)=>a+tierTot[h.key]*scale,0) + Math.max(0,tiersUsed.length-1)*gap;
+    const lNodes = {}; let yl = pad + (innerH - lH)/2;
+    cols.forEach(d => { const h = domTotal[d]*scale; lNodes[d] = { y:yl, h }; yl += h + gap; });
+    const rNodes = {}; let yr = pad + (innerH - rH)/2;
+    tiersUsed.forEach(h => { const hh = tierTot[h.key]*scale; rNodes[h.key] = { y:yr, h:hh }; yr += hh + gap; });
+    const lOff = {}; cols.forEach(d => { lOff[d] = lNodes[d].y; });
+    const rOff = {}; tiersUsed.forEach(h => { rOff[h.key] = rNodes[h.key].y; });
+    const links = [];
+    cols.forEach(d => tiersUsed.forEach(h => {
+      const v = physical.filter(r => inDom(r,d) && r.treatment===h.key).reduce((a,r)=>a+toTonnes(r),0);
+      if (v <= 0) return;
+      const vh = v*scale, x0 = pad+nodeW, x1 = W-pad-nodeW, cx = (x0+x1)/2;
+      const t0 = lOff[d], t1 = rOff[h.key];
+      lOff[d] += vh; rOff[h.key] += vh;
+      links.push({ key:d+"|"+h.key, d, tier:h.label, v, color:h.solid,
+        path:"M"+x0+","+t0+" C"+cx+","+t0+" "+cx+","+t1+" "+x1+","+t1+
+             " L"+x1+","+(t1+vh)+" C"+cx+","+(t1+vh)+" "+cx+","+(t0+vh)+" "+x0+","+(t0+vh)+" Z" });
+    }));
+    return { W, H, pad, nodeW, cols, tiersUsed, lNodes, rNodes, links, domTotal, tierTot };
+  })();
 
   return (
     <div>
@@ -2626,11 +2715,16 @@ function WasteTab({ project, onChange, notify }) {
                 <th style={{ ...th, width:64 }}>Ref</th>
                 <th style={{ ...th, minWidth:190 }}>Material / waste stream</th>
                 <th style={{ ...th, width:86 }}>EWC</th>
-                <th style={{ ...th, width:118 }}>Class</th>
+                <th style={{ ...th, width:112 }}>Class</th>
+                <th style={{ ...th, width:126 }}>Hierarchy</th>
                 <th style={{ ...th, width:150 }}>Phase</th>
+                <th style={{ ...th, width:104 }}>Context</th>
                 <th style={{ ...th, width:104, textAlign:"right" }}>Est. qty</th>
-                <th style={{ ...th, width:130 }}>Treatment</th>
-                <th style={{ ...th, width:96 }}>Methods</th>
+                <th style={{ ...th, minWidth:150 }}>Disposal route</th>
+                <th style={{ ...th, minWidth:130 }}>Carrier</th>
+                <th style={{ ...th, width:112 }}>Consignment</th>
+                <th style={{ ...th, width:110 }}>Status</th>
+                <th style={{ ...th, width:76 }}>Methods</th>
                 <th style={{ ...th, width:92 }}/>
               </tr>
             </thead>
@@ -2638,7 +2732,7 @@ function WasteTab({ project, onChange, notify }) {
               {orderedGroups.map(([fraction, frows]) => (
                 <React.Fragment key={fraction}>
                   <tr>
-                    <td colSpan={9} style={{ padding:"6px 10px", background:T.surface2,
+                    <td colSpan={14} style={{ padding:"6px 10px", background:T.surface2,
                       fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted,
                       textTransform:"uppercase", letterSpacing:"0.06em",
                       borderTop:"1px solid "+T.border, borderBottom:"1px solid "+T.border }}>
@@ -2647,7 +2741,6 @@ function WasteTab({ project, onChange, notify }) {
                   </tr>
                   {frows.map(r => {
                     const rlogged = isLogged(r);
-                    const h = hier(r.treatment);
                     const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
                     const bucket = bucketForPhase(r.phase);
                     const bucketVal = r[bucket] || "";
@@ -2660,11 +2753,9 @@ function WasteTab({ project, onChange, notify }) {
                           </span>
                         </td>
                         <td style={td}>
-                          {r.isStd
-                            ? <span style={{ display:"block", padding:"7px 8px", color:T.text }}>{r.product}</span>
-                            : <CellInput value={r.product} placeholder="Stream name…"
-                                ariaLabel="Waste stream name"
-                                onChange={v => updateRow(r.id, { product:v })}/>}
+                          <CellInput value={r.product} placeholder="Stream name…"
+                            ariaLabel="Waste stream name"
+                            onChange={v => updateRow(r.id, { product:v })}/>
                         </td>
                         <td style={td}>
                           <CellInput value={r.ewc} placeholder="EWC" ariaLabel="EWC code"
@@ -2675,8 +2766,17 @@ function WasteTab({ project, onChange, notify }) {
                             onChange={v => updateRow(r.id, { cls:v })}/>
                         </td>
                         <td style={td}>
+                          <CellSelect value={r.treatment} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
+                            ariaLabel="Hierarchy tier"
+                            onChange={v => updateRow(r.id, { treatment:v })}/>
+                        </td>
+                        <td style={td}>
                           <CellSelect value={r.phase} opts={["", ...PHASES]} ariaLabel="EPCIC phase"
                             onChange={v => updateRow(r.id, { phase:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={r.domain} opts={["", ...WASTE_DOMAINS]} ariaLabel="Project context"
+                            onChange={v => updateRow(r.id, { domain:v })}/>
                         </td>
                         <td style={{ ...td, whiteSpace:"nowrap" }}>
                           <div style={{ display:"flex", alignItems:"center", gap:3 }}
@@ -2691,9 +2791,20 @@ function WasteTab({ project, onChange, notify }) {
                           </div>
                         </td>
                         <td style={td}>
-                          <CellSelect value={r.treatment} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
-                            ariaLabel="Treatment route"
-                            onChange={v => updateRow(r.id, { treatment:v })}/>
+                          <CellInput value={r.route} placeholder="route…" ariaLabel="Disposal route"
+                            onChange={v => updateRow(r.id, { route:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellInput value={r.carrier} placeholder="carrier…" ariaLabel="Registered carrier"
+                            onChange={v => updateRow(r.id, { carrier:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellInput value={r.consign} placeholder="CN-…" ariaLabel="Consignment note"
+                            onChange={v => updateRow(r.id, { consign:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={r.status} opts={WASTE_STATUSES} ariaLabel="Status"
+                            onChange={v => updateRow(r.id, { status:v })}/>
                         </td>
                         <td style={{ ...td, padding:"7px 10px" }}>
                           {r.methods && r.methods.length
@@ -2742,19 +2853,27 @@ function WasteTab({ project, onChange, notify }) {
                             onChange={v => setDraft(fraction, { cls:v })}/>
                         </td>
                         <td style={td}>
+                          <CellSelect value={d.tier} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
+                            ariaLabel="New stream hierarchy tier"
+                            onChange={v => setDraft(fraction, { tier:v })}/>
+                        </td>
+                        <td style={td}>
                           <CellSelect value={d.phase} opts={["", ...PHASES]} ariaLabel="New stream phase"
                             onChange={v => setDraft(fraction, { phase:v })}/>
+                        </td>
+                        <td style={td}>
+                          <CellSelect value={d.domain} opts={["", ...WASTE_DOMAINS]} ariaLabel="New stream context"
+                            onChange={v => setDraft(fraction, { domain:v })}/>
                         </td>
                         <td style={td}>
                           <CellInput num value={d.qty} placeholder="0" ariaLabel="New stream quantity"
                             onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { qty:v })}/>
                         </td>
                         <td style={td}>
-                          <CellSelect value={d.tier} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
-                            ariaLabel="New stream treatment"
-                            onChange={v => setDraft(fraction, { tier:v })}/>
+                          <CellInput value={d.route} placeholder="route…" ariaLabel="New stream disposal route"
+                            onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { route:v })}/>
                         </td>
-                        <td colSpan={2} style={{ ...td, padding:"4px 8px", textAlign:"right" }}>
+                        <td colSpan={5} style={{ ...td, padding:"4px 8px", textAlign:"right" }}>
                           <Btn size="sm" variant="primary" onClick={() => commitDraft(fraction)}>+ Add</Btn>
                         </td>
                       </tr>
@@ -2774,67 +2893,166 @@ function WasteTab({ project, onChange, notify }) {
             <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:600, color:T.muted }}>No waste streams logged</p>
             <p style={{ margin:0, fontSize:12, color:T.muted }}>Add a stream to see the hierarchy.</p>
           </div>
-        ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:12, marginBottom:"1.5rem" }}>
-            <div style={card}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
-                <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste-management hierarchy</span>
-                <span style={{ fontSize:TYPE.data, color:T.muted }}>by mass · select a tier</span>
-              </div>
-              <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
-                {WASTE_HIERARCHY.map(h => {
-                  const v = tierTotals[h.key];
-                  const w = Math.max(0.13, v / maxTier);
-                  const pct = totalT ? Math.round((v / totalT) * 100) : 0;
-                  const n = tierCounts[h.key];
-                  return (
-                    <button key={h.key} className="hit"
-                      onClick={() => { setTierFilter(h.key); setView("register"); }}
-                      aria-label={h.label + " — " + fmtT(v) + ", " + n + " stream" + (n!==1?"s":"")}
-                      style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer",
-                        background:"transparent", border:"none", padding:"2px 0", width:"100%", fontFamily:T.sans }}>
-                      <span style={{ width:78, textAlign:"right", flexShrink:0, fontSize:11,
-                        fontWeight: tierFilter===h.key ? 700 : 500, color:h.color }}>{h.label}</span>
-                      <span style={{ flex:1, display:"flex", justifyContent:"center", minWidth:0 }}>
-                        <span style={{ width:(w*100)+"%", height:38, background:h.solid, borderRadius:6,
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          outline: tierFilter===h.key ? "2px solid "+h.color : "none", outlineOffset:2 }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:"var(--bar-ink)", fontVariantNumeric:"tabular-nums" }}>
-                            {fmtNb(v, 1)}
-                          </span>
-                        </span>
-                      </span>
-                      <span style={{ width:66, flexShrink:0, textAlign:"left" }}>
-                        <span style={{ display:"block", fontSize:12, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums" }}>
-                          {h.key === "Prevention" ? "avoided" : pct + "%"}
-                        </span>
-                        <span style={{ display:"block", fontSize:TYPE.data, color:T.muted }}>
-                          {n} stream{n!==1?"s":""}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p style={{ margin:"12px 0 0", fontSize:11, color:T.muted }}>
-                Diversion rate {fmtNb(diversionRate,1)}% — {fmtT(divertedT)} kept from disposal of {fmtT(totalT)} logged.
-              </p>
-            </div>
-            {/* In this view the reduction principles are content, not a disclosure */}
-            <div style={card}>
-              <p style={lbl}>Reduction principles (philosophy)</p>
-              {WASTE_PHILOSOPHY.map((item,i) => (
-                <div key={i} style={{ display:"flex", gap:6, marginBottom:5 }}>
-                  <span style={{ color:T.green, fontSize:TYPE.data, flexShrink:0 }}>✓</span>
-                  <span style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>{item}</span>
+        ) : (() => {
+          const drillTier = funnelTier || WASTE_HIERARCHY.reduce((best,h) =>
+            tierTotals[h.key] > tierTotals[best.key] ? h : best, WASTE_HIERARCHY[0]).key;
+          const drillRows = logged.filter(r => r.treatment === drillTier);
+          const dh = hier(drillTier) || WASTE_HIERARCHY[0];
+          return (
+            <div style={{ marginBottom:"1.5rem" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1.55fr 1fr", gap:12, marginBottom:12 }}>
+                {/* Funnel */}
+                <div style={card}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
+                    <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste-management hierarchy</span>
+                    <span style={{ fontSize:TYPE.data, color:T.muted }}>by mass · select a tier</span>
+                  </div>
+                  <div style={{ display:"flex", gap:12 }}>
+                    {/* preference axis */}
+                    <div style={{ width:16, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"4px 0", flexShrink:0 }}>
+                      <span style={{ fontSize:TYPE.data, fontWeight:500, color:T.green, letterSpacing:"0.08em",
+                        writingMode:"vertical-rl", transform:"rotate(180deg)", whiteSpace:"nowrap" }}>MORE PREFERRED</span>
+                      <span style={{ flex:1, width:2, background:"linear-gradient("+T.greenBd+","+T.redBd+")", margin:"6px 0", borderRadius:1 }}/>
+                      <span style={{ fontSize:TYPE.data, fontWeight:500, color:T.red, letterSpacing:"0.08em",
+                        writingMode:"vertical-rl", transform:"rotate(180deg)", whiteSpace:"nowrap" }}>LESS PREFERRED</span>
+                    </div>
+                    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:9, minWidth:0 }}>
+                      {WASTE_HIERARCHY.map(h => {
+                        const v = tierTotals[h.key];
+                        const w = Math.max(0.13, v / maxTier);
+                        const pct = totalT ? Math.round((v / totalT) * 100) : 0;
+                        const n = tierCounts[h.key];
+                        const on = drillTier === h.key;
+                        return (
+                          <button key={h.key} className="hit" onClick={() => setFunnelTier(h.key)}
+                            aria-label={h.label + " — " + fmtT(v) + ", " + n + " stream" + (n!==1?"s":"")}
+                            aria-pressed={on}
+                            style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer",
+                              background:"transparent", border:"none", padding:"2px 0", width:"100%", fontFamily:T.sans }}>
+                            <span style={{ width:78, textAlign:"right", flexShrink:0, fontSize:11,
+                              fontWeight: on ? 700 : 500, color:h.color }}>{h.label}</span>
+                            <span style={{ flex:1, display:"flex", justifyContent:"center", minWidth:0 }}>
+                              <span style={{ width:(w*100)+"%", height:40, background:h.solid, borderRadius:6,
+                                display:"flex", alignItems:"center", justifyContent:"center",
+                                outline: on ? "2px solid "+h.color : "none", outlineOffset:2 }}>
+                                <span style={{ fontSize:13, fontWeight:600, color:"var(--bar-ink)", fontVariantNumeric:"tabular-nums" }}>
+                                  {fmtNb(v, 1)}
+                                </span>
+                              </span>
+                            </span>
+                            <span style={{ width:66, flexShrink:0, textAlign:"left" }}>
+                              <span style={{ display:"block", fontSize:12, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums" }}>
+                                {h.key === "Prevention" ? "avoided" : pct + "%"}
+                              </span>
+                              <span style={{ display:"block", fontSize:TYPE.data, color:T.muted }}>
+                                {n} stream{n!==1?"s":""}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-              ))}
+
+                {/* Diversion donut + tier breakdown */}
+                <div style={{ display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
+                  <div style={{ ...card, display:"flex", alignItems:"center", gap:16 }}>
+                    <WasteDonut value={diversionRate}/>
+                    <div style={{ minWidth:0 }}>
+                      <p style={{ ...lbl, marginBottom:2 }}>Diversion rate</p>
+                      <div style={{ fontSize:28, fontWeight:600, color:T.teal, fontVariantNumeric:"tabular-nums", lineHeight:1.1 }}>
+                        {fmtNb(diversionRate,1)}%
+                      </div>
+                      <p style={{ margin:"4px 0 0", fontSize:11, color:T.muted, lineHeight:1.45 }}>
+                        {fmtT(divertedT)} kept from disposal of {fmtT(totalT)} logged.
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ ...card, flex:1, minHeight:0 }}>
+                    <p style={{ ...lbl, marginBottom:8 }}>Tier breakdown</p>
+                    {WASTE_HIERARCHY.map(h => {
+                      const v = tierTotals[h.key];
+                      return (
+                        <div key={h.key} {...clickable(() => setFunnelTier(h.key), h.label + " — " + fmtT(v))}
+                          style={{ cursor:"pointer", marginBottom:8 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
+                            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, fontWeight:500,
+                              color: drillTier===h.key ? h.color : T.muted }}>
+                              <span style={{ width:7, height:7, borderRadius:4, background:h.solid }}/>{h.label}
+                            </span>
+                            <span style={{ fontSize:11, fontWeight:500, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtNb(v,1)} t</span>
+                          </div>
+                          <div style={{ height:6, background:T.rowBd, borderRadius:3, overflow:"hidden" }}>
+                            <div style={{ width: Math.max(2,(v/maxTier)*100)+"%", height:"100%", background:h.solid, borderRadius:3 }}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Drill-down strip for the selected tier */}
+              <div style={{ ...card, marginBottom:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 8px", borderRadius:4,
+                    background:dh.bg, color:dh.color, border:"1px solid "+dh.bd }}>{dh.label}</span>
+                  <span style={{ fontSize:12, fontWeight:500, color:T.text }}>{drillRows.length} stream{drillRows.length!==1?"s":""}</span>
+                  <span style={{ fontSize:11, color:T.muted }}>· {fmtT(tierTotals[drillTier])}</span>
+                  <button className="hit" onClick={() => { setTierFilter(drillTier); setView("register"); }}
+                    style={{ marginLeft:"auto", fontSize:11, color:T.teal, background:"transparent",
+                      border:"1px solid "+T.tealBd, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:T.sans }}>
+                    View in register ›
+                  </button>
+                </div>
+                {drillRows.length === 0
+                  ? <p style={{ margin:0, fontSize:11, color:T.muted }}>No streams in this tier.</p>
+                  : <div style={{ display:"flex", gap:10, overflowX:"auto", paddingBottom:2 }}>
+                      {drillRows.map(r => {
+                        const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
+                        return (
+                          <div key={r.id} {...clickable(() => setEditId(r.id), "Edit " + (r.product || "waste stream"))}
+                            style={{ flexShrink:0, width:212, border:"1px solid "+T.rowBd,
+                              borderLeft:"3px solid "+dh.solid, borderRadius:6, padding:"9px 11px",
+                              background:T.surface2, cursor:"pointer" }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:6 }}>
+                              <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal }}>{r.ref || "—"}</span>
+                              <span style={{ fontSize:12, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>
+                                {inTonnage(r) ? fmtT(toTonnes(r)) : fmtNb(rowTotal(r),2)+" "+r.unit}
+                              </span>
+                            </div>
+                            <div style={{ fontSize:12, fontWeight:500, color:T.text, margin:"3px 0 5px" }}>{r.product || "Unnamed stream"}</div>
+                            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                              <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
+                                background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>{r.cls}</span>
+                              {r.domain && <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
+                                background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd }}>{r.domain}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>}
+              </div>
+
+              {/* Reduction principles — content in this view, not a disclosure */}
+              <div style={card}>
+                <p style={lbl}>Reduction principles (philosophy)</p>
+                <div style={{ columns:2, columnGap:20 }}>
+                  {WASTE_PHILOSOPHY.map((item,i) => (
+                    <div key={i} style={{ display:"flex", gap:6, marginBottom:5, breakInside:"avoid" }}>
+                      <span style={{ color:T.green, fontSize:TYPE.data, flexShrink:0 }}>✓</span>
+                      <span style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        )
+          );
+        })()
       )}
 
-      {/* ── Stream cards (W9 · first reading) ── */}
+      {/* ── Stream cards ── */}
       {view === "streams" && (
         logged.length === 0 ? (
           <div style={{ ...card, textAlign:"center", padding:"3rem" }}>
@@ -2883,6 +3101,193 @@ function WasteTab({ project, onChange, notify }) {
             })}
           </div>
         )
+      )}
+
+      {/* ── Diversion board — drag to reclassify, with a keyboard path ── */}
+      {view === "board" && (
+        <div style={{ marginBottom:"1.5rem" }}>
+          <div style={{ ...card, display:"flex", alignItems:"center", gap:16, marginBottom:12, flexWrap:"wrap" }}>
+            <WasteDonut value={diversionRate} size={52} stroke={7} showLabel={false}/>
+            <div>
+              <p style={{ ...lbl, marginBottom:2 }}>Live diversion from disposal</p>
+              <div style={{ fontSize:22, fontWeight:600, color:T.teal, fontVariantNumeric:"tabular-nums", lineHeight:1.15 }}>
+                {fmtNb(diversionRate,1)}%
+              </div>
+            </div>
+            <span style={{ width:1, height:34, background:T.border }}/>
+            <div style={{ display:"flex", gap:22 }}>
+              <div>
+                <p style={{ ...lbl, marginBottom:2 }}>Total</p>
+                <div style={{ fontSize:15, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtT(totalT)}</div>
+              </div>
+              <div>
+                <p style={{ ...lbl, marginBottom:2 }}>To disposal</p>
+                <div style={{ fontSize:15, fontWeight:600, color:T.red, fontVariantNumeric:"tabular-nums" }}>{fmtT(disposeT)}</div>
+              </div>
+            </div>
+            <p style={{ margin:0, marginLeft:"auto", fontSize:11, color:T.muted, maxWidth:260, textAlign:"right", lineHeight:1.4 }}>
+              Drag a stream to a higher tier, or use the tier menu on any card, to model an improved route.
+            </p>
+          </div>
+          <div style={{ display:"flex", gap:10, alignItems:"flex-start", overflowX:"auto" }}>
+            {WASTE_HIERARCHY.map(h => {
+              const items = logged.filter(r => r.treatment === h.key);
+              const isOver = dragOver === h.key;
+              return (
+                <div key={h.key}
+                  onDragOver={e => { e.preventDefault(); if (dragOver !== h.key) setDragOver(h.key); }}
+                  onDragLeave={() => setDragOver(o => o === h.key ? null : o)}
+                  onDrop={() => { if (dragId != null) moveToTier(dragId, h.key); setDragId(null); setDragOver(null); }}
+                  style={{ flex:"1 1 0", minWidth:190, display:"flex", flexDirection:"column",
+                    background: isOver ? h.bg : T.surface2,
+                    border:"1px solid "+(isOver ? h.bd : T.border), borderRadius:8,
+                    transition:"background .12s, border-color .12s" }}>
+                  <div style={{ padding:"10px 12px", borderBottom:"1px solid "+h.bd, background:h.bg, borderRadius:"8px 8px 0 0" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ width:8, height:8, borderRadius:4, background:h.solid, flexShrink:0 }}/>
+                      <span style={{ fontSize:12, fontWeight:600, color:h.color }}>{h.label}</span>
+                      <span style={{ marginLeft:"auto", fontSize:TYPE.data, fontWeight:500, color:h.color,
+                        background:T.surface, border:"1px solid "+h.bd, borderRadius:10, padding:"1px 7px" }}>{items.length}</span>
+                    </div>
+                    <div style={{ fontSize:14, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums", marginTop:5 }}>
+                      {fmtNb(tierTotals[h.key],1)} <span style={{ fontSize:TYPE.data, fontWeight:400 }}>t</span>
+                    </div>
+                  </div>
+                  <div style={{ padding:"8px 8px 10px", display:"flex", flexDirection:"column", gap:7, minHeight:80 }}>
+                    {items.map(r => {
+                      const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
+                      return (
+                        <div key={r.id} draggable
+                          onDragStart={() => setDragId(r.id)}
+                          onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                          style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:6,
+                            padding:"8px 10px", cursor:"grab", opacity: dragId===r.id ? 0.4 : 1 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal }}>{r.ref || "—"}</span>
+                            <span style={{ fontSize:11, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>
+                              {inTonnage(r) ? fmtT(toTonnes(r)) : fmtNb(rowTotal(r),2)+" "+r.unit}
+                            </span>
+                          </div>
+                          <div style={{ fontSize:11, fontWeight:500, color:T.text, margin:"5px 0 6px", lineHeight:1.3 }}>
+                            {r.product || "Unnamed stream"}
+                          </div>
+                          <div style={{ display:"flex", gap:4, alignItems:"center", flexWrap:"wrap" }}>
+                            <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
+                              background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>{r.cls}</span>
+                            {r.domain && <span style={{ fontSize:TYPE.data, color:T.muted, marginLeft:"auto" }}>{r.domain}</span>}
+                          </div>
+                          {/* Keyboard equivalent for the drag — never drag-only */}
+                          <div style={{ marginTop:6 }}>
+                            <CellSelect value={r.treatment} opts={WASTE_HIERARCHY.map(x => x.key)}
+                              ariaLabel={"Hierarchy tier for " + (r.product || "stream")}
+                              onChange={v => moveToTier(r.id, v)}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {!items.length && (
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:60,
+                        border:"1px dashed "+h.bd, borderRadius:6, color:h.color, fontSize:TYPE.data,
+                        textAlign:"center", padding:8 }}>
+                        Drop here to set {h.label.toLowerCase()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Flow — tonnage-weighted Sankey, context → hierarchy fate ── */}
+      {view === "flow" && (
+        <div style={{ marginBottom:"1.5rem" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:12 }}>
+            {[
+              { l:"Diversion rate",      v:fmtNb(diversionRate,1)+"%", c:T.teal },
+              { l:"Recovery + recycling", v:fmtT(tierTotals["Recovery"]+tierTotals["Recycling"]), c:T.amber },
+              { l:"To disposal",         v:fmtT(disposeT), c:T.red },
+              { l:"Hazardous mass",      v:fmtT(hazT), c:T.purple },
+            ].map(k => (
+              <div key={k.l} style={card}>
+                <div style={{ fontSize:18, fontWeight:700, color:k.c, lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>{k.v}</div>
+                <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>{k.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ ...card, marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:2 }}>
+              <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Where the waste flows</span>
+              <span style={{ fontSize:TYPE.data, color:T.muted }}>project context → hierarchy fate · by mass</span>
+            </div>
+            {!sankey
+              ? <p style={{ margin:"10px 0 0", fontSize:12, color:T.muted }}>
+                  Set a project context and a hierarchy tier on at least one stream with a tonnage to see the flow.
+                </p>
+              : <>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontFamily:T.mono, fontSize:TYPE.data,
+                    color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase", padding:"6px 2px 0" }}>
+                    <span>Context</span><span>Hierarchy fate</span>
+                  </div>
+                  <svg viewBox={"0 0 "+sankey.W+" "+sankey.H} width="100%" style={{ display:"block" }} preserveAspectRatio="xMidYMid meet"
+                    role="img" aria-label={"Waste flow by mass: " + sankey.links.map(l => l.d+" to "+l.tier+" "+fmtT(l.v)).join("; ")}>
+                    {sankey.links.map(l => (
+                      <path key={l.key} d={l.path} fill={l.color} fillOpacity={0.42} stroke="none">
+                        <title>{l.d} → {l.tier}: {fmtT(l.v)}</title>
+                      </path>
+                    ))}
+                    {sankey.cols.map(d => {
+                      const n = sankey.lNodes[d];
+                      return (
+                        <g key={d}>
+                          <rect x={sankey.pad} y={n.y} width={sankey.nodeW} height={Math.max(2,n.h)} rx={2} fill={T.muted}/>
+                          <text x={sankey.pad+sankey.nodeW+6} y={n.y+n.h/2-4} dominantBaseline="central"
+                            style={{ fontSize:11, fontWeight:600, fill:T.text }}>{d}</text>
+                          <text x={sankey.pad+sankey.nodeW+6} y={n.y+n.h/2+8} dominantBaseline="central"
+                            style={{ fontSize:TYPE.data, fill:T.muted }}>{fmtT(sankey.domTotal[d])}</text>
+                        </g>
+                      );
+                    })}
+                    {sankey.tiersUsed.map(h => {
+                      const n = sankey.rNodes[h.key];
+                      return (
+                        <g key={h.key}>
+                          <rect x={sankey.W-sankey.pad-sankey.nodeW} y={n.y} width={sankey.nodeW} height={Math.max(2,n.h)} rx={2} fill={h.solid}/>
+                          <text x={sankey.W-sankey.pad-sankey.nodeW-6} y={n.y+n.h/2} textAnchor="end" dominantBaseline="central"
+                            style={{ fontSize:11, fontWeight:600, fill:h.color }}>{h.label}</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </>}
+          </div>
+          {/* Fate summary */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, marginBottom:12 }}>
+            {WASTE_HIERARCHY.map(h => (
+              <div key={h.key} style={{ ...card, borderLeft:"3px solid "+h.solid }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:TYPE.data, fontWeight:500, color:h.color }}>{h.label}</span>
+                  <span style={{ fontSize:14, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtNb(tierTotals[h.key],1)}</span>
+                </div>
+                <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:1 }}>
+                  {totalT ? Math.round(tierTotals[h.key]/totalT*100) : 0}% of logged · t
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* The mock pairs this with a 6-month trend. The register holds no dated
+              quantities, so that series would have to be invented — say so instead. */}
+          <div style={{ ...card, borderColor:T.amberBd, background:T.amberBg }}>
+            <p style={{ ...lbl, marginBottom:4 }}>Monthly throughput — not available</p>
+            <p style={{ margin:0, fontSize:11, color:T.muted, lineHeight:1.5 }}>
+              A diversion trend needs dated quantities. The register records a total per phase bucket,
+              not a dated log, so no monthly series can be derived from it — and inventing one would
+              put a number on screen the register does not hold. Add a dated quantity log to the
+              schema and this panel can be filled from real data.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* ── Full record drawer (W6) ── */}
@@ -3091,6 +3496,27 @@ function WasteTab({ project, onChange, notify }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Diversion donut for the hierarchy and board views.
+function WasteDonut({ value, size = 78, stroke = 9, showLabel = true }) {
+  const r = (size - stroke - 3) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  return (
+    <svg width={size} height={size} style={{ flexShrink:0 }} role="img"
+      aria-label={"Diversion rate " + pct + " percent"}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.rowBd} strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.teal} strokeWidth={stroke}
+        strokeDasharray={c} strokeDashoffset={c * (1 - pct/100)}
+        transform={"rotate(-90 " + (size/2) + " " + (size/2) + ")"}
+        style={{ strokeLinecap:"round", transition:"stroke-dashoffset .35s ease" }}/>
+      {showLabel && (
+        <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
+          style={{ fontSize:16, fontWeight:600, fill:T.teal }}>{Math.round(pct)}%</text>
+      )}
+    </svg>
   );
 }
 
