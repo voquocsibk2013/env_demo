@@ -3953,27 +3953,31 @@ This cannot be undone.`)) return;
       )}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
                     marginBottom:"1.25rem", flexWrap:"wrap", gap:8 }}>
-        <div role="tablist" aria-label="Project sections"
-          onKeyDown={e => {
-            const i = WORK_TABS.indexOf(tab);
-            if (i < 0) return;   // on a record tab — arrow nav starts once a work tab is focused
-            let n = null;
-            if (e.key==="ArrowRight") n = (i+1) % WORK_TABS.length;
-            else if (e.key==="ArrowLeft") n = (i-1+WORK_TABS.length) % WORK_TABS.length;
-            else if (e.key==="Home") n = 0;
-            else if (e.key==="End") n = WORK_TABS.length-1;
-            if (n!==null) { e.preventDefault(); setTab(WORK_TABS[n]); const el = document.getElementById("projtab-"+WORK_TABS[n]); if (el) el.focus(); }
-          }}
-          style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border, overflowX:"auto", scrollbarWidth:"thin", maxWidth:"100%" }}>
-          {WORK_TABS.map(t => (
-            <button key={t} id={"projtab-"+t} role="tab" aria-selected={tab===t}
-              tabIndex={(tab===t || (isRecordTab && t===WORK_TABS[0])) ? 0 : -1} onClick={()=>setTab(t)}
-              style={tabBtnStyle(tab===t)}>
-              {TAB_LABELS[t] || t.charAt(0).toUpperCase()+t.slice(1)}
-            </button>
-          ))}
-          {/* Record-keeping tabs behind a Project ▾ menu */}
-          <div data-projmenu style={{ position:"relative", display:"flex" }}>
+        <div style={{ display:"flex", alignItems:"center", minWidth:0, flex:1, borderBottom:"2px solid "+T.border }}>
+          <div role="tablist" aria-label="Project sections"
+            onKeyDown={e => {
+              const i = WORK_TABS.indexOf(tab);
+              if (i < 0) return;   // on a record tab — arrow nav starts once a work tab is focused
+              let n = null;
+              if (e.key==="ArrowRight") n = (i+1) % WORK_TABS.length;
+              else if (e.key==="ArrowLeft") n = (i-1+WORK_TABS.length) % WORK_TABS.length;
+              else if (e.key==="Home") n = 0;
+              else if (e.key==="End") n = WORK_TABS.length-1;
+              if (n!==null) { e.preventDefault(); setTab(WORK_TABS[n]); const el = document.getElementById("projtab-"+WORK_TABS[n]); if (el) el.focus(); }
+            }}
+            style={{ display:"flex", gap:0, overflowX:"auto", scrollbarWidth:"thin", minWidth:0 }}>
+            {WORK_TABS.map(t => (
+              <button key={t} id={"projtab-"+t} role="tab" aria-selected={tab===t}
+                tabIndex={(tab===t || (isRecordTab && t===WORK_TABS[0])) ? 0 : -1} onClick={()=>setTab(t)}
+                style={tabBtnStyle(tab===t)}>
+                {TAB_LABELS[t] || t.charAt(0).toUpperCase()+t.slice(1)}
+              </button>
+            ))}
+          </div>
+          {/* Record-keeping tabs behind a Project ▾ menu — pinned outside the scrollable
+              tablist (flexShrink:0) so it can never be scrolled or clipped out of reach
+              regardless of viewport width or zoom level; only the work tabs scroll. */}
+          <div data-projmenu style={{ position:"relative", display:"flex", flexShrink:0 }}>
             <button onClick={()=>setProjMenuOpen(o=>!o)} aria-haspopup="menu" aria-expanded={projMenuOpen}
               style={tabBtnStyle(isRecordTab)}>
               {isRecordTab ? "Project · "+TAB_LABELS[tab] : "Project"} ▾
