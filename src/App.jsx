@@ -2406,54 +2406,18 @@ function CatalogueCombo({ value, onText, onPick, placeholder, compact, idBase="w
   );
 }
 
-// Grid cells: borderless until focus, then a 1px teal border — no glow (W5).
-function CellInput({ value, onChange, num, placeholder, ariaLabel, onKeyDown }) {
-  const [f, setF] = useState(false);
-  return (
-    <input value={value==null?"":value} placeholder={placeholder} aria-label={ariaLabel}
-      type={num ? "number" : "text"} min={num ? "0" : undefined}
-      onFocus={()=>setF(true)} onBlur={()=>setF(false)} onKeyDown={onKeyDown}
-      onChange={e => onChange(e.target.value)}
-      style={{ width:"100%", boxSizing:"border-box", fontFamily:T.sans, fontSize:11,
-        fontWeight: num ? 500 : 400, color:T.text,
-        background: f ? T.surface : "transparent",
-        border:"1px solid "+(f ? T.teal : "transparent"), borderRadius:4, padding:"6px 7px",
-        textAlign: num ? "right" : "left", fontVariantNumeric:"tabular-nums",
-        transition:"border-color 0.15s" }}/>
-  );
-}
-function CellSelect({ value, opts, onChange, ariaLabel, short }) {
-  const [f, setF] = useState(false);
-  const label = v => (short && v === "Non-hazardous") ? "Non-haz" : v;
-  return (
-    <select value={value||""} aria-label={ariaLabel}
-      onFocus={()=>setF(true)} onBlur={()=>setF(false)}
-      onChange={e => onChange(e.target.value)}
-      style={{ width:"100%", boxSizing:"border-box", fontFamily:T.sans, fontSize:11, color:T.text,
-        background: f ? T.surface : "transparent",
-        border:"1px solid "+(f ? T.teal : "transparent"), borderRadius:4, padding:"5px 5px",
-        cursor:"pointer", transition:"border-color 0.15s" }}>
-      {opts.map(o => <option key={o} value={o}>{label(o)}</option>)}
-    </select>
-  );
-}
-
 // ── WasteTab component (needs useState, must be a real component not an IIFE) ──
+// Directions 1 + 2 merged, per the chosen board: the hierarchy funnel sits
+// directly above the register on ONE screen (no view switcher, no view state
+// to persist — the tab has one shape). The funnel bands and the tier-breakdown
+// rows both drive the SAME tier filter; class chips compose with it. Reference:
+// reference/waste-d12.jsx (WasteHierarchyRegister).
 function WasteTab({ project, onChange, notify }) {
   const [editId, setEditId]         = useState(null);
-  const [fracFilter, setFracFilter] = useState("All");
-  const [tierFilter, setTierFilter] = useState(null);   // register filter, set from the funnel (W8)
-  const [funnelTier, setFunnelTier] = useState(null);   // tier selected for the funnel's drill-down strip
-  const [drafts, setDrafts]         = useState({});     // per-fraction draft row (W5)
-  const [dragId, setDragId]         = useState(null);   // board: stream being dragged
-  const [dragOver, setDragOver]     = useState(null);   // board: tier column under the pointer
+  const [tierFilter, setTierFilter] = useState(null);   // funnel band ∪ breakdown row — null = All
+  const [clsFilter, setClsFilter]   = useState("All");  // class chips — composes with tierFilter
   const [armedDel, armDel]          = useArmedConfirm();
   const dialogRef = React.useRef(null);
-
-  // The chosen view is a workshop decision, not view state — persist it on the
-  // project, same reasoning as screening skips (W7).
-  const view    = project.wasteView || "register";
-  const setView = (v) => onChange({ ...project, wasteView: v });
 
   // Modal behaviour for the stream-editor drawer: focus in on open, trap Tab,
   // Escape to close, restore focus to the trigger on close.
@@ -2532,7 +2496,6 @@ function WasteTab({ project, onChange, notify }) {
   const diversionRate = totalT ? Math.round((divertedT / totalT) * 1000) / 10 : 0;
   const hazRows  = logged.filter(r => r.cls === "Hazardous");
   const hazT     = physical.filter(r => r.cls === "Hazardous").reduce((a,r) => a + toTonnes(r), 0);
-  const avoidedT = logged.filter(isAvoidedRow).reduce((a,r) => a + toTonnes(r), 0);
   const excluded = logged.filter(r => !inTonnage(r) && rowTotal(r) > 0);
   const tierTotals = {}, tierCounts = {};
   WASTE_HIERARCHY.forEach(h => {
@@ -2542,117 +2505,53 @@ function WasteTab({ project, onChange, notify }) {
   });
   const maxTier = Math.max(1, ...WASTE_HIERARCHY.map(h => tierTotals[h.key]));
 
-  const byFraction = fracFilter === "All" ? rows : rows.filter(r => (r.fraction||"Other") === fracFilter);
-  const visible    = tierFilter ? byFraction.filter(r => r.treatment === tierFilter) : byFraction;
-  const fractionOrder = [...WASTE_FRACTIONS.map(f => f.fraction), "Other"];
-  const groups = {};
-  visible.forEach(r => { const k = r.fraction || "Other"; (groups[k] = groups[k]||[]).push(r); });
-  const orderedGroups = fractionOrder.filter(f => groups[f]).map(f => [f, groups[f]]);
+  // ── Filter — funnel band ∪ breakdown row (tier) composes with class chips (W8) ──
+  const pickTier = (k) => setTierFilter(prev => prev === k ? null : k);
+  const visible = logged.filter(r =>
+    (tierFilter === null || r.treatment === tierFilter) &&
+    (clsFilter === "All" || r.cls === clsFilter));
+  const visibleTonnes = visible.reduce((a,r) => a + toTonnes(r), 0);
 
   const card = { background:T.surface, border:"1px solid "+T.border, borderRadius:9, padding:"12px 14px" };
   const iw = { padding:"7px 10px", fontSize:13, borderRadius:6, border:"1px solid "+T.border,
     background:T.bg, color:T.text, fontFamily:T.sans, width:"100%", boxSizing:"border-box" };
   const lbl = { display:"block", fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
     textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 };
-  const th = { padding:"8px 10px", textAlign:"left", color:T.muted, fontFamily:T.mono,
-    fontSize:TYPE.data, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" };
-  const td = { padding:"1px 3px", borderBottom:"1px solid "+T.rowBd, verticalAlign:"middle" };
+  const th = { padding:"9px 11px", textAlign:"left", color:T.muted, fontFamily:T.mono,
+    fontSize:TYPE.data, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap",
+    background:T.surface2, borderBottom:"1px solid "+T.border, position:"sticky", top:0, zIndex:1 };
+  const td = { padding:"8px 11px", borderBottom:"1px solid "+T.rowBd, verticalAlign:"middle", fontSize:12 };
+  const chipBtn = (on) => ({ fontSize:11, padding:"4px 11px", borderRadius:14, cursor:"pointer", fontFamily:T.sans,
+    border:"1px solid "+(on?T.teal:T.border), background:on?T.tealBg:"transparent",
+    color:on?T.teal:T.muted, whiteSpace:"nowrap" });
 
   const editing = editId ? rows.find(r => r.id === editId) : null;
 
-  // ── Draft row (W5) ────────────────────────────────────────────────────────
-  const emptyDraft = () => ({ name:"", ewc:"", cls:"Non-hazardous", tier:"", phase:"", domain:"", qty:"", route:"" });
-  const draftFor = (f) => drafts[f] || emptyDraft();
-  const setDraft = (f, patch) => setDrafts(p => ({ ...p, [f]: { ...draftFor(f), ...patch } }));
-  const commitDraft = (fraction) => {
-    const d = draftFor(fraction);
-    if (!d.name || !d.name.trim()) return;
-    const id = "custom_" + Date.now();
-    const bucket = bucketForPhase(d.phase);
-    const row = migrateWasteRow({
-      id, fraction: fraction === "Other" ? "" : fraction, product: d.name.trim(), isStd:false,
-      ref: nextWasteRef(rows), ewc: d.ewc || "", cls: d.cls || "Non-hazardous",
-      phase: d.phase || "", domain: d.domain || "", treatment: d.tier || "",
-      route: d.route || "", [bucket]: d.qty || "",
-    });
-    save([...rows, row]);
-    setDrafts(p => ({ ...p, [fraction]: emptyDraft() }));
-    if (notify) notify(row.ref + " added");
+  const statusTone = {
+    Active:     { c:T.green, bg:T.greenBg, bd:T.greenBd },
+    Monitoring: { c:T.amber, bg:T.amberBg, bd:T.amberBd },
+    Closed:     { c:T.slate, bg:T.slateBg, bd:T.slateBd },
   };
-  const draftKey = (fraction) => (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commitDraft(fraction); }
-  };
-
-  const VIEWS = [
-    { id:"register",  label:"Register" },
-    { id:"hierarchy", label:"Hierarchy" },
-    { id:"streams",   label:"Streams" },
-    { id:"board",     label:"Board" },
-    { id:"flow",      label:"Flow" },
-  ];
-
-  // Board (W9) — drag to reclassify. Drag is an accelerator only; the per-card
-  // tier select is the keyboard path, so no function is drag-only (Band 4 C2).
-  const moveToTier = (id, tierKey) => updateRow(id, { treatment: tierKey });
-
-  // Flow (W9) — two-stage tonnage-weighted Sankey, project context → hierarchy
-  // tier, computed from the register. No fabricated series.
-  const sankey = (() => {
-    const W = 560, H = 300, pad = 18, nodeW = 13, gap = 13;
-    const domainsUsed = WASTE_DOMAINS.filter(d => physical.some(r => r.domain === d));
-    const unset = physical.some(r => !r.domain);
-    const cols = unset ? [...domainsUsed, "Unassigned"] : domainsUsed;
-    const inDom = (r, d) => d === "Unassigned" ? !r.domain : r.domain === d;
-    const tiersUsed = WASTE_HIERARCHY.filter(h => physical.some(r => r.treatment === h.key));
-    const all = physical.reduce((a,r) => a + toTonnes(r), 0);
-    if (!all || !cols.length || !tiersUsed.length) return null;
-    const innerH = H - 2*pad;
-    const scale = Math.min(
-      (innerH - Math.max(0, cols.length-1)*gap) / all,
-      (innerH - Math.max(0, tiersUsed.length-1)*gap) / all);
-    const domTotal = {}; cols.forEach(d => { domTotal[d] = physical.filter(r => inDom(r,d)).reduce((a,r)=>a+toTonnes(r),0); });
-    const tierTot  = {}; tiersUsed.forEach(h => { tierTot[h.key] = physical.filter(r => r.treatment===h.key).reduce((a,r)=>a+toTonnes(r),0); });
-    const lH = cols.reduce((a,d)=>a+domTotal[d]*scale,0) + Math.max(0,cols.length-1)*gap;
-    const rH = tiersUsed.reduce((a,h)=>a+tierTot[h.key]*scale,0) + Math.max(0,tiersUsed.length-1)*gap;
-    const lNodes = {}; let yl = pad + (innerH - lH)/2;
-    cols.forEach(d => { const h = domTotal[d]*scale; lNodes[d] = { y:yl, h }; yl += h + gap; });
-    const rNodes = {}; let yr = pad + (innerH - rH)/2;
-    tiersUsed.forEach(h => { const hh = tierTot[h.key]*scale; rNodes[h.key] = { y:yr, h:hh }; yr += hh + gap; });
-    const lOff = {}; cols.forEach(d => { lOff[d] = lNodes[d].y; });
-    const rOff = {}; tiersUsed.forEach(h => { rOff[h.key] = rNodes[h.key].y; });
-    const links = [];
-    cols.forEach(d => tiersUsed.forEach(h => {
-      const v = physical.filter(r => inDom(r,d) && r.treatment===h.key).reduce((a,r)=>a+toTonnes(r),0);
-      if (v <= 0) return;
-      const vh = v*scale, x0 = pad+nodeW, x1 = W-pad-nodeW, cx = (x0+x1)/2;
-      const t0 = lOff[d], t1 = rOff[h.key];
-      lOff[d] += vh; rOff[h.key] += vh;
-      links.push({ key:d+"|"+h.key, d, tier:h.label, v, color:h.solid,
-        path:"M"+x0+","+t0+" C"+cx+","+t0+" "+cx+","+t1+" "+x1+","+t1+
-             " L"+x1+","+(t1+vh)+" C"+cx+","+(t1+vh)+" "+cx+","+(t0+vh)+" "+x0+","+(t0+vh)+" Z" });
-    }));
-    return { W, H, pad, nodeW, cols, tiersUsed, lNodes, rNodes, links, domTotal, tierTot };
-  })();
 
   return (
-    <div>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", gap:8, flexWrap:"wrap" }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:12, height:"100%" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap", flexShrink:0 }}>
         <div>
           <h2 style={{ margin:"0 0 2px", fontSize:15, fontWeight:700, color:T.text }}>Waste Stream Register</h2>
           <p style={{ margin:0, fontSize:12, color:T.muted }}>
-            Log each waste stream, classify and quantify it, then assign a treatment route and the reduction methods applied.
+            The funnel is the reading; the register is the record. Select a tier to filter the table below.
           </p>
         </div>
         <Btn variant="primary" onClick={addStream}>+ Add waste stream</Btn>
       </div>
 
-      {/* KPI row — tonnage-weighted (W3). Applies to every view. */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:"0.75rem" }}>
+      {/* KPI strip — 5 cards, tonnage-weighted (W3) */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, flexShrink:0 }}>
         <div style={card}>
           <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
             {fmtNb(totalT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
           </div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Total tonnage</div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Total logged</div>
           {excluded.length > 0 && (
             <div style={{ fontSize:TYPE.data, color:T.amber, marginTop:3 }}
               title={excluded.map(r => (r.product||r.fraction||"stream") + " (" + r.unit + ")").join(", ")}>
@@ -2660,635 +2559,211 @@ function WasteTab({ project, onChange, notify }) {
             </div>
           )}
         </div>
-        <div style={{ ...card, background: diversionRate>=50?T.greenBg:T.surface, borderColor: diversionRate>=50?T.greenBd:T.border }}>
-          <div style={{ fontSize:22, fontWeight:700, color: diversionRate>=50?T.green:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
-            {fmtNb(diversionRate, 1)}<span style={{ fontSize:13 }}>%</span>
+        <div style={{ ...card, background:T.tealBg, borderColor:T.tealBd }}>
+          <div style={{ fontSize:22, fontWeight:700, color:T.teal, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+            {fmtNb(divertedT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.teal }}> t</span>
           </div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diversion rate</div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3 }}>{fmtT(divertedT)} of {fmtT(totalT)}</div>
+          <div style={{ fontSize:TYPE.data, color:T.teal, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diverted from landfill</div>
+        </div>
+        <div style={{ ...card, background:T.amberBg, borderColor:T.amberBd }}>
+          <div style={{ fontSize:22, fontWeight:700, color:T.amber, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+            {fmtNb(disposeT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.amber }}> t</span>
+          </div>
+          <div style={{ fontSize:TYPE.data, color:T.amber, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>To disposal</div>
         </div>
         <div style={{ ...card, background: hazRows.length?T.redBg:T.surface, borderColor: hazRows.length?T.redBd:T.border }}>
           <div style={{ fontSize:22, fontWeight:700, color: hazRows.length?T.red:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
             {fmtNb(hazT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
           </div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Hazardous</div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3 }}>{hazRows.length} stream{hazRows.length!==1?"s":""}</div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Hazardous mass</div>
         </div>
         <div style={card}>
-          <div style={{ fontSize:22, fontWeight:700, color: avoidedT?T.teal:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
-            {fmtNb(avoidedT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
-          </div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Avoided at source</div>
-          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3 }}>Prevention — excluded from tonnage</div>
+          <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{logged.length}</div>
+          <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Waste streams</div>
         </div>
       </div>
 
-      {/* Fraction filter — applies to every view */}
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:"0.75rem", alignItems:"center" }}>
-        {["All", ...fractionOrder.filter(f => rows.some(r => (r.fraction||"Other")===f))].map(f => (
-          <button key={f} onClick={() => setFracFilter(f)}
-            style={{ fontSize:11, padding:"4px 11px", borderRadius:14, cursor:"pointer", fontFamily:T.sans,
-              border:"1px solid "+(fracFilter===f?T.teal:T.border),
-              background: fracFilter===f?T.tealBg:"transparent",
-              color: fracFilter===f?T.teal:T.muted, whiteSpace:"nowrap" }}>{f}</button>
-        ))}
-        {tierFilter && (
-          <button className="hit" onClick={() => setTierFilter(null)}
-            aria-label={"Clear " + tierFilter + " filter"}
-            style={{ fontSize:11, padding:"4px 11px", borderRadius:14, cursor:"pointer", fontFamily:T.sans,
-              border:"1px solid "+(hier(tierFilter)||{}).bd, background:(hier(tierFilter)||{}).bg,
-              color:(hier(tierFilter)||{}).color, whiteSpace:"nowrap", marginLeft:"auto" }}>
-            {(hier(tierFilter)||{}).label} ×
-          </button>
-        )}
+      {/* Funnel + diversion — fixed height; never scrolls (W7) */}
+      <div style={{ display:"grid", gridTemplateColumns:"1.62fr 1fr", gap:12, height:352, flexShrink:0, minHeight:0 }}>
+        <div style={{ ...card, display:"flex", flexDirection:"column" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
+            <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste-management hierarchy</span>
+            <span style={{ fontSize:TYPE.data, color:T.muted }}>by mass · select a tier to filter the register</span>
+          </div>
+          <div style={{ display:"flex", gap:12, flex:1, minHeight:0 }}>
+            <div style={{ width:14, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"6px 0" }}>
+              <span style={{ fontSize:TYPE.data, fontWeight:500, color:T.teal, letterSpacing:"0.08em", writingMode:"vertical-rl", transform:"rotate(180deg)" }}>MORE PREFERRED</span>
+              <div style={{ flex:1, width:2, background:"linear-gradient(var(--teal-bd), var(--red-bd))", margin:"6px 0", borderRadius:1 }}/>
+              <span style={{ fontSize:TYPE.data, fontWeight:500, color:T.red, letterSpacing:"0.08em", writingMode:"vertical-rl", transform:"rotate(180deg)" }}>LESS PREFERRED</span>
+            </div>
+            <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", gap:8 }}>
+              {WASTE_HIERARCHY.map(h => {
+                const v = tierTotals[h.key];
+                const w = Math.max(0.13, v / maxTier);
+                const on = tierFilter === h.key;
+                const dim = tierFilter !== null && !on;
+                const pct = totalT ? Math.round((v / totalT) * 100) : 0;
+                const n = tierCounts[h.key];
+                return (
+                  <div key={h.key} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ width:70, textAlign:"right", flexShrink:0 }}>
+                      <span style={{ fontSize:11, fontWeight: on?700:500, color:h.color }}>{h.label}</span>
+                    </div>
+                    <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
+                      <button className="hit" onClick={() => pickTier(h.key)}
+                        aria-label={h.label + " — " + fmtT(v) + ", " + n + " stream" + (n!==1?"s":"")}
+                        aria-pressed={on}
+                        style={{ width:(w*100)+"%", height:40, background:h.solid, border:"none", borderRadius:7,
+                          display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0,
+                          opacity: dim?0.42:1,
+                          boxShadow: on ? "0 0 0 2px "+T.surface+", 0 0 0 4px "+h.solid : "none",
+                          transition:"box-shadow .15s, opacity .15s" }}>
+                        <span style={{ fontSize:13, fontWeight:600, color:"var(--bar-ink)", fontVariantNumeric:"tabular-nums" }}>{fmtNb(v,1)}</span>
+                      </button>
+                    </div>
+                    <div style={{ width:58, flexShrink:0 }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums" }}>
+                        {h.key === "Prevention" ? "avoided" : pct + "%"}
+                      </div>
+                      <div style={{ fontSize:TYPE.data, color:T.muted }}>{n} stream{n!==1?"s":""}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12, minHeight:0 }}>
+          <div style={{ ...card, display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
+            <WasteDonut value={diversionRate} size={78}/>
+            <div>
+              <p style={{ ...lbl, marginBottom:2 }}>Diversion rate</p>
+              <div style={{ fontSize:27, fontWeight:700, color:T.teal, fontVariantNumeric:"tabular-nums", lineHeight:1.1, marginTop:2 }}>{fmtNb(diversionRate,1)}%</div>
+              <div style={{ fontSize:11, color:T.muted, marginTop:4, maxWidth:160, lineHeight:1.45 }}>{fmtT(divertedT)} kept from landfill of {fmtT(totalT)} logged.</div>
+            </div>
+          </div>
+          <div style={{ ...card, flex:1, minHeight:0, display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
+            <p style={{ ...lbl, marginBottom:2 }}>Tier breakdown</p>
+            {WASTE_HIERARCHY.map(h => {
+              const v = tierTotals[h.key];
+              const on = tierFilter === h.key;
+              return (
+                <button key={h.key} className="hit" onClick={() => pickTier(h.key)} aria-pressed={on}
+                  style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", padding:"3px 0", cursor:"pointer" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, fontWeight: on?600:500, color: on?h.color:T.muted }}>
+                      <span style={{ width:7, height:7, borderRadius:4, background:h.solid }}/>{h.label}
+                    </span>
+                    <span style={{ fontSize:11, fontWeight:500, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtT(v)}</span>
+                  </div>
+                  <div style={{ height:6, background:T.rowBd, borderRadius:3, overflow:"hidden" }}>
+                    <div style={{ width:Math.max(2,(v/maxTier)*100)+"%", height:"100%", background:h.solid, borderRadius:3, opacity: tierFilter!==null && !on ? 0.42 : 1 }}/>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* View switcher — the shared sub-tab grammar (W7) */}
-      <SubTabs style={{ marginBottom:"1rem" }} tabs={VIEWS} active={view} onChange={setView}/>
+      {/* Register — owns the scroll; the funnel above never moves (W7 · W8) */}
+      <div style={{ ...card, flex:1, minHeight:0, display:"flex", flexDirection:"column", overflow:"hidden", padding:0 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px",
+          borderBottom:"1px solid "+T.border, flexShrink:0, gap:12, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+            <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste register</span>
+            {tierFilter && (() => {
+              const h = hier(tierFilter);
+              return (
+                <span style={{ display:"inline-flex", alignItems:"center", gap:7, fontSize:11, fontWeight:500,
+                  padding:"3px 5px 3px 9px", borderRadius:20, background:h.bg, border:"1px solid "+h.bd, color:h.color }}>
+                  <span style={{ width:6, height:6, borderRadius:3, background:h.solid }}/>{h.label}
+                  <button className="hit" onClick={() => setTierFilter(null)} aria-label="Clear tier filter"
+                    style={{ background:"transparent", border:"none", cursor:"pointer", color:h.color, fontSize:12, lineHeight:1, padding:"0 3px" }}>×</button>
+                </span>
+              );
+            })()}
+            <div style={{ width:1, height:18, background:T.border }}/>
+            <div style={{ display:"flex", gap:6 }}>
+              {["All", ...WASTE_CLASSES].map(f => (
+                <button key={f} className="hit" onClick={() => setClsFilter(f)} style={chipBtn(clsFilter===f)}>{f}</button>
+              ))}
+            </div>
+          </div>
+          <span style={{ fontSize:11, color:T.muted }}>{visible.length} of {logged.length} streams · {fmtT(visibleTonnes)}</span>
+        </div>
 
-      {/* ── Register (the only view that writes freely) ── */}
-      {view === "register" && (
-        <div style={{ borderRadius:9, overflow:"auto", border:"1px solid "+T.border, marginBottom:"1.5rem" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+        <div style={{ flex:1, minHeight:0, overflow:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
-              <tr style={{ background:T.surface2, borderBottom:"1px solid "+T.border }}>
-                <th style={{ ...th, width:64 }}>Ref</th>
-                <th style={{ ...th, minWidth:190 }}>Material / waste stream</th>
-                <th style={{ ...th, width:86 }}>EWC</th>
-                <th style={{ ...th, width:112 }}>Class</th>
-                <th style={{ ...th, width:126 }}>Hierarchy</th>
-                <th style={{ ...th, width:150 }}>Phase</th>
-                <th style={{ ...th, width:104 }}>Context</th>
-                <th style={{ ...th, width:104, textAlign:"right" }}>Est. qty</th>
-                <th style={{ ...th, minWidth:150 }}>Disposal route</th>
-                <th style={{ ...th, minWidth:130 }}>Carrier</th>
-                <th style={{ ...th, width:112 }}>Consignment</th>
-                <th style={{ ...th, width:110 }}>Status</th>
-                <th style={{ ...th, width:76 }}>Methods</th>
-                <th style={{ ...th, width:92 }}/>
+              <tr>
+                {["Ref","Waste stream","EWC","Class","Hierarchy","Phase","Context","Qty","Disposal route","Status",""].map((h,i) => (
+                  <th key={h||"actions"} style={{ ...th, textAlign: i===7?"right":"left" }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {orderedGroups.map(([fraction, frows]) => (
-                <React.Fragment key={fraction}>
-                  <tr>
-                    <td colSpan={14} style={{ padding:"6px 10px", background:T.surface2,
-                      fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, color:T.muted,
-                      textTransform:"uppercase", letterSpacing:"0.06em",
-                      borderTop:"1px solid "+T.border, borderBottom:"1px solid "+T.border }}>
-                      {fraction} <span style={{ color:T.faint, fontWeight:400 }}>· {frows.length}</span>
+              {visible.map(r => {
+                const h = hier(r.treatment);
+                const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
+                const st = statusTone[r.status] || statusTone.Active;
+                const tot = rowTotal(r);
+                return (
+                  <tr key={r.id} onClick={() => setEditId(r.id)}
+                    style={{ cursor:"pointer", boxShadow:"inset 3px 0 0 "+tone.bd }}
+                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                    <td style={td}><span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal, letterSpacing:"0.02em" }}>{r.ref || "—"}</span></td>
+                    <td style={{ ...td, fontWeight:500, color:T.text }}>
+                      {r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}
+                    </td>
+                    <td style={{ ...td, fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap" }}>{r.ewc || "—"}</td>
+                    <td style={td}>
+                      {r.cls
+                        ? <span style={{ fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>
+                            {r.cls==="Non-hazardous" ? "NON-HAZ" : r.cls}
+                          </span>
+                        : <span style={{ color:T.faint }}>—</span>}
+                    </td>
+                    <td style={td}>
+                      {h
+                        ? <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:h.bg, color:h.color, border:"1px solid "+h.bd, whiteSpace:"nowrap" }}>{h.label}</span>
+                        : <span style={{ color:T.faint }}>—</span>}
+                    </td>
+                    <td style={{ ...td, color:T.muted, whiteSpace:"nowrap" }}>{r.phase || "—"}</td>
+                    <td style={{ ...td, color:T.muted }}>{r.domain || "—"}</td>
+                    <td style={{ ...td, textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:500, whiteSpace:"nowrap", color:T.text }}>
+                      {tot ? fmtNb(tot,2)+" "+r.unit : <span style={{ color:T.faint, fontWeight:400 }}>—</span>}
+                    </td>
+                    <td style={{ ...td, color:T.muted }}>{r.route || "—"}</td>
+                    <td style={td}>
+                      <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:st.bg, color:st.c, border:"1px solid "+st.bd, whiteSpace:"nowrap" }}>
+                        {(r.status||"Active").toUpperCase()}
+                      </span>
+                    </td>
+                    <td style={{ ...td, textAlign:"right", whiteSpace:"nowrap" }}>
+                      {/* The row stays a plain table row (role=row) so its cells stay
+                          screen-reader visible; this button is the keyboard path (Band 4 C2 —
+                          the same fix already applied to this exact table once before). */}
+                      <button className="hit" onClick={e => { e.stopPropagation(); setEditId(r.id); }}
+                        aria-label={"Open " + (r.product || r.ref || "waste stream")}
+                        style={{ fontSize:11, color:T.teal, background:"transparent", border:"none",
+                          padding:"4px 6px", cursor:"pointer", fontFamily:T.sans }}>›</button>
                     </td>
                   </tr>
-                  {frows.map(r => {
-                    const rlogged = isLogged(r);
-                    const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
-                    const bucket = bucketForPhase(r.phase);
-                    const bucketVal = r[bucket] || "";
-                    const otherBuckets = rowTotal(r) - (parseFloat(bucketVal) || 0);
-                    return (
-                      <tr key={r.id} style={{ opacity: rlogged?1:0.62, boxShadow:"inset 3px 0 0 "+tone.bd }}>
-                        <td style={{ ...td, padding:"7px 10px" }}>
-                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal, whiteSpace:"nowrap" }}>
-                            {r.ref || "—"}
-                          </span>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={r.product} placeholder="Stream name…"
-                            ariaLabel="Waste stream name"
-                            onChange={v => updateRow(r.id, { product:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={r.ewc} placeholder="EWC" ariaLabel="EWC code"
-                            onChange={v => updateRow(r.id, { ewc:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect short value={r.cls} opts={WASTE_CLASSES} ariaLabel="Hazard classification"
-                            onChange={v => updateRow(r.id, { cls:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={r.treatment} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
-                            ariaLabel="Hierarchy tier"
-                            onChange={v => updateRow(r.id, { treatment:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={r.phase} opts={["", ...PHASES]} ariaLabel="EPCIC phase"
-                            onChange={v => updateRow(r.id, { phase:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={r.domain} opts={["", ...WASTE_DOMAINS]} ariaLabel="Project context"
-                            onChange={v => updateRow(r.id, { domain:v })}/>
-                        </td>
-                        <td style={{ ...td, whiteSpace:"nowrap" }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:3 }}
-                            title={otherBuckets > 0
-                              ? "Editing the " + bucket + " bucket; " + fmtNb(otherBuckets,2) + " " + r.unit + " recorded in other phases (row total " + fmtNb(rowTotal(r),2) + " " + r.unit + ")"
-                              : undefined}>
-                            <CellInput num value={bucketVal} placeholder="0"
-                              ariaLabel={"Quantity (" + bucket + ")"}
-                              onChange={v => updateRow(r.id, { [bucket]: v })}/>
-                            <span style={{ fontSize:TYPE.data, color:T.muted }}>{r.unit}</span>
-                            {otherBuckets > 0 && <span style={{ fontSize:TYPE.data, color:T.amber }}>+</span>}
-                          </div>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={r.route} placeholder="route…" ariaLabel="Disposal route"
-                            onChange={v => updateRow(r.id, { route:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={r.carrier} placeholder="carrier…" ariaLabel="Registered carrier"
-                            onChange={v => updateRow(r.id, { carrier:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={r.consign} placeholder="CN-…" ariaLabel="Consignment note"
-                            onChange={v => updateRow(r.id, { consign:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={r.status} opts={WASTE_STATUSES} ariaLabel="Status"
-                            onChange={v => updateRow(r.id, { status:v })}/>
-                        </td>
-                        <td style={{ ...td, padding:"7px 10px" }}>
-                          {r.methods && r.methods.length
-                            ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>{r.methods.length}</span>
-                            : <span style={{ color:T.faint }}>—</span>}
-                        </td>
-                        <td style={{ ...td, padding:"4px 8px", textAlign:"right", whiteSpace:"nowrap" }}>
-                          <button className="hit" onClick={() => setEditId(r.id)}
-                            aria-label={"Edit " + (r.product || r.fraction || "waste stream")}
-                            style={{ fontSize:11, color:T.teal, background:"transparent", border:"none",
-                              padding:"4px 6px", cursor:"pointer", fontFamily:T.sans }}>Edit ›</button>
-                          {!r.isStd && (
-                            <button className="hit"
-                              onClick={() => { if (armedDel === r.id) { armDel(null); delStream(r.id); } else armDel(r.id); }}
-                              aria-label={"Delete " + (r.product || "waste stream")}
-                              style={{ fontSize: armedDel===r.id ? 10 : 13, fontWeight: armedDel===r.id ? 600 : 400,
-                                color:T.red, background:"transparent", border:"none", padding:"4px 6px",
-                                cursor:"pointer", fontFamily:T.sans, whiteSpace:"nowrap" }}>
-                              {armedDel===r.id ? "Sure?" : "×"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {/* Persistent draft row — Enter commits and clears for the next entry */}
-                  {(() => {
-                    const d = draftFor(fraction);
-                    return (
-                      <tr style={{ background:T.surface2, boxShadow:"inset 3px 0 0 "+T.tealBd }}>
-                        <td style={{ ...td, padding:"7px 10px" }}>
-                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.faint }}>new</span>
-                        </td>
-                        <td style={td}>
-                          <CatalogueCombo compact idBase={"wcat-"+fraction.replace(/\W+/g,"")}
-                            value={d.name} placeholder="Search waste stream…"
-                            onText={v => setDraft(fraction, { name:v })}
-                            onPick={e => setDraft(fraction, { name:e.name, ewc:e.ewc, cls:e.cls, tier:e.tier })}/>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={d.ewc} placeholder="EWC" ariaLabel="New stream EWC code"
-                            onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { ewc:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect short value={d.cls} opts={WASTE_CLASSES} ariaLabel="New stream class"
-                            onChange={v => setDraft(fraction, { cls:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={d.tier} opts={["", ...WASTE_HIERARCHY.map(x => x.key)]}
-                            ariaLabel="New stream hierarchy tier"
-                            onChange={v => setDraft(fraction, { tier:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={d.phase} opts={["", ...PHASES]} ariaLabel="New stream phase"
-                            onChange={v => setDraft(fraction, { phase:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellSelect value={d.domain} opts={["", ...WASTE_DOMAINS]} ariaLabel="New stream context"
-                            onChange={v => setDraft(fraction, { domain:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellInput num value={d.qty} placeholder="0" ariaLabel="New stream quantity"
-                            onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { qty:v })}/>
-                        </td>
-                        <td style={td}>
-                          <CellInput value={d.route} placeholder="route…" ariaLabel="New stream disposal route"
-                            onKeyDown={draftKey(fraction)} onChange={v => setDraft(fraction, { route:v })}/>
-                        </td>
-                        <td colSpan={5} style={{ ...td, padding:"4px 8px", textAlign:"right" }}>
-                          <Btn size="sm" variant="primary" onClick={() => commitDraft(fraction)}>+ Add</Btn>
-                        </td>
-                      </tr>
-                    );
-                  })()}
-                </React.Fragment>
-              ))}
+                );
+              })}
+              {visible.length === 0 && (
+                <tr><td colSpan={11} style={{ padding:"34px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:12, fontWeight:500, color:T.text }}>No streams match this filter</div>
+                  <div style={{ fontSize:11, color:T.muted, marginTop:3 }}>Clear the tier or class filter to see the full register.</div>
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
-      )}
-
-      {/* ── Hierarchy funnel — the signature view (W8) ── */}
-      {view === "hierarchy" && (
-        logged.length === 0 ? (
-          <div style={{ ...card, textAlign:"center", padding:"3rem" }}>
-            <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:600, color:T.muted }}>No waste streams logged</p>
-            <p style={{ margin:0, fontSize:12, color:T.muted }}>Add a stream to see the hierarchy.</p>
-          </div>
-        ) : (() => {
-          const drillTier = funnelTier || WASTE_HIERARCHY.reduce((best,h) =>
-            tierTotals[h.key] > tierTotals[best.key] ? h : best, WASTE_HIERARCHY[0]).key;
-          const drillRows = logged.filter(r => r.treatment === drillTier);
-          const dh = hier(drillTier) || WASTE_HIERARCHY[0];
-          return (
-            <div style={{ marginBottom:"1.5rem" }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1.55fr 1fr", gap:12, marginBottom:12 }}>
-                {/* Funnel */}
-                <div style={card}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
-                    <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste-management hierarchy</span>
-                    <span style={{ fontSize:TYPE.data, color:T.muted }}>by mass · select a tier</span>
-                  </div>
-                  <div style={{ display:"flex", gap:12 }}>
-                    {/* preference axis */}
-                    <div style={{ width:16, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"space-between", padding:"4px 0", flexShrink:0 }}>
-                      <span style={{ fontSize:TYPE.data, fontWeight:500, color:T.green, letterSpacing:"0.08em",
-                        writingMode:"vertical-rl", transform:"rotate(180deg)", whiteSpace:"nowrap" }}>MORE PREFERRED</span>
-                      <span style={{ flex:1, width:2, background:"linear-gradient("+T.greenBd+","+T.redBd+")", margin:"6px 0", borderRadius:1 }}/>
-                      <span style={{ fontSize:TYPE.data, fontWeight:500, color:T.red, letterSpacing:"0.08em",
-                        writingMode:"vertical-rl", transform:"rotate(180deg)", whiteSpace:"nowrap" }}>LESS PREFERRED</span>
-                    </div>
-                    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:9, minWidth:0 }}>
-                      {WASTE_HIERARCHY.map(h => {
-                        const v = tierTotals[h.key];
-                        const w = Math.max(0.13, v / maxTier);
-                        const pct = totalT ? Math.round((v / totalT) * 100) : 0;
-                        const n = tierCounts[h.key];
-                        const on = drillTier === h.key;
-                        return (
-                          <button key={h.key} className="hit" onClick={() => setFunnelTier(h.key)}
-                            aria-label={h.label + " — " + fmtT(v) + ", " + n + " stream" + (n!==1?"s":"")}
-                            aria-pressed={on}
-                            style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer",
-                              background:"transparent", border:"none", padding:"2px 0", width:"100%", fontFamily:T.sans }}>
-                            <span style={{ width:78, textAlign:"right", flexShrink:0, fontSize:11,
-                              fontWeight: on ? 700 : 500, color:h.color }}>{h.label}</span>
-                            <span style={{ flex:1, display:"flex", justifyContent:"center", minWidth:0 }}>
-                              <span style={{ width:(w*100)+"%", height:40, background:h.solid, borderRadius:6,
-                                display:"flex", alignItems:"center", justifyContent:"center",
-                                outline: on ? "2px solid "+h.color : "none", outlineOffset:2 }}>
-                                <span style={{ fontSize:13, fontWeight:600, color:"var(--bar-ink)", fontVariantNumeric:"tabular-nums" }}>
-                                  {fmtNb(v, 1)}
-                                </span>
-                              </span>
-                            </span>
-                            <span style={{ width:66, flexShrink:0, textAlign:"left" }}>
-                              <span style={{ display:"block", fontSize:12, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums" }}>
-                                {h.key === "Prevention" ? "avoided" : pct + "%"}
-                              </span>
-                              <span style={{ display:"block", fontSize:TYPE.data, color:T.muted }}>
-                                {n} stream{n!==1?"s":""}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Diversion donut + tier breakdown */}
-                <div style={{ display:"flex", flexDirection:"column", gap:12, minWidth:0 }}>
-                  <div style={{ ...card, display:"flex", alignItems:"center", gap:16 }}>
-                    <WasteDonut value={diversionRate}/>
-                    <div style={{ minWidth:0 }}>
-                      <p style={{ ...lbl, marginBottom:2 }}>Diversion rate</p>
-                      <div style={{ fontSize:28, fontWeight:600, color:T.teal, fontVariantNumeric:"tabular-nums", lineHeight:1.1 }}>
-                        {fmtNb(diversionRate,1)}%
-                      </div>
-                      <p style={{ margin:"4px 0 0", fontSize:11, color:T.muted, lineHeight:1.45 }}>
-                        {fmtT(divertedT)} kept from disposal of {fmtT(totalT)} logged.
-                      </p>
-                    </div>
-                  </div>
-                  <div style={{ ...card, flex:1, minHeight:0 }}>
-                    <p style={{ ...lbl, marginBottom:8 }}>Tier breakdown</p>
-                    {WASTE_HIERARCHY.map(h => {
-                      const v = tierTotals[h.key];
-                      return (
-                        <div key={h.key} {...clickable(() => setFunnelTier(h.key), h.label + " — " + fmtT(v))}
-                          style={{ cursor:"pointer", marginBottom:8 }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
-                            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, fontWeight:500,
-                              color: drillTier===h.key ? h.color : T.muted }}>
-                              <span style={{ width:7, height:7, borderRadius:4, background:h.solid }}/>{h.label}
-                            </span>
-                            <span style={{ fontSize:11, fontWeight:500, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtNb(v,1)} t</span>
-                          </div>
-                          <div style={{ height:6, background:T.rowBd, borderRadius:3, overflow:"hidden" }}>
-                            <div style={{ width: Math.max(2,(v/maxTier)*100)+"%", height:"100%", background:h.solid, borderRadius:3 }}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Drill-down strip for the selected tier */}
-              <div style={{ ...card, marginBottom:12 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
-                  <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 8px", borderRadius:4,
-                    background:dh.bg, color:dh.color, border:"1px solid "+dh.bd }}>{dh.label}</span>
-                  <span style={{ fontSize:12, fontWeight:500, color:T.text }}>{drillRows.length} stream{drillRows.length!==1?"s":""}</span>
-                  <span style={{ fontSize:11, color:T.muted }}>· {fmtT(tierTotals[drillTier])}</span>
-                  <button className="hit" onClick={() => { setTierFilter(drillTier); setView("register"); }}
-                    style={{ marginLeft:"auto", fontSize:11, color:T.teal, background:"transparent",
-                      border:"1px solid "+T.tealBd, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:T.sans }}>
-                    View in register ›
-                  </button>
-                </div>
-                {drillRows.length === 0
-                  ? <p style={{ margin:0, fontSize:11, color:T.muted }}>No streams in this tier.</p>
-                  : <div style={{ display:"flex", gap:10, overflowX:"auto", paddingBottom:2 }}>
-                      {drillRows.map(r => {
-                        const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
-                        return (
-                          <div key={r.id} {...clickable(() => setEditId(r.id), "Edit " + (r.product || "waste stream"))}
-                            style={{ flexShrink:0, width:212, border:"1px solid "+T.rowBd,
-                              borderLeft:"3px solid "+dh.solid, borderRadius:6, padding:"9px 11px",
-                              background:T.surface2, cursor:"pointer" }}>
-                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:6 }}>
-                              <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal }}>{r.ref || "—"}</span>
-                              <span style={{ fontSize:12, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>
-                                {inTonnage(r) ? fmtT(toTonnes(r)) : fmtNb(rowTotal(r),2)+" "+r.unit}
-                              </span>
-                            </div>
-                            <div style={{ fontSize:12, fontWeight:500, color:T.text, margin:"3px 0 5px" }}>{r.product || "Unnamed stream"}</div>
-                            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                              <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
-                                background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>{r.cls}</span>
-                              {r.domain && <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
-                                background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd }}>{r.domain}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>}
-              </div>
-
-              {/* Reduction principles — content in this view, not a disclosure */}
-              <div style={card}>
-                <p style={lbl}>Reduction principles (philosophy)</p>
-                <div style={{ columns:2, columnGap:20 }}>
-                  {WASTE_PHILOSOPHY.map((item,i) => (
-                    <div key={i} style={{ display:"flex", gap:6, marginBottom:5, breakInside:"avoid" }}>
-                      <span style={{ color:T.green, fontSize:TYPE.data, flexShrink:0 }}>✓</span>
-                      <span style={{ fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        })()
-      )}
-
-      {/* ── Stream cards ── */}
-      {view === "streams" && (
-        logged.length === 0 ? (
-          <div style={{ ...card, textAlign:"center", padding:"3rem" }}>
-            <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:600, color:T.muted }}>No waste streams logged</p>
-            <p style={{ margin:0, fontSize:12, color:T.muted }}>Add a stream to see the cards.</p>
-          </div>
-        ) : (
-          <div style={{ marginBottom:"1.5rem" }}>
-            {orderedGroups.map(([fraction, frows]) => {
-              const shown = frows.filter(isLogged);
-              if (!shown.length) return null;
-              return (
-                <div key={fraction} style={{ marginBottom:"1rem" }}>
-                  <p style={{ ...lbl, marginBottom:8 }}>{fraction} · {shown.length}</p>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:8 }}>
-                    {shown.map(r => {
-                      const h = hier(r.treatment);
-                      const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
-                      return (
-                        <div key={r.id} {...clickable(() => setEditId(r.id), "Edit " + (r.product || "waste stream"))}
-                          style={{ background:T.surface, border:"1px solid "+T.border,
-                            borderLeft:"3px solid "+((h && h.solid) || T.border), borderRadius:8,
-                            padding:"10px 12px", cursor:"pointer" }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:8 }}>
-                            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal }}>{r.ref || "—"}</span>
-                            <span style={{ fontSize:12, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>
-                              {inTonnage(r) ? fmtT(toTonnes(r)) : fmtNb(rowTotal(r),2) + " " + r.unit}
-                            </span>
-                          </div>
-                          <div style={{ fontSize:12, fontWeight:500, color:T.text, margin:"3px 0 6px" }}>
-                            {r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}
-                          </div>
-                          <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
-                            {r.ewc && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{r.ewc}</span>}
-                            <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
-                              background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>{r.cls}</span>
-                            {h && <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
-                              background:h.bg, color:h.color, border:"1px solid "+h.bd }}>{h.label}</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )
-      )}
-
-      {/* ── Diversion board — drag to reclassify, with a keyboard path ── */}
-      {view === "board" && (
-        <div style={{ marginBottom:"1.5rem" }}>
-          <div style={{ ...card, display:"flex", alignItems:"center", gap:16, marginBottom:12, flexWrap:"wrap" }}>
-            <WasteDonut value={diversionRate} size={52} stroke={7} showLabel={false}/>
-            <div>
-              <p style={{ ...lbl, marginBottom:2 }}>Live diversion from disposal</p>
-              <div style={{ fontSize:22, fontWeight:600, color:T.teal, fontVariantNumeric:"tabular-nums", lineHeight:1.15 }}>
-                {fmtNb(diversionRate,1)}%
-              </div>
-            </div>
-            <span style={{ width:1, height:34, background:T.border }}/>
-            <div style={{ display:"flex", gap:22 }}>
-              <div>
-                <p style={{ ...lbl, marginBottom:2 }}>Total</p>
-                <div style={{ fontSize:15, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtT(totalT)}</div>
-              </div>
-              <div>
-                <p style={{ ...lbl, marginBottom:2 }}>To disposal</p>
-                <div style={{ fontSize:15, fontWeight:600, color:T.red, fontVariantNumeric:"tabular-nums" }}>{fmtT(disposeT)}</div>
-              </div>
-            </div>
-            <p style={{ margin:0, marginLeft:"auto", fontSize:11, color:T.muted, maxWidth:260, textAlign:"right", lineHeight:1.4 }}>
-              Drag a stream to a higher tier, or use the tier menu on any card, to model an improved route.
-            </p>
-          </div>
-          <div style={{ display:"flex", gap:10, alignItems:"flex-start", overflowX:"auto" }}>
-            {WASTE_HIERARCHY.map(h => {
-              const items = logged.filter(r => r.treatment === h.key);
-              const isOver = dragOver === h.key;
-              return (
-                <div key={h.key}
-                  onDragOver={e => { e.preventDefault(); if (dragOver !== h.key) setDragOver(h.key); }}
-                  onDragLeave={() => setDragOver(o => o === h.key ? null : o)}
-                  onDrop={() => { if (dragId != null) moveToTier(dragId, h.key); setDragId(null); setDragOver(null); }}
-                  style={{ flex:"1 1 0", minWidth:190, display:"flex", flexDirection:"column",
-                    background: isOver ? h.bg : T.surface2,
-                    border:"1px solid "+(isOver ? h.bd : T.border), borderRadius:8,
-                    transition:"background .12s, border-color .12s" }}>
-                  <div style={{ padding:"10px 12px", borderBottom:"1px solid "+h.bd, background:h.bg, borderRadius:"8px 8px 0 0" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <span style={{ width:8, height:8, borderRadius:4, background:h.solid, flexShrink:0 }}/>
-                      <span style={{ fontSize:12, fontWeight:600, color:h.color }}>{h.label}</span>
-                      <span style={{ marginLeft:"auto", fontSize:TYPE.data, fontWeight:500, color:h.color,
-                        background:T.surface, border:"1px solid "+h.bd, borderRadius:10, padding:"1px 7px" }}>{items.length}</span>
-                    </div>
-                    <div style={{ fontSize:14, fontWeight:600, color:h.color, fontVariantNumeric:"tabular-nums", marginTop:5 }}>
-                      {fmtNb(tierTotals[h.key],1)} <span style={{ fontSize:TYPE.data, fontWeight:400 }}>t</span>
-                    </div>
-                  </div>
-                  <div style={{ padding:"8px 8px 10px", display:"flex", flexDirection:"column", gap:7, minHeight:80 }}>
-                    {items.map(r => {
-                      const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
-                      return (
-                        <div key={r.id} draggable
-                          onDragStart={() => setDragId(r.id)}
-                          onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                          style={{ background:T.surface, border:"1px solid "+T.border, borderRadius:6,
-                            padding:"8px 10px", cursor:"grab", opacity: dragId===r.id ? 0.4 : 1 }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
-                            <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal }}>{r.ref || "—"}</span>
-                            <span style={{ fontSize:11, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>
-                              {inTonnage(r) ? fmtT(toTonnes(r)) : fmtNb(rowTotal(r),2)+" "+r.unit}
-                            </span>
-                          </div>
-                          <div style={{ fontSize:11, fontWeight:500, color:T.text, margin:"5px 0 6px", lineHeight:1.3 }}>
-                            {r.product || "Unnamed stream"}
-                          </div>
-                          <div style={{ display:"flex", gap:4, alignItems:"center", flexWrap:"wrap" }}>
-                            <span style={{ fontSize:TYPE.data, padding:"2px 6px", borderRadius:3,
-                              background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>{r.cls}</span>
-                            {r.domain && <span style={{ fontSize:TYPE.data, color:T.muted, marginLeft:"auto" }}>{r.domain}</span>}
-                          </div>
-                          {/* Keyboard equivalent for the drag — never drag-only */}
-                          <div style={{ marginTop:6 }}>
-                            <CellSelect value={r.treatment} opts={WASTE_HIERARCHY.map(x => x.key)}
-                              ariaLabel={"Hierarchy tier for " + (r.product || "stream")}
-                              onChange={v => moveToTier(r.id, v)}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {!items.length && (
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:60,
-                        border:"1px dashed "+h.bd, borderRadius:6, color:h.color, fontSize:TYPE.data,
-                        textAlign:"center", padding:8 }}>
-                        Drop here to set {h.label.toLowerCase()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Flow — tonnage-weighted Sankey, context → hierarchy fate ── */}
-      {view === "flow" && (
-        <div style={{ marginBottom:"1.5rem" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:12 }}>
-            {[
-              { l:"Diversion rate",      v:fmtNb(diversionRate,1)+"%", c:T.teal },
-              { l:"Recovery + recycling", v:fmtT(tierTotals["Recovery"]+tierTotals["Recycling"]), c:T.amber },
-              { l:"To disposal",         v:fmtT(disposeT), c:T.red },
-              { l:"Hazardous mass",      v:fmtT(hazT), c:T.purple },
-            ].map(k => (
-              <div key={k.l} style={card}>
-                <div style={{ fontSize:18, fontWeight:700, color:k.c, lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>{k.v}</div>
-                <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>{k.l}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ ...card, marginBottom:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:2 }}>
-              <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Where the waste flows</span>
-              <span style={{ fontSize:TYPE.data, color:T.muted }}>project context → hierarchy fate · by mass</span>
-            </div>
-            {!sankey
-              ? <p style={{ margin:"10px 0 0", fontSize:12, color:T.muted }}>
-                  Set a project context and a hierarchy tier on at least one stream with a tonnage to see the flow.
-                </p>
-              : <>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontFamily:T.mono, fontSize:TYPE.data,
-                    color:T.muted, letterSpacing:"0.08em", textTransform:"uppercase", padding:"6px 2px 0" }}>
-                    <span>Context</span><span>Hierarchy fate</span>
-                  </div>
-                  <svg viewBox={"0 0 "+sankey.W+" "+sankey.H} width="100%" style={{ display:"block" }} preserveAspectRatio="xMidYMid meet"
-                    role="img" aria-label={"Waste flow by mass: " + sankey.links.map(l => l.d+" to "+l.tier+" "+fmtT(l.v)).join("; ")}>
-                    {sankey.links.map(l => (
-                      <path key={l.key} d={l.path} fill={l.color} fillOpacity={0.42} stroke="none">
-                        <title>{l.d} → {l.tier}: {fmtT(l.v)}</title>
-                      </path>
-                    ))}
-                    {sankey.cols.map(d => {
-                      const n = sankey.lNodes[d];
-                      return (
-                        <g key={d}>
-                          <rect x={sankey.pad} y={n.y} width={sankey.nodeW} height={Math.max(2,n.h)} rx={2} fill={T.muted}/>
-                          <text x={sankey.pad+sankey.nodeW+6} y={n.y+n.h/2-4} dominantBaseline="central"
-                            style={{ fontSize:11, fontWeight:600, fill:T.text }}>{d}</text>
-                          <text x={sankey.pad+sankey.nodeW+6} y={n.y+n.h/2+8} dominantBaseline="central"
-                            style={{ fontSize:TYPE.data, fill:T.muted }}>{fmtT(sankey.domTotal[d])}</text>
-                        </g>
-                      );
-                    })}
-                    {sankey.tiersUsed.map(h => {
-                      const n = sankey.rNodes[h.key];
-                      return (
-                        <g key={h.key}>
-                          <rect x={sankey.W-sankey.pad-sankey.nodeW} y={n.y} width={sankey.nodeW} height={Math.max(2,n.h)} rx={2} fill={h.solid}/>
-                          <text x={sankey.W-sankey.pad-sankey.nodeW-6} y={n.y+n.h/2} textAnchor="end" dominantBaseline="central"
-                            style={{ fontSize:11, fontWeight:600, fill:h.color }}>{h.label}</text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-                </>}
-          </div>
-          {/* Fate summary */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, marginBottom:12 }}>
-            {WASTE_HIERARCHY.map(h => (
-              <div key={h.key} style={{ ...card, borderLeft:"3px solid "+h.solid }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:TYPE.data, fontWeight:500, color:h.color }}>{h.label}</span>
-                  <span style={{ fontSize:14, fontWeight:600, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtNb(tierTotals[h.key],1)}</span>
-                </div>
-                <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:1 }}>
-                  {totalT ? Math.round(tierTotals[h.key]/totalT*100) : 0}% of logged · t
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* The mock pairs this with a 6-month trend. The register holds no dated
-              quantities, so that series would have to be invented — say so instead. */}
-          <div style={{ ...card, borderColor:T.amberBd, background:T.amberBg }}>
-            <p style={{ ...lbl, marginBottom:4 }}>Monthly throughput — not available</p>
-            <p style={{ margin:0, fontSize:11, color:T.muted, lineHeight:1.5 }}>
-              A diversion trend needs dated quantities. The register records a total per phase bucket,
-              not a dated log, so no monthly series can be derived from it — and inventing one would
-              put a number on screen the register does not hold. Add a dated quantity log to the
-              schema and this panel can be filled from real data.
-            </p>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* ── Full record drawer (W6) ── */}
       {editing && (
