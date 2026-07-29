@@ -1852,12 +1852,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                   }}
                                   aria-label={"Add "+(item.aspect||item.sub)}
                                   style={{ width:12, height:12, borderRadius:"50%", flexShrink:0, padding:0,
-                                           background:T.surface, border:"1.5px solid "+col.head, cursor:"pointer",
-                                           display:"flex", alignItems:"center", justifyContent:"center" }}>
-                                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
-                                    <path d="M1 4L3 6L7 1.5" stroke={col.head} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
+                                           background:T.surface, border:"1.5px solid "+col.head, cursor:"pointer" }}/>
                               )}
                               {/* Text */}
                               <div style={{ flex:1, minWidth:0 }}>
@@ -1960,12 +1955,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                             <button className="hit" onClick={mkOnClick(btn)}
                               aria-label={"Add "+btn.label.replace("\n"," ")}
                               style={{width:12,height:12,borderRadius:"50%",flexShrink:0,padding:0,
-                                background:T.surface,border:"1.5px solid "+col.head,cursor:"pointer",
-                                display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
-                                <path d="M1 4L3 6L7 1.5" stroke={col.head} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
+                                background:T.surface,border:"1.5px solid "+col.head,cursor:"pointer"}}/>
                           )}
                           <div style={{flex:1,minWidth:0}}>
                             <span style={{fontSize:12,fontWeight:500,color:T.text,
