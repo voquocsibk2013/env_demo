@@ -1837,10 +1837,28 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                                    background:isAdded||isSkipped?"transparent":undefined,
                                                    opacity:isAdded?0.6:1,
                                                    borderBottom:"1px solid "+T.rowBd }}>
-                              {/* Status dot */}
-                              <div style={{ width:12, height:12, borderRadius:"50%", flexShrink:0,
-                                             background:isAdded?T.green:isSkipped?T.border:T.surface,
-                                             border:"1.5px solid "+(isAdded?T.greenBd:isSkipped?T.muted:T.muted) }}/>
+                              {/* Status / add: check-circle button (click to add); plain dot once resolved */}
+                              {isAdded||isSkipped ? (
+                                <div style={{ width:12, height:12, borderRadius:"50%", flexShrink:0,
+                                               background:isAdded?T.green:T.border,
+                                               border:"1.5px solid "+(isAdded?T.greenBd:T.muted) }}/>
+                              ) : (
+                                <button className="hit"
+                                  onClick={()=>{
+                                    setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub,
+                                                 activity:item.hint||"",
+                                                 _color:cat.color, _screeningId:item.id});
+                                    setView("form");
+                                  }}
+                                  aria-label={"Add "+(item.aspect||item.sub)}
+                                  style={{ width:12, height:12, borderRadius:"50%", flexShrink:0, padding:0,
+                                           background:T.surface, border:"1.5px solid "+col.head, cursor:"pointer",
+                                           display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+                                    <path d="M1 4L3 6L7 1.5" stroke={col.head} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
                               {/* Text */}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
@@ -1848,7 +1866,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                                marginRight:8 }}>{item.sub}</span>
                                 <span style={{ fontSize:11, color:T.muted }}>{item.hint}</span>
                               </div>
-                              {/* Reference badge or actions */}
+                              {/* Reference badge or skip toggle */}
                               {isAdded&&addedItems[item.id]&&(
                                 <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 6px",
                                                borderRadius:3, background:T.tealBg, color:T.teal,
@@ -1857,28 +1875,13 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                 </span>
                               )}
                               {!isAdded&&(
-                                <>
-                                  <button onClick={()=>toggleSkip(item.id)}
-                                    style={{ fontSize:11, padding:"2px 8px", borderRadius:12,
-                                             border:"1px solid "+T.border, background:"transparent",
-                                             color:isSkipped?T.muted:T.faint, cursor:"pointer",
-                                             flexShrink:0, fontFamily:T.sans }}>
-                                    {isSkipped?"Undo":"Skip"}
-                                  </button>
-                                  {!isSkipped&&<button
-                                    onClick={()=>{
-                                      setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub,
-                                                   activity:item.hint||"",
-                                                   _color:cat.color, _screeningId:item.id});
-                                      setView("form");
-                                    }}
-                                    style={{ fontSize:11, padding:"3px 10px", borderRadius:12,
-                                             border:"1px solid "+col.head, background:col.bg,
-                                             color:col.head, cursor:"pointer", flexShrink:0,
-                                             fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap" }}>
-                                    + Add
-                                  </button>}
-                                </>
+                                <button onClick={()=>toggleSkip(item.id)}
+                                  style={{ fontSize:11, padding:"2px 8px", borderRadius:12,
+                                           border:"1px solid "+T.border, background:"transparent",
+                                           color:isSkipped?T.muted:T.faint, cursor:"pointer",
+                                           flexShrink:0, fontFamily:T.sans }}>
+                                  {isSkipped?"Undo":"Skip"}
+                                </button>
                               )}
                             </div>
                           );
@@ -1949,9 +1952,21 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                           padding:"6px 10px",borderRadius:5,
                           opacity:isAdded?0.6:1,
                           borderBottom:"1px solid "+T.rowBd}}>
-                          <div style={{width:12,height:12,borderRadius:"50%",flexShrink:0,
-                            background:isAdded?T.green:isSkipped?T.border:T.surface,
-                            border:"1.5px solid "+(isAdded?T.greenBd:isSkipped?T.muted:T.muted)}}/>
+                          {isAdded||isSkipped ? (
+                            <div style={{width:12,height:12,borderRadius:"50%",flexShrink:0,
+                              background:isAdded?T.green:T.border,
+                              border:"1.5px solid "+(isAdded?T.greenBd:T.muted)}}/>
+                          ) : (
+                            <button className="hit" onClick={mkOnClick(btn)}
+                              aria-label={"Add "+btn.label.replace("\n"," ")}
+                              style={{width:12,height:12,borderRadius:"50%",flexShrink:0,padding:0,
+                                background:T.surface,border:"1.5px solid "+col.head,cursor:"pointer",
+                                display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+                                <path d="M1 4L3 6L7 1.5" stroke={col.head} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
                           <div style={{flex:1,minWidth:0}}>
                             <span style={{fontSize:12,fontWeight:500,color:T.text,
                               textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
@@ -1967,22 +1982,13 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                             </span>
                           )}
                           {!isAdded&&(
-                            <>
-                              <button onClick={()=>toggleSkip("opp_"+btn.id)}
-                                style={{fontSize:11,padding:"2px 8px",borderRadius:12,
-                                  border:"1px solid "+T.border,background:"transparent",
-                                  color:isSkipped?T.muted:T.faint,cursor:"pointer",
-                                  flexShrink:0,fontFamily:T.sans}}>
-                                {isSkipped?"Undo":"Skip"}
-                              </button>
-                              {!isSkipped&&<button onClick={mkOnClick(btn)}
-                                style={{fontSize:11,padding:"3px 10px",borderRadius:12,
-                                  border:"1px solid "+col.head,background:col.bg,
-                                  color:col.head,cursor:"pointer",flexShrink:0,
-                                  fontFamily:T.sans,fontWeight:500,whiteSpace:"nowrap"}}>
-                                + Add
-                              </button>}
-                            </>
+                            <button onClick={()=>toggleSkip("opp_"+btn.id)}
+                              style={{fontSize:11,padding:"2px 8px",borderRadius:12,
+                                border:"1px solid "+T.border,background:"transparent",
+                                color:isSkipped?T.muted:T.faint,cursor:"pointer",
+                                flexShrink:0,fontFamily:T.sans}}>
+                              {isSkipped?"Undo":"Skip"}
+                            </button>
                           )}
                         </div>
                       );
