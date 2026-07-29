@@ -3951,7 +3951,7 @@ This cannot be undone.`)) return;
             else if (e.key==="End") n = TABS.length-1;
             if (n!==null) { e.preventDefault(); setTab(TABS[n]); const el = document.getElementById("projtab-"+TABS[n]); if (el) el.focus(); }
           }}
-          style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border, overflowX:"auto", scrollbarWidth:"thin", minWidth:0, flex:1 }}>
+          style={{ display:"flex", gap:0, borderBottom:"2px solid "+T.border }}>
           {TABS.map(t => (
             <button key={t} id={"projtab-"+t} role="tab" aria-selected={tab===t}
               tabIndex={tab===t ? 0 : -1} onClick={()=>setTab(t)}
