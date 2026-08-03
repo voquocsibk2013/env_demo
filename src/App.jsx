@@ -1708,23 +1708,40 @@ const TH = ({ children }) => (
 //            (2) clicking "Save" arms a second, independent confirm
 //              ("Confirm save?") before anything commits — the app's standard
 //              arm-then-fire pattern, reused rather than reinvented.
-//   after  — (3) the change is written to the current project's Changes log as
-//              an "Edited legal reference" entry with before → after fields, the
-//              same audit trail every other edit in the app produces.
+//   after  — (3) the change is written to a global edit history (localStorage,
+//              same shape as project.changelog entries) as an "Edited legal
+//              reference" entry with before → after fields — global because the
+//              reference data itself is global, not tied to any one project.
 //            (4) the row shows "Edited <date> — revert to original" for as long
 //              as the override exists, so a bad edit is always one click from undone.
-function LegalReferencesPanel({ search, notify, onLogChange }) {
-  const OVERRIDE_KEY = "env-legalref-overrides";
+//
+// Notes are the opposite of the reference data: per-project (project.legalRefNotes),
+// free-form, no barriers — scratch space for "why this does/doesn't apply here".
+function LegalReferencesPanel({ search, notify, project, onChange }) {
+  const OVERRIDE_KEY  = "env-legalref-overrides";
+  const CHANGELOG_KEY = "env-legalref-changelog";
   const [overrides, setOverrides] = useState(() => {
     try { return JSON.parse(localStorage.getItem(OVERRIDE_KEY) || "{}"); } catch { return {}; }
   });
+  const [changelog, setChangelog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CHANGELOG_KEY) || "[]"); } catch { return []; }
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [armedEdit, armEdit] = useArmedConfirm();  // "<itemId>#<idx>" armed to ENTER edit mode
   const [armedSave, armSave] = useArmedConfirm();  // "<itemId>#<idx>" armed to COMMIT
   const [editingKey, setEditingKey] = useState(null);
   const [draftName, setDraftName]   = useState("");
   const [draftUrl,  setDraftUrl]    = useState("");
+  const [openNoteKey, setOpenNoteKey] = useState(null);
 
-  const persist = next => { setOverrides(next); localStorage.setItem(OVERRIDE_KEY, JSON.stringify(next)); };
+  const persist   = next => { setOverrides(next); localStorage.setItem(OVERRIDE_KEY, JSON.stringify(next)); };
+  const logGlobal = (action, detail, fields) => {
+    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail, fields:fields||[] };
+    const next = [...changelog, entry];
+    setChangelog(next); localStorage.setItem(CHANGELOG_KEY, JSON.stringify(next));
+  };
+  const notes    = project.legalRefNotes || {};
+  const setNote  = (key, text) => onChange({ ...project, legalRefNotes: { ...notes, [key]: text } });
 
   // Effective {cite, url, qualifier, tag} for citation idx of item, folding in any override.
   const citationsFor = item => parseLegalRef(item.legalRef).map((p, idx) => {
@@ -1755,15 +1772,15 @@ function LegalReferencesPanel({ search, notify, onLogChange }) {
     const fields = [];
     if (c.name !== nextName) fields.push({ k:"Name", from:c.name, to:nextName });
     if (c.url  !== nextUrl)  fields.push({ k:"Link", from:c.url,  to:nextUrl  });
-    if (fields.length && onLogChange) onLogChange("Edited legal reference", item.id + " — " + item.sub, fields);
+    if (fields.length) logGlobal("Edited legal reference", item.id + " — " + item.sub, fields);
     setEditingKey(null); setDraftName(""); setDraftUrl(""); armSave(null);
     notify("Reference updated — " + item.id);
   };
   const revertCitation = (item, c) => {
     const next = { ...overrides }; delete next[c.key];
     persist(next);
-    if (onLogChange) onLogChange("Edited legal reference", item.id + " — " + item.sub,
-      [{ k:"Name", from:c.name, to:c.baselineName }, { k:"Link", from:c.url, to:c.baselineUrl }].filter(f=>f.from!==f.to));
+    const fields = [{ k:"Name", from:c.name, to:c.baselineName }, { k:"Link", from:c.url, to:c.baselineUrl }].filter(f=>f.from!==f.to);
+    if (fields.length) logGlobal("Edited legal reference", item.id + " — " + item.sub, fields);
     notify("Reverted to original reference — " + item.id);
   };
 
@@ -1779,14 +1796,57 @@ function LegalReferencesPanel({ search, notify, onLogChange }) {
 
   return (
     <div>
-      <p style={{ fontSize:12.5, color:T.muted, margin:"0 0 16px", lineHeight:1.6, maxWidth:680 }}>
+      <p style={{ fontSize:12.5, color:T.muted, margin:"0 0 12px", lineHeight:1.6, maxWidth:680 }}>
         Every Risks guide-word item's <strong style={{color:T.text}}>Legal / regulatory reference</strong> in one place —
         the same text that prefills the field when that item is added from the Risks tab. Each law or regulation has
         its own name and link, edited independently. Links search the official source register by default; they are
-        lookup aids, not verified deep links, until you replace one with a direct URL. Edits apply everywhere this
-        reference is used, are stored on this device only, are recorded in this project's Changes log, and can always
-        be reverted to the shipped original.
+        lookup aids, not verified deep links, until you replace one with a direct URL. Reference edits are global —
+        they apply to every project — and can always be reverted to the shipped original. Notes are the opposite:
+        private to this project, for recording why a reference does or doesn't apply here.
       </p>
+
+      <div {...clickable(()=>setHistoryOpen(o=>!o), "Edit history")} aria-expanded={historyOpen}
+        style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", marginBottom:16,
+                 background:T.surface2, border:"1px solid "+T.border, borderRadius:6, cursor:"pointer" }}>
+        <span style={{ fontSize:11.5, fontWeight:600, color:T.text }}>Edit history</span>
+        <span style={{ fontSize:TYPE.data, color:T.muted }}>{changelog.length} change{changelog.length!==1?"s":""} · global, all projects</span>
+        <span style={{ fontSize:11, color:T.faint, marginLeft:"auto" }}>{historyOpen?"▾":"▸"}</span>
+      </div>
+      {historyOpen && (
+        <div style={{ marginBottom:20, border:"1px solid "+T.border, borderRadius:6, overflow:"hidden" }}>
+          {changelog.length===0 ? (
+            <p style={{ margin:0, padding:"12px 14px", fontSize:12, color:T.muted }}>No edits yet.</p>
+          ) : [...changelog].reverse().map((entry,i,arr) => {
+            const ts = new Date(entry.ts);
+            return (
+              <div key={entry.id} style={{ display:"flex", gap:10, padding:"8px 14px",
+                borderBottom:i<arr.length-1?"1px solid "+T.rowBd:"none" }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background:T.amber, marginTop:5, flexShrink:0 }}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"baseline", flexWrap:"wrap", marginBottom:2 }}>
+                    <span style={{ fontSize:11, color:T.text, fontWeight:500 }}>{entry.detail}</span>
+                    <span style={{ fontFamily:T.mono, fontSize:9.5, color:T.faint }}>
+                      {ts.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})} {ts.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                    {(entry.fields||[]).map((f,fi)=>(
+                      <span key={fi} style={{ fontSize:10.5, padding:"1px 7px", borderRadius:10, background:T.surface2,
+                        border:"1px solid "+T.border, color:T.muted, display:"flex", alignItems:"center", gap:4 }}>
+                        <span style={{ color:T.faint, fontSize:9.5 }}>{f.k}</span>
+                        <span style={{ textDecoration:"line-through" }}>{f.from}</span>
+                        <span style={{ color:T.faint }}>→</span>
+                        <span style={{ color:T.text }}>{f.to}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {RISK_CATEGORIES.map(cat => {
         const col = COLOR_MAP[cat.color] || COLOR_MAP.gray;
         const items = cat.items.filter(it => {
@@ -1847,34 +1907,56 @@ function LegalReferencesPanel({ search, notify, onLogChange }) {
                                 </div>
                               </div>
                             ) : (
-                              <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                                <a href={c.url} target="_blank" rel="noopener noreferrer"
-                                  style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
-                                           borderBottom:"1px solid "+T.tealBd }}>
-                                  {c.name}
-                                </a>
-                                {c.qualifier && (
-                                  <span style={{ fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:3,
-                                    background:c.tag==="m"?T.redBg:c.tag==="bp"?T.tealBg:T.slateBg,
-                                    color:c.tag==="m"?T.red:c.tag==="bp"?T.teal:T.slate }}>
-                                    {c.qualifier}
-                                  </span>
+                              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                                  <a href={c.url} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
+                                             borderBottom:"1px solid "+T.tealBd }}>
+                                    {c.name}
+                                  </a>
+                                  {c.qualifier && (
+                                    <span style={{ fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:3,
+                                      background:c.tag==="m"?T.redBg:c.tag==="bp"?T.tealBg:T.slateBg,
+                                      color:c.tag==="m"?T.red:c.tag==="bp"?T.teal:T.slate }}>
+                                      {c.qualifier}
+                                    </span>
+                                  )}
+                                  <button className="hit" onClick={()=>startEditClick(c)}
+                                    aria-label={(armedEdit===c.key?"Confirm edit ":"Edit ")+c.name}
+                                    style={{ ...btn(armedEdit===c.key, "edit"), padding:"2px 8px", fontSize:10 }}>
+                                    {armedEdit===c.key ? "Confirm edit?" : "Edit"}
+                                  </button>
+                                  <button className="hit" onClick={()=>setOpenNoteKey(k=>k===c.key?null:c.key)}
+                                    aria-label={(notes[c.key]?"Edit note for ":"Add note for ")+c.name}
+                                    style={{ padding:"2px 8px", fontSize:10, fontWeight:600, borderRadius:5, cursor:"pointer",
+                                             fontFamily:T.sans, border:"1px solid "+(notes[c.key]?T.purpleBd:T.border),
+                                             background:notes[c.key]?T.purpleBg:"transparent",
+                                             color:notes[c.key]?T.purple:T.muted }}>
+                                    {notes[c.key] ? "Note ✓" : "+ Note"}
+                                  </button>
+                                  {c.override && (
+                                    <span style={{ fontSize:10, color:T.muted, fontStyle:"italic" }}>
+                                      Edited {new Date(c.override.editedAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                                      {" — "}
+                                      <button onClick={()=>revertCitation(item,c)}
+                                        style={{ fontSize:10, color:T.teal, background:"none", border:"none", padding:0,
+                                                 cursor:"pointer", textDecoration:"underline", fontFamily:"inherit" }}>
+                                        revert to original
+                                      </button>
+                                    </span>
+                                  )}
+                                </div>
+                                {openNoteKey === c.key && (
+                                  <textarea value={notes[c.key]||""} onChange={e=>setNote(c.key, e.target.value)} rows={2}
+                                    placeholder="Note for this project only — e.g. why this does or doesn't apply here"
+                                    style={{ width:"100%", boxSizing:"border-box", fontSize:12, padding:"5px 8px",
+                                             border:"1px solid "+T.purpleBd, borderRadius:5, background:T.surface, color:T.text,
+                                             fontFamily:T.sans, resize:"vertical" }}/>
                                 )}
-                                <button className="hit" onClick={()=>startEditClick(c)}
-                                  aria-label={(armedEdit===c.key?"Confirm edit ":"Edit ")+c.name}
-                                  style={{ ...btn(armedEdit===c.key, "edit"), padding:"2px 8px", fontSize:10 }}>
-                                  {armedEdit===c.key ? "Confirm edit?" : "Edit"}
-                                </button>
-                                {c.override && (
-                                  <span style={{ fontSize:10, color:T.muted, fontStyle:"italic" }}>
-                                    Edited {new Date(c.override.editedAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                                    {" — "}
-                                    <button onClick={()=>revertCitation(item,c)}
-                                      style={{ fontSize:10, color:T.teal, background:"none", border:"none", padding:0,
-                                               cursor:"pointer", textDecoration:"underline", fontFamily:"inherit" }}>
-                                      revert to original
-                                    </button>
-                                  </span>
+                                {openNoteKey !== c.key && notes[c.key] && (
+                                  <p style={{ margin:0, fontSize:11, color:T.purple, fontStyle:"italic", lineHeight:1.4 }}>
+                                    {notes[c.key]}
+                                  </p>
                                 )}
                               </div>
                             )}
@@ -1915,13 +1997,6 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
   const setRF = (k, v) => setRiskForm(p => ({ ...p, [k]:v }));
   const setOF = (k, v) => setOppForm(p => ({ ...p, [k]:v }));
   const showToast = msg => notify(msg);   // route through the shared shell toast
-  // Legal-reference edits are global (see LegalReferencesPanel) but the Changes
-  // log is per-project — record them against whichever project is open, since
-  // that's the only changelog that exists and where a reviewer would look.
-  const logChange = (action, detail, fields) => {
-    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail, fields:fields||[] };
-    onChange({ ...project, changelog:[...(project.changelog||[]), entry] });
-  };
 
   // prefillRisk now inlined in button onClick — kept for legacy compatibility
   const prefillRisk = (code, item, sectionColor) => {
@@ -2007,7 +2082,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
       <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
 
         {/* ══ LEGAL REFERENCES — register of every guide-word item's citation ══ */}
-        {mode === "legal" && <LegalReferencesPanel search={screenSearch} notify={notify} onLogChange={logChange}/>}
+        {mode === "legal" && <LegalReferencesPanel search={screenSearch} notify={notify} project={project} onChange={onChange}/>}
 
         {/* ══ RISKS GUIDE — checklist layout ═══════════════════════════════════ */}
         {view === "guide" && isRisks && (() => {
@@ -3620,6 +3695,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             && !Array.isArray(src.footprintCorOverrides)) ? src.footprintCorOverrides : {},
           screeningSkips: (src.screeningSkips && typeof src.screeningSkips === "object"
             && !Array.isArray(src.screeningSkips)) ? src.screeningSkips : {},
+          legalRefNotes: (src.legalRefNotes && typeof src.legalRefNotes === "object"
+            && !Array.isArray(src.legalRefNotes)) ? src.legalRefNotes : {},
           footprintMeta: Array.isArray(src.footprintMeta) ? src.footprintMeta : [],
           // Footprint result — strip row arrays (they're large and session-only)
           footprint: src.footprint ? stripForSave(src.footprint) : null,
