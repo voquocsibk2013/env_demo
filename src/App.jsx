@@ -1695,60 +1695,165 @@ const TH = ({ children }) => (
 );
 
 // ── Legal references register (Screening / Legal references sub-tab) ──────────
-// Edits are stored as overrides layered on top of RISK_CATEGORIES' shipped
-// legalRef values (localStorage, global — not per-project, since the guide-word
-// register itself is global). The shipped baseline is never mutated: an override
-// always keeps its own "original" value, so a revert is always possible and nothing
-// is silently, permanently lost. Two barriers guard a write: entering edit mode is
-// a deliberate click (not inline-editable), and saving needs a second confirm click
-// (the app's standard arm-then-fire pattern) before it commits.
-function LegalReferencesPanel({ search, notify }) {
-  const OVERRIDE_KEY = "env-legalref-overrides";
+// Every citation ("law/regulation") is its own unit: its own name, its own link,
+// edited independently of its siblings in the same item. Overrides layer on top
+// of RISK_CATEGORIES' shipped legalRef (localStorage, global — not per-project,
+// since the guide-word register itself is global). The shipped baseline is never
+// mutated: an override keeps its own original name+link, so a revert is always
+// possible and nothing is silently, permanently lost.
+//
+// Four barriers guard a write, two before and two after:
+//   before — (1) clicking "Edit" arms a confirm ("Edit this reference?"); only a
+//              second click actually opens the Name/Link fields.
+//            (2) clicking "Save" arms a second, independent confirm
+//              ("Confirm save?") before anything commits — the app's standard
+//              arm-then-fire pattern, reused rather than reinvented.
+//   after  — (3) the change is written to a global edit history (localStorage,
+//              same shape as project.changelog entries) as an "Edited legal
+//              reference" entry with before → after fields — global because the
+//              reference data itself is global, not tied to any one project.
+//            (4) the row shows "Edited <date> — revert to original" for as long
+//              as the override exists, so a bad edit is always one click from undone.
+//
+// Notes are the opposite of the reference data: per-project (project.legalRefNotes),
+// free-form, no barriers — scratch space for "why this does/doesn't apply here".
+function LegalReferencesPanel({ search, notify, project, onChange }) {
+  const OVERRIDE_KEY  = "env-legalref-overrides";
+  const CHANGELOG_KEY = "env-legalref-changelog";
   const [overrides, setOverrides] = useState(() => {
     try { return JSON.parse(localStorage.getItem(OVERRIDE_KEY) || "{}"); } catch { return {}; }
   });
-  const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft]         = useState("");
-  const [armedSave, armSave]      = useArmedConfirm();
+  const [changelog, setChangelog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CHANGELOG_KEY) || "[]"); } catch { return []; }
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [armedEdit, armEdit] = useArmedConfirm();  // "<itemId>#<idx>" armed to ENTER edit mode
+  const [armedSave, armSave] = useArmedConfirm();  // "<itemId>#<idx>" armed to COMMIT
+  const [editingKey, setEditingKey] = useState(null);
+  const [draftName, setDraftName]   = useState("");
+  const [draftUrl,  setDraftUrl]    = useState("");
+  const [openNoteKey, setOpenNoteKey] = useState(null);
 
-  const persist = next => { setOverrides(next); localStorage.setItem(OVERRIDE_KEY, JSON.stringify(next)); };
-  const effectiveRef = item => overrides[item.id]?.value ?? item.legalRef;
+  const persist   = next => { setOverrides(next); localStorage.setItem(OVERRIDE_KEY, JSON.stringify(next)); };
+  const logGlobal = (action, detail, fields) => {
+    const entry = { id:Date.now().toString(), ts:new Date().toISOString(), action, detail, fields:fields||[] };
+    const next = [...changelog, entry];
+    setChangelog(next); localStorage.setItem(CHANGELOG_KEY, JSON.stringify(next));
+  };
+  const notes    = project.legalRefNotes || {};
+  const setNote  = (key, text) => onChange({ ...project, legalRefNotes: { ...notes, [key]: text } });
 
-  const startEdit  = item => { setEditingId(item.id); setDraft(effectiveRef(item)); armSave(null); };
-  const cancelEdit = () => { setEditingId(null); setDraft(""); armSave(null); };
-  const commitEdit = item => {
-    if (!draft.trim()) return;
-    const next = { ...overrides, [item.id]: {
-      value: draft.trim(), editedAt: new Date().toISOString(),
-      original: overrides[item.id]?.original ?? item.legalRef,
+  // Effective {cite, url, qualifier, tag} for citation idx of item, folding in any override.
+  const citationsFor = item => parseLegalRef(item.legalRef).map((p, idx) => {
+    const key = item.id + "#" + idx;
+    const ov  = overrides[key];
+    return { key, idx, qualifier:p.qualifier, tag:p.tag,
+             name: ov?.name ?? p.cite, url: ov?.url ?? legalRefLink(p.cite),
+             baselineName: p.cite, baselineUrl: legalRefLink(p.cite), override: ov };
+  });
+
+  const startEditClick = c => {
+    if (armedEdit === c.key) {
+      setEditingKey(c.key); setDraftName(c.name); setDraftUrl(c.url); armEdit(null);
+    } else {
+      armEdit(c.key);
+    }
+  };
+  const cancelEdit = () => { setEditingKey(null); setDraftName(""); setDraftUrl(""); armSave(null); };
+  const commitEdit = (item, c) => {
+    const nextName = draftName.trim() || c.baselineName;
+    const nextUrl  = draftUrl.trim()  || c.baselineUrl;
+    const next = { ...overrides, [c.key]: {
+      name: nextName, url: nextUrl, editedAt: new Date().toISOString(),
+      originalName: c.override?.originalName ?? c.baselineName,
+      originalUrl:  c.override?.originalUrl  ?? c.baselineUrl,
     }};
     persist(next);
-    setEditingId(null); setDraft(""); armSave(null);
+    const fields = [];
+    if (c.name !== nextName) fields.push({ k:"Name", from:c.name, to:nextName });
+    if (c.url  !== nextUrl)  fields.push({ k:"Link", from:c.url,  to:nextUrl  });
+    if (fields.length) logGlobal("Edited legal reference", item.id + " — " + item.sub, fields);
+    setEditingKey(null); setDraftName(""); setDraftUrl(""); armSave(null);
     notify("Reference updated — " + item.id);
   };
-  const revert = item => {
-    const next = { ...overrides }; delete next[item.id];
+  const revertCitation = (item, c) => {
+    const next = { ...overrides }; delete next[c.key];
     persist(next);
+    const fields = [{ k:"Name", from:c.name, to:c.baselineName }, { k:"Link", from:c.url, to:c.baselineUrl }].filter(f=>f.from!==f.to);
+    if (fields.length) logGlobal("Edited legal reference", item.id + " — " + item.sub, fields);
     notify("Reverted to original reference — " + item.id);
   };
 
   const q  = (search||"").trim().toLowerCase();
   const th = { textAlign:"left", fontSize:TYPE.data, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase",
                color:T.muted, padding:"0 10px 7px 0", borderBottom:"1px solid "+T.border };
+  const btn = (armed, kind) => ({
+    fontSize:11, fontWeight:600, padding:"3px 9px", borderRadius:5, cursor:"pointer", fontFamily:T.sans,
+    border:"1px solid "+(armed?T.amberBd:kind==="save"?T.tealBd:T.border),
+    background:armed?T.amberBg:kind==="save"?T.tealBg:"transparent",
+    color:armed?T.amber:kind==="save"?T.teal:T.muted,
+  });
 
   return (
     <div>
-      <p style={{ fontSize:12.5, color:T.muted, margin:"0 0 16px", lineHeight:1.6, maxWidth:680 }}>
+      <p style={{ fontSize:12.5, color:T.muted, margin:"0 0 12px", lineHeight:1.6, maxWidth:680 }}>
         Every Risks guide-word item's <strong style={{color:T.text}}>Legal / regulatory reference</strong> in one place —
-        the same text that prefills the field when that item is added from the Risks tab. Links search the official
-        source register; they are lookup aids, not verified deep links. Edits made here apply everywhere this reference
-        is used, are stored on this device only, and can always be reverted to the shipped original.
+        the same text that prefills the field when that item is added from the Risks tab. Each law or regulation has
+        its own name and link, edited independently. Links search the official source register by default; they are
+        lookup aids, not verified deep links, until you replace one with a direct URL. Reference edits are global —
+        they apply to every project — and can always be reverted to the shipped original. Notes are the opposite:
+        private to this project, for recording why a reference does or doesn't apply here.
       </p>
+
+      <div {...clickable(()=>setHistoryOpen(o=>!o), "Edit history")} aria-expanded={historyOpen}
+        style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", marginBottom:16,
+                 background:T.surface2, border:"1px solid "+T.border, borderRadius:6, cursor:"pointer" }}>
+        <span style={{ fontSize:11.5, fontWeight:600, color:T.text }}>Edit history</span>
+        <span style={{ fontSize:TYPE.data, color:T.muted }}>{changelog.length} change{changelog.length!==1?"s":""} · global, all projects</span>
+        <span style={{ fontSize:11, color:T.faint, marginLeft:"auto" }}>{historyOpen?"▾":"▸"}</span>
+      </div>
+      {historyOpen && (
+        <div style={{ marginBottom:20, border:"1px solid "+T.border, borderRadius:6, overflow:"hidden" }}>
+          {changelog.length===0 ? (
+            <p style={{ margin:0, padding:"12px 14px", fontSize:12, color:T.muted }}>No edits yet.</p>
+          ) : [...changelog].reverse().map((entry,i,arr) => {
+            const ts = new Date(entry.ts);
+            return (
+              <div key={entry.id} style={{ display:"flex", gap:10, padding:"8px 14px",
+                borderBottom:i<arr.length-1?"1px solid "+T.rowBd:"none" }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background:T.amber, marginTop:5, flexShrink:0 }}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"baseline", flexWrap:"wrap", marginBottom:2 }}>
+                    <span style={{ fontSize:11, color:T.text, fontWeight:500 }}>{entry.detail}</span>
+                    <span style={{ fontFamily:T.mono, fontSize:9.5, color:T.faint }}>
+                      {ts.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})} {ts.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                    {(entry.fields||[]).map((f,fi)=>(
+                      <span key={fi} style={{ fontSize:10.5, padding:"1px 7px", borderRadius:10, background:T.surface2,
+                        border:"1px solid "+T.border, color:T.muted, display:"flex", alignItems:"center", gap:4 }}>
+                        <span style={{ color:T.faint, fontSize:9.5 }}>{f.k}</span>
+                        <span style={{ textDecoration:"line-through" }}>{f.from}</span>
+                        <span style={{ color:T.faint }}>→</span>
+                        <span style={{ color:T.text }}>{f.to}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {RISK_CATEGORIES.map(cat => {
         const col = COLOR_MAP[cat.color] || COLOR_MAP.gray;
-        const items = cat.items.filter(it => !q ||
-          it.sub.toLowerCase().includes(q) || it.aspect.toLowerCase().includes(q) ||
-          effectiveRef(it).toLowerCase().includes(q) || it.id.includes(q));
+        const items = cat.items.filter(it => {
+          if (!q) return true;
+          if (it.sub.toLowerCase().includes(q) || it.aspect.toLowerCase().includes(q) || it.id.includes(q)) return true;
+          return citationsFor(it).some(c => c.name.toLowerCase().includes(q) || c.url.toLowerCase().includes(q));
+        });
         if (!items.length) return null;
         return (
           <div key={cat.cat} style={{ marginBottom:22 }}>
@@ -1760,90 +1865,107 @@ function LegalReferencesPanel({ search, notify }) {
               </span>
             </div>
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
-              <colgroup><col style={{width:68}}/><col style={{width:"26%"}}/><col/><col style={{width:56}}/></colgroup>
+              <colgroup><col style={{width:68}}/><col style={{width:"24%"}}/><col/></colgroup>
               <thead><tr>
                 <th style={th}>ID</th><th style={th}>Item</th><th style={th}>Legal / regulatory reference</th>
-                <th style={{...th,textAlign:"right"}}></th>
               </tr></thead>
               <tbody>
-                {items.map(item => {
-                  const override  = overrides[item.id];
-                  const isEditing = editingId === item.id;
-                  return (
-                    <tr key={item.id} style={{ borderBottom:"1px solid "+T.rowBd }}>
-                      <td style={{ padding:"9px 10px 9px 0", fontFamily:T.mono, fontSize:10, color:T.faint, verticalAlign:"top" }}>
-                        {item.id}
-                      </td>
-                      <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
-                        <div style={{ fontSize:12.5, fontWeight:500, color:T.text }}>{item.sub}</div>
-                        <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:2, lineHeight:1.4 }}>{item.aspect}</div>
-                      </td>
-                      <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
-                        {isEditing ? (
-                          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                            <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={2}
-                              style={{ width:"100%", boxSizing:"border-box", fontSize:12.5, padding:"5px 8px",
-                                       border:"1px solid "+T.tealBd, borderRadius:5, background:T.surface, color:T.text,
-                                       fontFamily:T.sans, resize:"vertical" }}/>
-                            <div style={{ display:"flex", gap:6 }}>
-                              <button onClick={()=> armedSave===item.id ? commitEdit(item) : armSave(item.id)}
-                                style={{ fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:5, cursor:"pointer",
-                                         border:"1px solid "+(armedSave===item.id?T.amberBd:T.tealBd),
-                                         background:armedSave===item.id?T.amberBg:T.tealBg,
-                                         color:armedSave===item.id?T.amber:T.teal, fontFamily:T.sans }}>
-                                {armedSave===item.id ? "Confirm save?" : "Save"}
-                              </button>
-                              <button onClick={cancelEdit}
-                                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
-                                         border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-start" }}>
-                            {parseLegalRef(effectiveRef(item)).map((p,i) => (
-                              <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, flexWrap:"wrap" }}>
-                                <a href={legalRefLink(p.cite)} target="_blank" rel="noopener noreferrer"
-                                  style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
-                                           borderBottom:"1px solid "+T.tealBd }}>
-                                  {p.cite}
-                                </a>
-                                {p.qualifier && (
-                                  <span style={{ fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:3,
-                                    background:p.tag==="m"?T.redBg:p.tag==="bp"?T.tealBg:T.slateBg,
-                                    color:p.tag==="m"?T.red:p.tag==="bp"?T.teal:T.slate }}>
-                                    {p.qualifier}
-                                  </span>
+                {items.map(item => (
+                  <tr key={item.id} style={{ borderBottom:"1px solid "+T.rowBd }}>
+                    <td style={{ padding:"9px 10px 9px 0", fontFamily:T.mono, fontSize:10, color:T.faint, verticalAlign:"top" }}>
+                      {item.id}
+                    </td>
+                    <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
+                      <div style={{ fontSize:12.5, fontWeight:500, color:T.text }}>{item.sub}</div>
+                      <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:2, lineHeight:1.4 }}>{item.aspect}</div>
+                    </td>
+                    <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
+                      <div style={{ display:"flex", flexDirection:"column", gap:8, alignItems:"flex-start" }}>
+                        {citationsFor(item).map(c => (
+                          <div key={c.key} style={{ width:"100%" }}>
+                            {editingKey === c.key ? (
+                              <div style={{ display:"flex", flexDirection:"column", gap:5, padding:"8px 10px",
+                                            border:"1px solid "+T.tealBd, borderRadius:6, background:T.tealBg }}>
+                                <label style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                                  <span style={{ fontSize:9.5, fontWeight:600, color:T.muted, textTransform:"uppercase", letterSpacing:"0.06em" }}>Name</span>
+                                  <input value={draftName} onChange={e=>setDraftName(e.target.value)}
+                                    style={{ fontSize:12.5, padding:"4px 7px", border:"1px solid "+T.border, borderRadius:4,
+                                             background:T.surface, color:T.text, fontFamily:T.sans }}/>
+                                </label>
+                                <label style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                                  <span style={{ fontSize:9.5, fontWeight:600, color:T.muted, textTransform:"uppercase", letterSpacing:"0.06em" }}>Link</span>
+                                  <input value={draftUrl} onChange={e=>setDraftUrl(e.target.value)}
+                                    style={{ fontSize:11.5, padding:"4px 7px", border:"1px solid "+T.border, borderRadius:4,
+                                             background:T.surface, color:T.text, fontFamily:T.mono }}/>
+                                </label>
+                                <div style={{ display:"flex", gap:6, marginTop:2 }}>
+                                  <button onClick={()=> armedSave===c.key ? commitEdit(item,c) : armSave(c.key)}
+                                    style={btn(armedSave===c.key, "save")}>
+                                    {armedSave===c.key ? "Confirm save?" : "Save"}
+                                  </button>
+                                  <button onClick={cancelEdit} style={btn(false, "cancel")}>Cancel</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                                  <a href={c.url} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
+                                             borderBottom:"1px solid "+T.tealBd }}>
+                                    {c.name}
+                                  </a>
+                                  {c.qualifier && (
+                                    <span style={{ fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:3,
+                                      background:c.tag==="m"?T.redBg:c.tag==="bp"?T.tealBg:T.slateBg,
+                                      color:c.tag==="m"?T.red:c.tag==="bp"?T.teal:T.slate }}>
+                                      {c.qualifier}
+                                    </span>
+                                  )}
+                                  <button className="hit" onClick={()=>startEditClick(c)}
+                                    aria-label={(armedEdit===c.key?"Confirm edit ":"Edit ")+c.name}
+                                    style={{ ...btn(armedEdit===c.key, "edit"), padding:"2px 8px", fontSize:10 }}>
+                                    {armedEdit===c.key ? "Confirm edit?" : "Edit"}
+                                  </button>
+                                  <button className="hit" onClick={()=>setOpenNoteKey(k=>k===c.key?null:c.key)}
+                                    aria-label={(notes[c.key]?"Edit note for ":"Add note for ")+c.name}
+                                    style={{ padding:"2px 8px", fontSize:10, fontWeight:600, borderRadius:5, cursor:"pointer",
+                                             fontFamily:T.sans, border:"1px solid "+(notes[c.key]?T.purpleBd:T.border),
+                                             background:notes[c.key]?T.purpleBg:"transparent",
+                                             color:notes[c.key]?T.purple:T.muted }}>
+                                    {notes[c.key] ? "Note ✓" : "+ Note"}
+                                  </button>
+                                  {c.override && (
+                                    <span style={{ fontSize:10, color:T.muted, fontStyle:"italic" }}>
+                                      Edited {new Date(c.override.editedAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                                      {" — "}
+                                      <button onClick={()=>revertCitation(item,c)}
+                                        style={{ fontSize:10, color:T.teal, background:"none", border:"none", padding:0,
+                                                 cursor:"pointer", textDecoration:"underline", fontFamily:"inherit" }}>
+                                        revert to original
+                                      </button>
+                                    </span>
+                                  )}
+                                </div>
+                                {openNoteKey === c.key && (
+                                  <textarea value={notes[c.key]||""} onChange={e=>setNote(c.key, e.target.value)} rows={2}
+                                    placeholder="Note for this project only — e.g. why this does or doesn't apply here"
+                                    style={{ width:"100%", boxSizing:"border-box", fontSize:12, padding:"5px 8px",
+                                             border:"1px solid "+T.purpleBd, borderRadius:5, background:T.surface, color:T.text,
+                                             fontFamily:T.sans, resize:"vertical" }}/>
                                 )}
-                              </span>
-                            ))}
-                            {override && (
-                              <span style={{ fontSize:10, color:T.muted, fontStyle:"italic" }}>
-                                Edited {new Date(override.editedAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-                                {" — "}
-                                <button onClick={()=>revert(item)}
-                                  style={{ fontSize:10, color:T.teal, background:"none", border:"none", padding:0,
-                                           cursor:"pointer", textDecoration:"underline", fontFamily:"inherit" }}>
-                                  revert to original
-                                </button>
-                              </span>
+                                {openNoteKey !== c.key && notes[c.key] && (
+                                  <p style={{ margin:0, fontSize:11, color:T.purple, fontStyle:"italic", lineHeight:1.4 }}>
+                                    {notes[c.key]}
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </td>
-                      <td style={{ padding:"9px 0 9px 10px", textAlign:"right", verticalAlign:"top" }}>
-                        {!isEditing && (
-                          <button className="hit" onClick={()=>startEdit(item)} aria-label={"Edit legal reference for "+item.sub}
-                            style={{ fontSize:11, color:T.muted, background:"transparent", border:"none", cursor:"pointer",
-                                     padding:"4px 6px", fontFamily:T.sans }}>
-                            Edit
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1960,7 +2082,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
       <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
 
         {/* ══ LEGAL REFERENCES — register of every guide-word item's citation ══ */}
-        {mode === "legal" && <LegalReferencesPanel search={screenSearch} notify={notify}/>}
+        {mode === "legal" && <LegalReferencesPanel search={screenSearch} notify={notify} project={project} onChange={onChange}/>}
 
         {/* ══ RISKS GUIDE — checklist layout ═══════════════════════════════════ */}
         {view === "guide" && isRisks && (() => {
@@ -3573,6 +3695,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             && !Array.isArray(src.footprintCorOverrides)) ? src.footprintCorOverrides : {},
           screeningSkips: (src.screeningSkips && typeof src.screeningSkips === "object"
             && !Array.isArray(src.screeningSkips)) ? src.screeningSkips : {},
+          legalRefNotes: (src.legalRefNotes && typeof src.legalRefNotes === "object"
+            && !Array.isArray(src.legalRefNotes)) ? src.legalRefNotes : {},
           footprintMeta: Array.isArray(src.footprintMeta) ? src.footprintMeta : [],
           // Footprint result — strip row arrays (they're large and session-only)
           footprint: src.footprint ? stripForSave(src.footprint) : null,
