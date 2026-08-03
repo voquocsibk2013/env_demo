@@ -1717,7 +1717,10 @@ const TH = ({ children }) => (
 //
 // Notes are the opposite of the reference data: per-project (project.legalRefNotes),
 // free-form, no barriers — scratch space for "why this does/doesn't apply here".
-function LegalReferencesPanel({ search, notify, project, onChange }) {
+// project omitted (undefined) → the standalone, global, fully-editable page (Portfolio-level).
+// project supplied → the embedded, per-project view: read-only reference data, notes only.
+function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) {
+  const editable = !project;
   const OVERRIDE_KEY  = "env-legalref-overrides";
   const CHANGELOG_KEY = "env-legalref-changelog";
   const [overrides, setOverrides] = useState(() => {
@@ -1727,6 +1730,7 @@ function LegalReferencesPanel({ search, notify, project, onChange }) {
     try { return JSON.parse(localStorage.getItem(CHANGELOG_KEY) || "[]"); } catch { return []; }
   });
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [selfSearch, setSelfSearch] = useState("");  // standalone page owns its own search; embedded reuses the caller's
   const [armedEdit, armEdit] = useArmedConfirm();  // "<itemId>#<idx>" armed to ENTER edit mode
   const [armedSave, armSave] = useArmedConfirm();  // "<itemId>#<idx>" armed to COMMIT
   const [editingKey, setEditingKey] = useState(null);
@@ -1740,8 +1744,8 @@ function LegalReferencesPanel({ search, notify, project, onChange }) {
     const next = [...changelog, entry];
     setChangelog(next); localStorage.setItem(CHANGELOG_KEY, JSON.stringify(next));
   };
-  const notes    = project.legalRefNotes || {};
-  const setNote  = (key, text) => onChange({ ...project, legalRefNotes: { ...notes, [key]: text } });
+  const notes    = project?.legalRefNotes || {};
+  const setNote  = (key, text) => project && onChange({ ...project, legalRefNotes: { ...notes, [key]: text } });
 
   // Effective {cite, url, qualifier, tag} for citation idx of item, folding in any override.
   const citationsFor = item => parseLegalRef(item.legalRef).map((p, idx) => {
@@ -1784,7 +1788,7 @@ function LegalReferencesPanel({ search, notify, project, onChange }) {
     notify("Reverted to original reference — " + item.id);
   };
 
-  const q  = (search||"").trim().toLowerCase();
+  const q  = ((search !== undefined ? search : selfSearch)||"").trim().toLowerCase();
   const th = { textAlign:"left", fontSize:TYPE.data, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase",
                color:T.muted, padding:"0 10px 7px 0", borderBottom:"1px solid "+T.border };
   const btn = (armed, kind) => ({
@@ -1796,23 +1800,22 @@ function LegalReferencesPanel({ search, notify, project, onChange }) {
 
   return (
     <div>
-      <p style={{ fontSize:12.5, color:T.muted, margin:"0 0 12px", lineHeight:1.6, maxWidth:680 }}>
-        Every Risks guide-word item's <strong style={{color:T.text}}>Legal / regulatory reference</strong> in one place —
-        the same text that prefills the field when that item is added from the Risks tab. Each law or regulation has
-        its own name and link, edited independently. Links search the official source register by default; they are
-        lookup aids, not verified deep links, until you replace one with a direct URL. Reference edits are global —
-        they apply to every project — and can always be reverted to the shipped original. Notes are the opposite:
-        private to this project, for recording why a reference does or doesn't apply here.
-      </p>
+      {search === undefined && (
+        <input value={selfSearch} onChange={e=>setSelfSearch(e.target.value)} placeholder="Search references..."
+          style={{ width:240, padding:"6px 10px", fontSize:12, border:"1px solid "+T.border, borderRadius:6,
+                   background:T.surface, color:T.text, marginBottom:16, display:"block" }}/>
+      )}
 
-      <div {...clickable(()=>setHistoryOpen(o=>!o), "Edit history")} aria-expanded={historyOpen}
-        style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", marginBottom:16,
-                 background:T.surface2, border:"1px solid "+T.border, borderRadius:6, cursor:"pointer" }}>
-        <span style={{ fontSize:11.5, fontWeight:600, color:T.text }}>Edit history</span>
-        <span style={{ fontSize:TYPE.data, color:T.muted }}>{changelog.length} change{changelog.length!==1?"s":""} · global, all projects</span>
-        <span style={{ fontSize:11, color:T.faint, marginLeft:"auto" }}>{historyOpen?"▾":"▸"}</span>
-      </div>
-      {historyOpen && (
+      {editable && (
+        <div {...clickable(()=>setHistoryOpen(o=>!o), "Edit history")} aria-expanded={historyOpen}
+          style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", marginBottom:16,
+                   background:T.surface2, border:"1px solid "+T.border, borderRadius:6, cursor:"pointer" }}>
+          <span style={{ fontSize:11.5, fontWeight:600, color:T.text }}>Edit history</span>
+          <span style={{ fontSize:TYPE.data, color:T.muted }}>{changelog.length} change{changelog.length!==1?"s":""} · global, all projects</span>
+          <span style={{ fontSize:11, color:T.faint, marginLeft:"auto" }}>{historyOpen?"▾":"▸"}</span>
+        </div>
+      )}
+      {editable && historyOpen && (
         <div style={{ marginBottom:20, border:"1px solid "+T.border, borderRadius:6, overflow:"hidden" }}>
           {changelog.length===0 ? (
             <p style={{ margin:0, padding:"12px 14px", fontSize:12, color:T.muted }}>No edits yet.</p>
@@ -1921,20 +1924,24 @@ function LegalReferencesPanel({ search, notify, project, onChange }) {
                                       {c.qualifier}
                                     </span>
                                   )}
-                                  <button className="hit" onClick={()=>startEditClick(c)}
-                                    aria-label={(armedEdit===c.key?"Confirm edit ":"Edit ")+c.name}
-                                    style={{ ...btn(armedEdit===c.key, "edit"), padding:"2px 8px", fontSize:10 }}>
-                                    {armedEdit===c.key ? "Confirm edit?" : "Edit"}
-                                  </button>
-                                  <button className="hit" onClick={()=>setOpenNoteKey(k=>k===c.key?null:c.key)}
-                                    aria-label={(notes[c.key]?"Edit note for ":"Add note for ")+c.name}
-                                    style={{ padding:"2px 8px", fontSize:10, fontWeight:600, borderRadius:5, cursor:"pointer",
-                                             fontFamily:T.sans, border:"1px solid "+(notes[c.key]?T.purpleBd:T.border),
-                                             background:notes[c.key]?T.purpleBg:"transparent",
-                                             color:notes[c.key]?T.purple:T.muted }}>
-                                    {notes[c.key] ? "Note ✓" : "+ Note"}
-                                  </button>
-                                  {c.override && (
+                                  {editable && (
+                                    <button className="hit" onClick={()=>startEditClick(c)}
+                                      aria-label={(armedEdit===c.key?"Confirm edit ":"Edit ")+c.name}
+                                      style={{ ...btn(armedEdit===c.key, "edit"), padding:"2px 8px", fontSize:10 }}>
+                                      {armedEdit===c.key ? "Confirm edit?" : "Edit"}
+                                    </button>
+                                  )}
+                                  {project && (
+                                    <button className="hit" onClick={()=>setOpenNoteKey(k=>k===c.key?null:c.key)}
+                                      aria-label={(notes[c.key]?"Edit note for ":"Add note for ")+c.name}
+                                      style={{ padding:"2px 8px", fontSize:10, fontWeight:600, borderRadius:5, cursor:"pointer",
+                                               fontFamily:T.sans, border:"1px solid "+(notes[c.key]?T.purpleBd:T.border),
+                                               background:notes[c.key]?T.purpleBg:"transparent",
+                                               color:notes[c.key]?T.purple:T.muted }}>
+                                      {notes[c.key] ? "Note ✓" : "+ Note"}
+                                    </button>
+                                  )}
+                                  {editable && c.override && (
                                     <span style={{ fontSize:10, color:T.muted, fontStyle:"italic" }}>
                                       Edited {new Date(c.override.editedAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
                                       {" — "}
@@ -1946,7 +1953,7 @@ function LegalReferencesPanel({ search, notify, project, onChange }) {
                                     </span>
                                   )}
                                 </div>
-                                {openNoteKey === c.key && (
+                                {project && openNoteKey === c.key && (
                                   <textarea value={notes[c.key]||""} onChange={e=>setNote(c.key, e.target.value)} rows={2}
                                     placeholder="Note for this project only — e.g. why this does or doesn't apply here"
                                     style={{ width:"100%", boxSizing:"border-box", fontSize:12, padding:"5px 8px",
@@ -5772,7 +5779,8 @@ function PortfolioView({ projects, onClose, onSelect }) {
 }
 
 
-function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate, onPortfolio, portfolioActive }) {
+function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, zoom, onZoom, onDuplicate,
+                    onPortfolio, portfolioActive, onLegalRefs, legalRefsActive }) {
   const [collapsed, setCollapsed] = useState(false);
   if (collapsed) return (
     <div style={{ width:40, flexShrink:0, background:T.sbBg, display:"flex", flexDirection:"column",
@@ -5824,6 +5832,19 @@ function Sidebar({ projects, activeId, onSelect, onNew, isDark, onToggleTheme, z
             <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
           </svg>
           Portfolio overview
+        </button>
+        <button onClick={onLegalRefs}
+          style={{ width:"100%", marginTop:6, padding:"6px 10px", borderRadius:5,
+                   border:"1px solid "+(legalRefsActive?"var(--teal-bd)":"var(--sb-bd)"),
+                   background:legalRefsActive?"var(--teal)":"transparent",
+                   color:legalRefsActive?"#fff":"var(--sb-muted)",
+                   fontFamily:"var(--sans,system-ui)", fontSize:11, fontWeight:500,
+                   cursor:"pointer", display:"flex", alignItems:"center", gap:6, justifyContent:"center" }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M4 1.5h6l3 3v10a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V2a.5.5 0 0 1 .5-.5Z"/>
+            <path d="M6 8h4M6 10.5h4M6 5.5h1.5"/>
+          </svg>
+          Legal references
         </button>
       </div>
       <div style={{ flex:1, overflowY:"auto", padding:"10px 8px" }}>
@@ -7651,6 +7672,7 @@ export default function App() {
   const [isDark,   setIsDark]   = useState(false);
   const [zoom,    setZoom]    = useState(() => parseFloat(localStorage.getItem("env-zoom")||"1"));
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [showLegalRefs, setShowLegalRefs] = useState(false);  // global, editable — Portfolio-level, not tied to a project
   const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
@@ -7776,9 +7798,18 @@ export default function App() {
     <div style={{ display:"flex", minHeight:"100vh", fontFamily:T.sans, color:T.text, background:T.bg }}>
       <Sidebar projects={projects} activeId={activeId} onSelect={setActiveId} onNew={createProject}
                isDark={isDark} onToggleTheme={toggleTheme} zoom={zoom} onZoom={handleZoom} onDuplicate={duplicateProject}
-               onPortfolio={()=>setShowPortfolio(v=>!v)} portfolioActive={showPortfolio}/>
+               onPortfolio={()=>{ setShowPortfolio(v=>!v); setShowLegalRefs(false); }} portfolioActive={showPortfolio}
+               onLegalRefs={()=>{ setShowLegalRefs(v=>!v); setShowPortfolio(false); }} legalRefsActive={showLegalRefs}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column", zoom }}>
-        {showPortfolio ? (
+        {showLegalRefs ? (
+          <div style={{ flex:1, overflow:"auto", padding:"1.5rem 1.75rem" }}>
+            <h1 style={{ margin:"0 0 3px", fontSize:18, fontWeight:700, color:"var(--text)" }}>Legal &amp; regulatory references</h1>
+            <p style={{ margin:"0 0 20px", fontSize:12, color:"var(--muted)" }}>
+              Global — shared by every project's Risks guide-word checklist.
+            </p>
+            <LegalReferencesPanel/>
+          </div>
+        ) : showPortfolio ? (
           <div style={{ flex:1, overflow:"auto" }}>
             <PortfolioView projects={projects} onClose={()=>setShowPortfolio(false)} onSelect={setActiveId}/>
           </div>
