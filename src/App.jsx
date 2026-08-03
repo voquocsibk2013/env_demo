@@ -432,6 +432,40 @@ const ABNORMAL_CONDITIONS = [
   'Other abnormal conditions',
 ];
 
+// ── Legal reference → source-document link heuristics ─────────────────────────
+// Search-style links to the official register/source, not verified deep links —
+// there is no reliable per-citation URL for 68 items x up to 3 references each.
+const LEGAL_LINK_RULES = [
+  { test: /norsok/i,                                  url: c => "https://www.standard.no/search/?query=" + encodeURIComponent(c) },
+  { test: /marpol|ballast water management|imo bwm/i, url: () => "https://www.imo.org/en/about/conventions/pages/default.aspx" },
+  { test: /london protocol/i,                         url: () => "https://www.imo.org/en/OurWork/Environment/Pages/London-Convention-Protocol.aspx" },
+  { test: /ospar/i,                                   url: c => "https://www.ospar.org/search?query=" + encodeURIComponent(c) },
+  { test: /reach|f-gas|habitats directive|birds directive|eia directive|\bwfd\b|methane reg|ppwr|\beed\b|paints directive|\d{4}\/\d+|csrd|esrs/i,
+                                                        url: c => "https://eur-lex.europa.eu/search.html?scope=EURLEX&text=" + encodeURIComponent(c) },
+  { test: /ifc ps/i,          url: () => "https://www.ifc.org/en/insights-reports/2012/ifc-performance-standards" },
+  { test: /bern convention/i, url: () => "https://www.coe.int/en/web/bern-convention" },
+  { test: /ramsar/i,          url: () => "https://www.ramsar.org/" },
+  { test: /aarhus/i,          url: () => "https://unece.org/environment-policy/public-participation/aarhus-convention" },
+  { test: /ilo[- ]?169/i,     url: () => "https://www.ilo.org/international-labour-standards/indigenous-and-tribal-peoples-convention-1989-no-169" },
+];
+function legalRefLink(citeText) {
+  for (const rule of LEGAL_LINK_RULES) if (rule.test.test(citeText)) return rule.url(citeText);
+  const bare = citeText.replace(/§.*/,"").replace(/kap\.?\s*\S*/i,"").trim();  // default: Norwegian statute/forskrift — search Lovdata
+  return "https://lovdata.no/register/lover?q=" + encodeURIComponent(bare);
+}
+// Split "Law §x (M); Other reg (BP)" into per-instrument citations with a status tag.
+function parseLegalRef(ref) {
+  return (ref||"").split(/;\s+/).filter(Boolean).map(part => {
+    const m = part.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+    if (!m) return { cite: part.trim(), qualifier:"", tag:"none" };
+    const q = m[2].trim();
+    const startsM = /^M(\s|,|$|\.)/.test(q) || q === "M";
+    const hasBP = /BP/.test(q);
+    const tag = startsM && hasBP ? "mixed" : startsM ? "m" : /^BP/.test(q) ? "bp" : "mixed";
+    return { cite: m[1].trim(), qualifier:q, tag };
+  });
+}
+
 // ── Color map for guide word categories ──────────────────────────────────────
 const COLOR_MAP = {
   teal:   { bg:"var(--cat-teal-bg)",   border:"var(--cat-teal-bd)",   text:"var(--cat-teal-tx)",   head:"var(--cat-teal-hd)" },
@@ -1660,6 +1694,165 @@ const TH = ({ children }) => (
   </th>
 );
 
+// ── Legal references register (Screening / Legal references sub-tab) ──────────
+// Edits are stored as overrides layered on top of RISK_CATEGORIES' shipped
+// legalRef values (localStorage, global — not per-project, since the guide-word
+// register itself is global). The shipped baseline is never mutated: an override
+// always keeps its own "original" value, so a revert is always possible and nothing
+// is silently, permanently lost. Two barriers guard a write: entering edit mode is
+// a deliberate click (not inline-editable), and saving needs a second confirm click
+// (the app's standard arm-then-fire pattern) before it commits.
+function LegalReferencesPanel({ search, notify }) {
+  const OVERRIDE_KEY = "env-legalref-overrides";
+  const [overrides, setOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(OVERRIDE_KEY) || "{}"); } catch { return {}; }
+  });
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft]         = useState("");
+  const [armedSave, armSave]      = useArmedConfirm();
+
+  const persist = next => { setOverrides(next); localStorage.setItem(OVERRIDE_KEY, JSON.stringify(next)); };
+  const effectiveRef = item => overrides[item.id]?.value ?? item.legalRef;
+
+  const startEdit  = item => { setEditingId(item.id); setDraft(effectiveRef(item)); armSave(null); };
+  const cancelEdit = () => { setEditingId(null); setDraft(""); armSave(null); };
+  const commitEdit = item => {
+    if (!draft.trim()) return;
+    const next = { ...overrides, [item.id]: {
+      value: draft.trim(), editedAt: new Date().toISOString(),
+      original: overrides[item.id]?.original ?? item.legalRef,
+    }};
+    persist(next);
+    setEditingId(null); setDraft(""); armSave(null);
+    notify("Reference updated — " + item.id);
+  };
+  const revert = item => {
+    const next = { ...overrides }; delete next[item.id];
+    persist(next);
+    notify("Reverted to original reference — " + item.id);
+  };
+
+  const q  = (search||"").trim().toLowerCase();
+  const th = { textAlign:"left", fontSize:TYPE.data, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase",
+               color:T.muted, padding:"0 10px 7px 0", borderBottom:"1px solid "+T.border };
+
+  return (
+    <div>
+      <p style={{ fontSize:12.5, color:T.muted, margin:"0 0 16px", lineHeight:1.6, maxWidth:680 }}>
+        Every Risks guide-word item's <strong style={{color:T.text}}>Legal / regulatory reference</strong> in one place —
+        the same text that prefills the field when that item is added from the Risks tab. Links search the official
+        source register; they are lookup aids, not verified deep links. Edits made here apply everywhere this reference
+        is used, are stored on this device only, and can always be reverted to the shipped original.
+      </p>
+      {RISK_CATEGORIES.map(cat => {
+        const col = COLOR_MAP[cat.color] || COLOR_MAP.gray;
+        const items = cat.items.filter(it => !q ||
+          it.sub.toLowerCase().includes(q) || it.aspect.toLowerCase().includes(q) ||
+          effectiveRef(it).toLowerCase().includes(q) || it.id.includes(q));
+        if (!items.length) return null;
+        return (
+          <div key={cat.cat} style={{ marginBottom:22 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
+                          background:col.bg, borderLeft:"3px solid "+col.head, borderRadius:5, marginBottom:8 }}>
+              <span style={{ fontSize:12.5, fontWeight:600, color:col.head }}>{cat.cat}</span>
+              <span style={{ fontSize:TYPE.data, color:T.muted, marginLeft:"auto" }}>
+                {items.length} item{items.length!==1?"s":""}
+              </span>
+            </div>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <colgroup><col style={{width:68}}/><col style={{width:"26%"}}/><col/><col style={{width:56}}/></colgroup>
+              <thead><tr>
+                <th style={th}>ID</th><th style={th}>Item</th><th style={th}>Legal / regulatory reference</th>
+                <th style={{...th,textAlign:"right"}}></th>
+              </tr></thead>
+              <tbody>
+                {items.map(item => {
+                  const override  = overrides[item.id];
+                  const isEditing = editingId === item.id;
+                  return (
+                    <tr key={item.id} style={{ borderBottom:"1px solid "+T.rowBd }}>
+                      <td style={{ padding:"9px 10px 9px 0", fontFamily:T.mono, fontSize:10, color:T.faint, verticalAlign:"top" }}>
+                        {item.id}
+                      </td>
+                      <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
+                        <div style={{ fontSize:12.5, fontWeight:500, color:T.text }}>{item.sub}</div>
+                        <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:2, lineHeight:1.4 }}>{item.aspect}</div>
+                      </td>
+                      <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
+                        {isEditing ? (
+                          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                            <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={2}
+                              style={{ width:"100%", boxSizing:"border-box", fontSize:12.5, padding:"5px 8px",
+                                       border:"1px solid "+T.tealBd, borderRadius:5, background:T.surface, color:T.text,
+                                       fontFamily:T.sans, resize:"vertical" }}/>
+                            <div style={{ display:"flex", gap:6 }}>
+                              <button onClick={()=> armedSave===item.id ? commitEdit(item) : armSave(item.id)}
+                                style={{ fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:5, cursor:"pointer",
+                                         border:"1px solid "+(armedSave===item.id?T.amberBd:T.tealBd),
+                                         background:armedSave===item.id?T.amberBg:T.tealBg,
+                                         color:armedSave===item.id?T.amber:T.teal, fontFamily:T.sans }}>
+                                {armedSave===item.id ? "Confirm save?" : "Save"}
+                              </button>
+                              <button onClick={cancelEdit}
+                                style={{ fontSize:11, padding:"4px 10px", borderRadius:5, cursor:"pointer",
+                                         border:"1px solid "+T.border, background:"transparent", color:T.muted, fontFamily:T.sans }}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-start" }}>
+                            {parseLegalRef(effectiveRef(item)).map((p,i) => (
+                              <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, flexWrap:"wrap" }}>
+                                <a href={legalRefLink(p.cite)} target="_blank" rel="noopener noreferrer"
+                                  style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
+                                           borderBottom:"1px solid "+T.tealBd }}>
+                                  {p.cite}
+                                </a>
+                                {p.qualifier && (
+                                  <span style={{ fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:3,
+                                    background:p.tag==="m"?T.redBg:p.tag==="bp"?T.tealBg:T.slateBg,
+                                    color:p.tag==="m"?T.red:p.tag==="bp"?T.teal:T.slate }}>
+                                    {p.qualifier}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                            {override && (
+                              <span style={{ fontSize:10, color:T.muted, fontStyle:"italic" }}>
+                                Edited {new Date(override.editedAt).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                                {" — "}
+                                <button onClick={()=>revert(item)}
+                                  style={{ fontSize:10, color:T.teal, background:"none", border:"none", padding:0,
+                                           cursor:"pointer", textDecoration:"underline", fontFamily:"inherit" }}>
+                                  revert to original
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding:"9px 0 9px 10px", textAlign:"right", verticalAlign:"top" }}>
+                        {!isEditing && (
+                          <button className="hit" onClick={()=>startEdit(item)} aria-label={"Edit legal reference for "+item.sub}
+                            style={{ fontSize:11, color:T.muted, background:"transparent", border:"none", cursor:"pointer",
+                                     padding:"4px 6px", fontFamily:T.sans }}>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Screening tab ─────────────────────────────────────────────────────────────
 function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
   const [mode, setMode]               = useState("risks");
@@ -1738,15 +1931,15 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
       {/* ── Top bar ── */}
       <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-        <SubTabs tabs={[{id:"risks",label:"Risks"},{id:"opps",label:"Opportunities"}]}
+        <SubTabs tabs={[{id:"risks",label:"Risks"},{id:"opps",label:"Opportunities"},{id:"legal",label:"Legal references"}]}
           active={mode} onChange={m=>{ setMode(m); setView("guide"); setScreenSearch(""); }}/>
-        {view === "guide" && (
+        {(view === "guide" || mode === "legal") && (
           <input value={screenSearch} onChange={e=>setScreenSearch(e.target.value)}
-            placeholder={isRisks?"Search guide words...":"Search opportunity categories..."}
+            placeholder={mode==="legal"?"Search references...":isRisks?"Search guide words...":"Search opportunity categories..."}
             style={{ width:200, padding:"5px 10px", fontSize:12, border:"1px solid "+T.border,
                      borderRadius:6, background:T.surface, color:T.text }}/>
         )}
-        {view === "guide" && (
+        {view === "guide" && mode !== "legal" && (
           <button onClick={() => setView("form")}
             style={{ marginLeft:"auto", padding:"6px 14px", fontSize:12, borderRadius:6, border:"none",
                      background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer",
@@ -1765,6 +1958,9 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
 
       {/* ── Content ── */}
       <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
+
+        {/* ══ LEGAL REFERENCES — register of every guide-word item's citation ══ */}
+        {mode === "legal" && <LegalReferencesPanel search={screenSearch} notify={notify}/>}
 
         {/* ══ RISKS GUIDE — checklist layout ═══════════════════════════════════ */}
         {view === "guide" && isRisks && (() => {
@@ -1891,7 +2087,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
         })()}
 
                 {/* ══ OPPORTUNITIES GUIDE — Scope-based with search ══════════════════════ */}
-        {view === "guide" && !isRisks && (() => {
+        {view === "guide" && mode === "opps" && (() => {
           const q = screenSearch.trim().toLowerCase();
           const matchBtn = b => !q ||
             (b.label||"").toLowerCase().includes(q) ||
@@ -2034,7 +2230,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
         )}
 
         {/* ══ OPPORTUNITY FORM ═════════════════════════════════════════════════════ */}
-        {view === "form" && !isRisks && (
+        {view === "form" && mode === "opps" && (
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
               <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:T.purple }}>Opportunity screening</h3>
