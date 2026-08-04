@@ -432,26 +432,140 @@ const ABNORMAL_CONDITIONS = [
   'Other abnormal conditions',
 ];
 
-// ── Legal reference → source-document link heuristics ─────────────────────────
-// Search-style links to the official register/source, not verified deep links —
-// there is no reliable per-citation URL for 68 items x up to 3 references each.
-const LEGAL_LINK_RULES = [
-  { test: /norsok/i,                                  url: c => "https://www.standard.no/search/?query=" + encodeURIComponent(c) },
-  { test: /marpol|ballast water management|imo bwm/i, url: () => "https://www.imo.org/en/about/conventions/pages/default.aspx" },
-  { test: /london protocol/i,                         url: () => "https://www.imo.org/en/OurWork/Environment/Pages/London-Convention-Protocol.aspx" },
-  { test: /ospar/i,                                   url: c => "https://www.ospar.org/search?query=" + encodeURIComponent(c) },
-  { test: /reach|f-gas|habitats directive|birds directive|eia directive|\bwfd\b|methane reg|ppwr|\beed\b|paints directive|\d{4}\/\d+|csrd|esrs/i,
-                                                        url: c => "https://eur-lex.europa.eu/search.html?scope=EURLEX&text=" + encodeURIComponent(c) },
-  { test: /ifc ps/i,          url: () => "https://www.ifc.org/en/insights-reports/2012/ifc-performance-standards" },
-  { test: /bern convention/i, url: () => "https://www.coe.int/en/web/bern-convention" },
-  { test: /ramsar/i,          url: () => "https://www.ramsar.org/" },
-  { test: /aarhus/i,          url: () => "https://unece.org/environment-policy/public-participation/aarhus-convention" },
-  { test: /ilo[- ]?169/i,     url: () => "https://www.ilo.org/international-labour-standards/indigenous-and-tribal-peoples-convention-1989-no-169" },
+// ── Legal reference → source-document deep links ──────────────────────────────
+// Canonical per-instrument URLs against the official publisher (lovdata.no,
+// eur-lex.europa.eu, imo.org, ospar.org, coe.int, standard.no, regjeringen.no).
+// Each was fetch-checked against the live document, EXCEPT the three marked
+// `unverified` below, whose publishers return 403 to any automated client —
+// those URLs come from the publisher's own search index and open normally in a
+// real browser, but should be spot-checked by hand before compliance sign-off.
+//
+// Where the publisher supports linking straight to a provision, `sec`/`chap`/
+// `anx` build that deep link; otherwise the citation lands on the document.
+// Lovdata section anchors were confirmed against real sections (e.g. §28 of
+// Forurensningsloven, §56a of Naturmangfoldloven, §28-1 of Pbl); Lovdata
+// KAPITTEL_ chapter anchors are search-confirmed rather than fetch-confirmed,
+// so a chapter cite degrades to the document front page at worst.
+const LD_LAW = id => ({ url:"https://lovdata.no/lov/"+id,
+                        sec:s=>"https://lovdata.no/lov/"+id+"/§"+s,
+                        chap:c=>"https://lovdata.no/dokument/NL/lov/"+id+"/KAPITTEL_"+c });
+const LD_FOR = id => ({ url:"https://lovdata.no/forskrift/"+id,
+                        sec:s=>"https://lovdata.no/forskrift/"+id+"/§"+s,
+                        chap:c=>"https://lovdata.no/dokument/SF/forskrift/"+id+"/KAPITTEL_"+c });
+const EURLEX = u  => ({ url:u, sec:s=>u+"#art_"+s });
+const PLAIN  = u  => ({ url:u });
+
+const LEGAL_SOURCES = [
+  // Not an instrument — this citation states that NO Norwegian standard exists
+  // (artificial light at night), so there is nothing to link to. url:null makes
+  // the register render it as plain text rather than a dead search link.
+  { test:/^no\s+NO\s+ALAN\b/i,                     url:null },
+  // ── Norwegian statutes (lover) ──
+  { test:/forurensningsloven/i,                    ...LD_LAW("1981-03-13-6") },
+  { test:/naturmangfoldloven/i,                    ...LD_LAW("2009-06-19-100") },
+  { test:/kulturminneloven/i,                      ...LD_LAW("1978-06-09-50") },
+  { test:/plan-?\s*og\s*bygningsloven|\bpbl\b/i,   ...LD_LAW("2008-06-27-71") },
+  { test:/petroleumsloven/i,                       ...LD_LAW("1996-11-29-72") },
+  { test:/vannressursloven/i,                      ...LD_LAW("2000-11-24-82") },
+  { test:/str[åa]levernloven/i,                    ...LD_LAW("2000-05-12-36") },
+  { test:/produktkontrolloven/i,                   ...LD_LAW("1976-06-11-79") },
+  { test:/reindriftsloven/i,                       ...LD_LAW("2007-06-15-40") },
+  { test:/finnmarksloven/i,                        ...LD_LAW("2005-06-17-85") },
+  { test:/vegtrafikkloven/i,                       ...LD_LAW("1965-06-18-4") },
+  { test:/havvernloven/i,                          ...LD_LAW("2025-06-10-33") },
+  { test:/co2-?avgift/i,                           ...LD_LAW("1990-12-21-72") },
+  // ── Norwegian regulations (forskrifter) ── specific names before generic ones
+  { test:/ballastvannforskriften/i,                ...LD_FOR("2017-09-08-1368") },
+  { test:/marpol-forskriften/i,                    ...LD_FOR("1983-06-16-1122") },
+  { test:/milj[øo]messig sikkerhet/i,              ...LD_FOR("2012-05-30-488") },
+  { test:/aktivitetsforskriften/i,                 ...LD_FOR("2010-04-29-613") },
+  { test:/innretningsforskriften/i,                ...LD_FOR("2010-04-29-634") },
+  { test:/forurensningsforskriften/i,              ...LD_FOR("2004-06-01-931") },
+  { test:/avfallsforskriften/i,                    ...LD_FOR("2004-06-01-930") },
+  { test:/produktforskriften/i,                    ...LD_FOR("2004-06-01-922") },
+  { test:/str[åa]levernforskriften/i,              ...LD_FOR("2016-12-16-1659") },
+  { test:/fremmede organismer/i,                   ...LD_FOR("2015-06-19-716") },
+  { test:/utf[øo]relse av arbeid/i,                ...LD_FOR("2011-12-06-1357") },
+  { test:/bruk av kj[øo]ret[øo]y/i,                ...LD_FOR("1990-01-25-92") },
+  { test:/tek17/i,                                 ...LD_FOR("2017-06-19-840") },
+  { test:/ledningsregistrering/i,                  ...LD_FOR("2020-12-18-2986") },
+  { test:/ku-forskrift/i,                          ...LD_FOR("2017-06-21-854") },
+  { test:/nox-?avgift/i,                           ...LD_FOR("2001-12-11-1451") },  // særavgiftsforskriften kap. 3-19
+  // ── EU (EUR-Lex) ── consolidated versions where per-article anchors need them
+  { test:/2009\/148/,                              ...EURLEX("https://eur-lex.europa.eu/eli/dir/2009/148/oj") },
+  { test:/2023\/1791|\beed\b/i,                    ...EURLEX("https://eur-lex.europa.eu/eli/dir/2023/1791/oj") },
+  { test:/2024\/573|f-gas/i,                       ...EURLEX("https://eur-lex.europa.eu/eli/reg/2024/573/oj") },
+  { test:/2024\/1787|methane reg/i,                ...EURLEX("https://eur-lex.europa.eu/eli/reg/2024/1787/oj") },
+  { test:/2004\/42|paints directive/i,             ...EURLEX("https://eur-lex.europa.eu/eli/dir/2004/42/2021-07-16") },
+  { test:/2025\/40|ppwr/i,                         ...EURLEX("https://eur-lex.europa.eu/eli/reg/2025/40/oj") },
+  { test:/2016\/1628/,                             ...EURLEX("https://eur-lex.europa.eu/eli/reg/2016/1628/oj") },
+  { test:/2008\/98/,                               ...EURLEX("https://eur-lex.europa.eu/eli/dir/2008/98/oj") },
+  { test:/2000\/60|\bwfd\b/i,                      ...EURLEX("https://eur-lex.europa.eu/eli/dir/2000/60/2026-05-10") },
+  { test:/2011\/92|eia dir/i,                      ...EURLEX("https://eur-lex.europa.eu/eli/dir/2011/92/2014-05-15") },
+  { test:/csrd|esrs/i,                             ...PLAIN("https://eur-lex.europa.eu/eli/reg_del/2023/2772/oj") },
+  { test:/reach|1907\/2006/i,   url:"https://eur-lex.europa.eu/eli/reg/2006/1907/2026-05-11",
+    sec:s=>"https://eur-lex.europa.eu/eli/reg/2006/1907/2026-05-11#art_"+s,
+    anx:a=>"https://eur-lex.europa.eu/eli/reg/2006/1907/2026-05-11#anx_"+a },
+  // ── International conventions & bodies ──
+  { test:/ospar dec/i,          ...PLAIN("https://www.ospar.org/documents?d=32703") },
+  { test:/ospar rec/i,          ...PLAIN("https://www.ospar.org/documents?d=32591") },
+  { test:/underwater noise/i,   ...PLAIN("https://www.ospar.org/work-areas/eiha/noise") },
+  { test:/ospar/i,              ...PLAIN("https://www.ospar.org/convention/text") },
+  { test:/bwm|ballast water management/i, ...PLAIN("https://www.imo.org/en/About/Conventions/Pages/International-Convention-for-the-Control-and-Management-of-Ships%27-Ballast-Water-and-Sediments-(BWM).aspx") },
+  { test:/london protocol/i,    ...PLAIN("https://www.imo.org/en/OurWork/Environment/Pages/London-Convention-Protocol.aspx") },
+  { test:/marpol/i,             ...PLAIN("https://www.imo.org/en/about/Conventions/Pages/International-Convention-for-the-Prevention-of-Pollution-from-Ships-(MARPOL).aspx") },
+  { test:/bern conv/i,          ...PLAIN("https://www.coe.int/en/web/bern-convention/texte-de-la-convention") },
+  { test:/ramsar/i,             ...PLAIN("https://www.ramsar.org/document/present-text-convention-wetlands"), unverified:true },
+  { test:/aarhus/i,             ...PLAIN("https://unece.org/environment-policy/public-participation/aarhus-convention/text"), unverified:true },
+  { test:/ilo[-\s]?169/i,       ...PLAIN("https://normlex.ilo.org/dyn/nrmlx_en/f?p=NORMLEXPUB:12100:0::NO::P12100_ILO_CODE:C169") },
+  { test:/ifc ps/i,             ...PLAIN("https://www.ifc.org/en/insights-reports/2012/ifc-performance-standards") },
+  // ── Standards & national guidance ── paid/landing pages, no provision anchors
+  { test:/norsok s-002/i,       ...PLAIN("https://online.standard.no/norsok-s-002-2025") },
+  { test:/norsok s-003/i,       ...PLAIN("https://online.standard.no/norsok-s-003-2017") },
+  { test:/iso 50001/i,          ...PLAIN("https://www.iso.org/standard/69426.html"), unverified:true },
+  { test:/ns 8176/i,            ...PLAIN("https://online.standard.no/ns-8176-2017") },
+  { test:/t-1442/i,             ...PLAIN("https://www.regjeringen.no/no/dokumenter/retningslinje-for-behandling-av-stoy-i-arealplanlegging/id2857574/") },
 ];
+
+const ROMAN_VAL = { I:1, V:5, X:10, L:50, C:100 };
+function romanToArabic(r) {
+  const s = String(r).toUpperCase();
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const v = ROMAN_VAL[s[i]], next = ROMAN_VAL[s[i+1]];
+    n += (next && v < next) ? -v : v;
+  }
+  return n;
+}
+// Turn one citation ("Forurensningsloven §11", "Aktivitetsforskriften Kap. XI")
+// into the deepest link its publisher supports.
 function legalRefLink(citeText) {
-  for (const rule of LEGAL_LINK_RULES) if (rule.test.test(citeText)) return rule.url(citeText);
-  const bare = citeText.replace(/§.*/,"").replace(/kap\.?\s*\S*/i,"").trim();  // default: Norwegian statute/forskrift — search Lovdata
-  return "https://lovdata.no/register/lover?q=" + encodeURIComponent(bare);
+  const src = LEGAL_SOURCES.find(s => s.test.test(citeText));
+  if (!src) {   // unknown instrument — fall back to a Lovdata search rather than a wrong deep link
+    const bare = citeText.replace(/§.*/,"").replace(/kap\.?\s*\S*/i,"").trim();
+    return "https://lovdata.no/register/lover?q=" + encodeURIComponent(bare);
+  }
+  if (src.anx) {                                     // "REACH Annex XVII"
+    const m = citeText.match(/annex\s+([IVXL]+)\b/i);
+    if (m) return src.anx(m[1].toUpperCase());
+  }
+  if (src.sec) {
+    // "§§4-6" / "§§3–5" is a RANGE of sections — deep-link the first of the range.
+    // "§5-3" / "§28-1" is a single COMPOUND section number — keep it whole.
+    const range = citeText.match(/§§\s*(\d+)/);
+    if (range) return src.sec(range[1]);
+    const one = citeText.match(/§\s*(\d+[a-z]?(?:-\d+)*)/i);
+    if (one) return src.sec(one[1]);
+    const art = citeText.match(/\bart\.?\s*(\d+)/i);  // EU: "Art.4", "Art.11"
+    if (art) return src.sec(art[1]);
+  }
+  if (src.chap) {
+    const roman = citeText.match(/kap\.?\s*([IVXL]+)\b/i);
+    if (roman) return src.chap(romanToArabic(roman[1]));
+    const arabic = citeText.match(/kap\.?\s*(\d+[a-z]?)/i);
+    if (arabic) return src.chap(arabic[1]);
+  }
+  return src.url;
 }
 // Split "Law §x (M); Other reg (BP)" into per-instrument citations with a status tag.
 function parseLegalRef(ref) {
@@ -1855,7 +1969,7 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
         const items = cat.items.filter(it => {
           if (!q) return true;
           if (it.sub.toLowerCase().includes(q) || it.aspect.toLowerCase().includes(q) || it.id.includes(q)) return true;
-          return citationsFor(it).some(c => c.name.toLowerCase().includes(q) || c.url.toLowerCase().includes(q));
+          return citationsFor(it).some(c => c.name.toLowerCase().includes(q) || (c.url||"").toLowerCase().includes(q));
         });
         if (!items.length) return null;
         return (
@@ -1912,11 +2026,16 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
                             ) : (
                               <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                                  <a href={c.url} target="_blank" rel="noopener noreferrer"
-                                    style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
-                                             borderBottom:"1px solid "+T.tealBd }}>
-                                    {c.name}
-                                  </a>
+                                  {c.url ? (
+                                    <a href={c.url} target="_blank" rel="noopener noreferrer"
+                                      title={c.url}
+                                      style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
+                                               borderBottom:"1px solid "+T.tealBd }}>
+                                      {c.name}
+                                    </a>
+                                  ) : (
+                                    <span style={{ fontFamily:T.mono, fontSize:11.5, color:T.muted }}>{c.name}</span>
+                                  )}
                                   {c.qualifier && (
                                     <span style={{ fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:3,
                                       background:c.tag==="m"?T.redBg:c.tag==="bp"?T.tealBg:T.slateBg,
