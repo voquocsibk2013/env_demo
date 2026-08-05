@@ -567,6 +567,226 @@ function legalRefLink(citeText) {
   }
   return src.url;
 }
+// Verbatim chapter + provision headings, read off each publisher's own document.
+// Keyed by the SHIPPED citation text (so a renamed citation still resolves), and
+// deliberately left in the source language — these are quoted legal headings, not
+// UI copy, so translating them would misquote the instrument.
+const LEGAL_TITLES = {
+  'Aarhus Convention':
+    'United Nations Economic Commission for Europe (UNECE) Convention on access to information, public participation in decision-making and access to justice in environmental matters',
+  'Aktivitetsforskriften':
+    'Forskrift om utføring av aktiviteter i petroleumsvirksomheten (aktivitetsforskriften)',
+  'Aktivitetsforskriften Kap. XI':
+    'Kap. XI. Utslipp til ytre miljø mv.',
+  'Aktivitetsforskriften Kap. XIII':
+    'Kap. XIII. Beredskap',
+  'Aktivitetsforskriften Kap. XVIII':
+    'Kap. XVIII. Løfteoperasjoner',
+  'Aktivitetsforskriften Kap.X':
+    'Kap. X. Overvåking av det ytre miljøet',
+  'Aktivitetsforskriften Kap.XI':
+    'Kap. XI. Utslipp til ytre miljø mv.',
+  'Aktivitetsforskriften Kap.XI (flaring)':
+    'Kap. XI. Utslipp til ytre miljø mv.',
+  'Avfallsforskriften kap.11':
+    'Kapittel 11. Farlig avfall',
+  'Avfallsforskriften kap.7':
+    'Kapittel 7. Emballasje og emballasjeavfall',
+  'Ballastvannforskriften FOR-2017-09-08-1368':
+    'Forskrift om ballastvannbehandling på skip og flyttbare innretninger',
+  'Bern Conv. Art.4':
+    'Convention on the Conservation of European Wildlife and Natural Habitats — Article 4 (conservation of habitats of wild flora and fauna species)',
+  'Bern Convention Art.4,6':
+    'Convention on the Conservation of European Wildlife and Natural Habitats — Article 4 (conservation of habitats) · Article 6 (special protection of fauna species listed in Appendix II)',
+  'Bern Convention Art.5,6':
+    'Convention on the Conservation of European Wildlife and Natural Habitats — Article 5 (protection of plant species listed in Appendix I) · Article 6 (special protection of fauna species listed in Appendix II)',
+  'Bern Convention Art.6, App.II':
+    'Convention on the Conservation of European Wildlife and Natural Habitats — Article 6 (special protection of fauna species) · Appendix II (strictly protected fauna species)',
+  'CO2-avgiften':
+    'Lov om avgift på utslipp av CO2 i petroleumsvirksomhet på kontinentalsokkelen',
+  'CO2-avgiftsloven':
+    'Lov om avgift på utslipp av CO2 i petroleumsvirksomhet på kontinentalsokkelen',
+  'CSRD/ESRS S1':
+    'COMMISSION DELEGATED REGULATION (EU) 2023/2772 of 31 July 2023 supplementing Directive 2013/34/EU of the European Parliament and of the Council as regards sustainability reporting standards — ESRS S1 OWN WORKFORCE (Annex I, listed as "European Sustainability Reporting Standard S1 Own workforce")',
+  'EIA Dir. 2011/92/EU Annex IV':
+    'ANNEX IV — INFORMATION REFERRED TO IN ARTICLE 5(1) (INFORMATION FOR THE ENVIRONMENTAL IMPACT ASSESSMENT REPORT)',
+  'EIA screening under Pbl/KU-forskrift if required':
+    'Forskrift om konsekvensutredninger',
+  'EU Dir. 2009/148/EC':
+    'DIRECTIVE 2009/148/EC OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 30 November 2009 on the protection of workers from the risks related to exposure to asbestos at work (codified version)',
+  'EU EED 2023/1791 Art.11 (≥85TJ)':
+    'Article 11 — Energy management systems and energy audits',
+  'EU EIA Directive 2011/92/EU Annex IV':
+    'ANNEX IV — INFORMATION REFERRED TO IN ARTICLE 5(1) (INFORMATION FOR THE ENVIRONMENTAL IMPACT ASSESSMENT REPORT)',
+  'EU F-Gas Reg. 2024/573':
+    'REGULATION (EU) 2024/573 OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 7 February 2024 on fluorinated greenhouse gases, amending Directive (EU) 2019/1937 and repealing Regulation (EU) No 517/2014',
+  'EU Methane Reg. 2024/1787 LDAR':
+    'REGULATION (EU) 2024/1787 OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 13 June 2024 on the reduction of methane emissions in the energy sector and amending Regulation (EU) 2019/942',
+  'EU Paints Directive 2004/42/EC (VOC)':
+    'DIRECTIVE 2004/42/EC OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 21 April 2004 on the limitation of emissions of volatile organic compounds due to the use of organic solvents in certain paints and varnishes and vehicle refinishing products and amending Directive 1999/13/EC',
+  'EU PPWR 2025/40':
+    'REGULATION (EU) 2025/40 OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 19 December 2024 on packaging and packaging waste, amending Regulation (EU) 2019/1020 and Directive (EU) 2019/904, and repealing Directive 94/62/EC',
+  'EU Reg. 2016/1628':
+    'REGULATION (EU) 2016/1628 OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 14 September 2016 on requirements relating to gaseous and particulate pollutant emission limits and type-approval for internal combustion engines for non-road mobile machinery, amending Regulations (EU) No 1024/2012 and (EU) No 167/2013, and amending and repealing Directive 97/68/EC',
+  'EU WFD 2000/60/EC Art.4':
+    'Article 4 — Environmental objectives',
+  'EU WFD 2008/98/EC Art.4':
+    'Article 4 — Waste hierarchy',
+  'Finnmarksloven':
+    'Lov om rettsforhold og forvaltning av grunn og naturressurser i Finnmark (Finnmarksloven)',
+  'Forskrift om bruk av kjøretøy Kap.5':
+    'Kapittel 5. Vekt, dimensjoner',
+  'Forskrift om fremmede organismer 2015':
+    'Forskrift om fremmede organismer',
+  'Forskrift om miljømessig sikkerhet for skip FOR-2012-05-30-488':
+    'Forskrift om miljømessig sikkerhet for skip og flyttbare innretninger',
+  'Forskrift om utførelse av arbeid kap.4':
+    'Kapittel 4. Asbestarbeid',
+  'Forurensningsforskriften kap.2':
+    'Kapittel 2. Opprydding i forurenset grunn ved bygge- og gravearbeider',
+  'Forurensningsforskriften Kap.27 (MCP)':
+    'Kapittel 27. Utslipp til luft fra mellomstore forbrenningsanlegg',
+  'Forurensningsforskriften Kap.7 (PM10)':
+    'Kapittel 7. Lokal luftkvalitet',
+  'Forurensningsloven §11':
+    'Kap. 3. Tillatelse til virksomhet som kan volde forurensning. Konsekvensanalyser. § 11.(særskilt tillatelse til forurensende tiltak)',
+  'Forurensningsloven §11 vilkår':
+    'Kap. 3. Tillatelse til virksomhet som kan volde forurensning. Konsekvensanalyser. § 11.(særskilt tillatelse til forurensende tiltak)',
+  'Forurensningsloven §28':
+    'Kap. 5. Om avfall. § 28.(forbud mot forsøpling)',
+  'Forurensningsloven §32':
+    'Kap. 5. Om avfall. § 32.Håndtering av næringsavfall',
+  'Forurensningsloven §40':
+    'Kap. 6. Akutt forurensning. § 40.(beredskapsplikt)',
+  'Forurensningsloven §6':
+    'Kap. 2. Alminnelige bestemmelser om forurensninger. § 6.(hva som forstås med forurensning)',
+  'Forurensningsloven §7':
+    'Kap. 2. Alminnelige bestemmelser om forurensninger. § 7.(plikt til å unngå forurensning)',
+  'Havvernloven':
+    'Lov om vern av marin natur utenfor territorialfarvannet (havvernloven)',
+  'Havvernloven 2025':
+    'Lov om vern av marin natur utenfor territorialfarvannet (havvernloven)',
+  'IFC PS1':
+    'Performance Standard 1: Assessment and Management of Environmental and Social Risks and Impacts',
+  'IFC PS1/PS4 local content':
+    'Performance Standard 1: Assessment and Management of Environmental and Social Risks and Impacts · Performance Standard 4: Community Health, Safety, and Security',
+  'IFC PS8 chance find':
+    'Performance Standard 8: Cultural Heritage',
+  'ILO-169':
+    'Indigenous and Tribal Peoples Convention, 1989 (No. 169)',
+  'IMO BWM Convention 2004':
+    'International Convention for the Control and Management of Ships\' Ballast Water and Sediments (BWM)',
+  'Innretningsforskriften §40':
+    'Kap. V. Fysiske barrierer. § 40.Åpne dreneringsanlegg',
+  'ISO 50001':
+    'Energy management systems - Requirements with guidance for use (ISO 50001:2018)',
+  'Kulturminneloven §14':
+    'Kapittel IV. Skipsfunn og fartøyvern. § 14. Skipsfunn.',
+  'Kulturminneloven §15':
+    'Kap. V. Fredning ved enkeltvedtak. § 15. Fredning av bygninger, anlegg m.v. fra nyere tid.',
+  'Kulturminneloven §8':
+    'Kap. II. Automatisk fredete kulturminner. § 8. Tillatelse til inngrep i automatisk fredete kulturminner.',
+  'Kulturminneloven §9':
+    'Kap. II. Automatisk fredete kulturminner. § 9. Undersøkelsesplikt m.v.',
+  'Ledningsregistreringsforskriften':
+    'Forskrift om innmåling, dokumentasjon og utlevering av geografisk informasjon om ledninger og annen infrastruktur i grunnen, sjø og vassdrag (ledningsregistreringsforskriften)',
+  'London Protocol Art.4':
+    '1996 Protocol to the Convention on the Prevention of Marine Pollution by Dumping of Wastes and Other Matter, 1972 — Article 4 (dumping of wastes or other matter prohibited except those listed in Annex 1)',
+  'MARPOL Annex I':
+    'International Convention for the Prevention of Pollution from Ships (MARPOL) — Annex I Regulations for the Prevention of Pollution by Oil (entered into force 2 October 1983)',
+  'MARPOL Annex IV':
+    'International Convention for the Prevention of Pollution from Ships (MARPOL) — Annex IV Prevention of Pollution by Sewage from Ships (entered into force 27 September 2003)',
+  'MARPOL Annex VI (SOx/NOx ECA)':
+    'International Convention for the Prevention of Pollution from Ships (MARPOL) — Annex VI Prevention of Air Pollution from Ships (entered into force 19 May 2005)',
+  'MARPOL-forskriften FOR-1983-06-16-1122':
+    'Forskrift om hindring av forurensning fra skip (MARPOL-forskriften)',
+  'Naturmangfoldloven §§15-27':
+    'Kapittel III. Artsforvaltning mv. § 15.(forvaltningsprinsipp) (§§ 15–27)',
+  'Naturmangfoldloven §§15-27,53':
+    'Kapittel III. Artsforvaltning mv. § 15.(forvaltningsprinsipp) (§§ 15–27) · Kapittel VI. Utvalgte naturtyper § 53.(utvelgingens generelle betydning)',
+  'Naturmangfoldloven §§28-30':
+    'Kapittel IV. Fremmede organismer § 28.(krav til aktsomhet) · § 29.(innførsel) · § 30.(utsetting og omsetning)',
+  'Naturmangfoldloven §§33-51':
+    'Kapittel V. Områdevern § 33.(mål for områdevern) (§§ 33–51)',
+  'Naturmangfoldloven §§4-5,10':
+    'Kapittel II. Alminnelige bestemmelser om bærekraftig bruk § 4.(forvaltningsmål for naturtyper og økosystemer) · § 5.(forvaltningsmål for arter) · § 10.(økosystemtilnærming og samlet belastning)',
+  'Naturmangfoldloven §§4-6':
+    'Kapittel II. Alminnelige bestemmelser om bærekraftig bruk § 4.(forvaltningsmål for naturtyper og økosystemer) · § 5.(forvaltningsmål for arter) · § 6.(generell aktsomhetsplikt)',
+  'Naturmangfoldloven §§4-6,23-24':
+    'Kapittel II. Alminnelige bestemmelser om bærekraftig bruk § 4.(forvaltningsmål for naturtyper og økosystemer) · § 5.(forvaltningsmål for arter) · § 6.(generell aktsomhetsplikt) · Kapittel III. Artsforvaltning mv. § 23.(prioriterte arter) · § 24.(beskyttelsens innhold)',
+  'Naturmangfoldloven §36':
+    'Kapittel V. Områdevern § 36.(landskapsvernområder)',
+  'Naturmangfoldloven §53':
+    'Kapittel VI. Utvalgte naturtyper § 53.(utvelgingens generelle betydning)',
+  'Naturmangfoldloven §56a peat ban 2026':
+    'Kapittel VI. Utvalgte naturtyper § 56 a.(forbud mot næringsmessig uttak av myr)',
+  'Naturmangfoldloven §6 duty of care':
+    'Kapittel II. Alminnelige bestemmelser om bærekraftig bruk § 6.(generell aktsomhetsplikt)',
+  'Naturmangfoldloven §8':
+    'Kapittel II. Alminnelige bestemmelser om bærekraftig bruk § 8.(kunnskapsgrunnlaget)',
+  'NORSOK S-002':
+    'NORSOK S-002:2025 Arbeidsmiljø',
+  'NORSOK S-003':
+    'NORSOK S-003:2017 Environmental care',
+  'NORSOK S-003 §5':
+    'NORSOK S-003:2017 Environmental care',
+  'NOx-avgiften':
+    'Kap. 3-19. Avgift på NOX',
+  'NS 8176 vibration standard':
+    'NS 8176:2017 Vibrasjoner og støt - Måling i bygninger av vibrasjoner fra landbasert samferdsel, vibrasjonsklasser og veiledning for bedømmelse av virkning på mennesker',
+  'OSPAR':
+    'Convention for the Protection of the Marine Environment of the North-East Atlantic',
+  'OSPAR Annex III':
+    'ANNEX III ON THE PREVENTION AND ELIMINATION OF POLLUTION FROM OFFSHORE SOURCES',
+  'OSPAR Dec. 98/3':
+    'OSPAR Decision 98/3 on the Disposal of Disused Offshore Installations',
+  'OSPAR guidance on underwater noise':
+    'OSPAR inventory of measures to mitigate the emission and environmental impact of underwater noise',
+  'OSPAR Rec.2001/1':
+    'OSPAR Recommendation 2001/1 for the Management of Produced Water from Offshore Installations',
+  'Petroleumsloven kap.5 (§5-3)':
+    'Kapittel 5. Avslutning av petroleumsvirksomheten. § 5-3. Vedtak om disponering',
+  'Plan- og bygningsloven §28-1':
+    'Kapittel 28. Krav til byggetomta og ubebygd areal. § 28-1. Byggegrunn, miljøforhold mv.',
+  'Plan- og bygningsloven §29-2':
+    'Kapittel 29. Krav til tiltaket. § 29-2. Visuelle kvaliteter',
+  'Plan- og bygningsloven §5-1':
+    'Kapittel 5. Medvirkning i planleggingen. § 5-1. Medvirkning',
+  'Produktforskriften kap.6a':
+    'Kapittel 6a. Regulering av fluorholdige stoffer',
+  'Produktkontrolloven §§3–5':
+    '§ 3. Aktsomhetsplikt m.v. · § 4. Myndighet for Kongen. · § 5. Opplysningsplikt.',
+  'Produktkontrolloven §3':
+    '§ 3. Aktsomhetsplikt m.v.',
+  'Ramsar Convention':
+    'Convention on Wetlands of International Importance especially as Waterfowl Habitat',
+  'REACH Annex XVII':
+    'ANNEX XVII — RESTRICTIONS ON THE MANUFACTURE, PLACING ON THE MARKET AND USE OF CERTAIN DANGEROUS SUBSTANCES, MIXTURES AND ARTICLES',
+  'REACH Reg. 1907/2006':
+    'REGULATION (EC) No 1907/2006 OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL of 18 December 2006 concerning the Registration, Evaluation, Authorisation and Restriction of Chemicals (REACH), establishing a European Chemicals Agency, amending Directive 1999/45/EC and repealing Council Regulation (EEC) No 793/93 and Commission Regulation (EC) No 1488/94 as well as Council Directive 76/769/EEC and Commission Directives 91/155/EEC, 93/67/EEC, 93/105/EC and 2000/21/EC',
+  'Reindriftsloven':
+    'Lov om reindrift (reindriftsloven)',
+  'Strålevernforskriften (M) — NORM waste':
+    'Forskrift om strålevern og bruk av stråling (strålevernforskriften)',
+  'Strålevernforskriften §§14, 25':
+    'Kapittel II. Generelle bestemmelser om ioniserende og ikke-ioniserende stråling. § 14.Avhending av strålekilder · Kapittel III. Bestemmelser om ioniserende stråling. § 25.Oppbevaring av radioaktive strålekilder',
+  'Strålevernloven':
+    'Lov om strålevern og bruk av stråling [strålevernloven]',
+  'T-1442 noise guideline':
+    'Retningslinje for behandling av støy i arealplanlegging (T-1442/2021)',
+  'TEK17 §7-2 flom':
+    'Kapittel 7. Sikkerhet mot naturpåkjenninger. § 7-2. Sikkerhet mot flom og stormflo',
+  'TEK17 §9-6/§9-9 avfallsplan':
+    'Kapittel 9. Ytre miljø. § 9-6. Avfallsplan · § 9-9. Sluttrapport for faktisk disponering av avfall',
+  'Vannressursloven §5':
+    'Kapittel 2. Alminnelige regler om vassdrag. § 5.(forvalteransvar og aktsomhetsplikt)',
+  'Vegtrafikkloven':
+    'Lov om vegtrafikk (vegtrafikkloven)',
+  'WFD Art.4':
+    'Article 4 — Environmental objectives',
+};
+function legalRefTitle(cite) { return LEGAL_TITLES[cite] || ""; }
+
 // Split "Law §x (M); Other reg (BP)" into per-instrument citations with a status tag.
 function parseLegalRef(ref) {
   return (ref||"").split(/;\s+/).filter(Boolean).map(part => {
@@ -1982,24 +2202,31 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
               </span>
             </div>
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
-              <colgroup><col style={{width:68}}/><col style={{width:"24%"}}/><col/></colgroup>
+              <colgroup><col style={{width:"22%"}}/><col style={{width:"30%"}}/><col/></colgroup>
               <thead><tr>
-                <th style={th}>ID</th><th style={th}>Item</th><th style={th}>Legal / regulatory reference</th>
+                <th style={th}>Item</th><th style={th}>Legal / regulatory reference</th><th style={th}>Title</th>
               </tr></thead>
               <tbody>
-                {items.map(item => (
-                  <tr key={item.id} style={{ borderBottom:"1px solid "+T.rowBd }}>
-                    <td style={{ padding:"9px 10px 9px 0", fontFamily:T.mono, fontSize:10, color:T.faint, verticalAlign:"top" }}>
-                      {item.id}
-                    </td>
-                    <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
-                      <div style={{ fontSize:12.5, fontWeight:500, color:T.text }}>{item.sub}</div>
-                      <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:2, lineHeight:1.4 }}>{item.aspect}</div>
-                    </td>
-                    <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top" }}>
+                {/* One row per CITATION, with the item cell spanning its citations, so the
+                    Title column stays aligned with the reference it belongs to. */}
+                {items.flatMap(item => {
+                  const cits = citationsFor(item);
+                  if (!cits.length) return [];
+                  return cits.map((c, ci) => {
+                    const lastOfItem = ci === cits.length - 1;
+                    const cellBd = lastOfItem ? "1px solid "+T.border : "1px solid "+T.rowBd;
+                    return (
+                  <tr key={c.key}>
+                    {ci === 0 && (
+                      <td rowSpan={cits.length}
+                        style={{ padding:"9px 10px 9px 0", verticalAlign:"top", borderBottom:"1px solid "+T.border }}>
+                        <div style={{ fontSize:12.5, fontWeight:500, color:T.text }}>{item.sub}</div>
+                        <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:2, lineHeight:1.4 }}>{item.aspect}</div>
+                      </td>
+                    )}
+                    <td style={{ padding:"9px 10px 9px 0", verticalAlign:"top", borderBottom:cellBd }}>
                       <div style={{ display:"flex", flexDirection:"column", gap:8, alignItems:"flex-start" }}>
-                        {citationsFor(item).map(c => (
-                          <div key={c.key} style={{ width:"100%" }}>
+                          <div style={{ width:"100%" }}>
                             {editingKey === c.key ? (
                               <div style={{ display:"flex", flexDirection:"column", gap:5, padding:"8px 10px",
                                             border:"1px solid "+T.tealBd, borderRadius:6, background:T.tealBg }}>
@@ -2087,11 +2314,17 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
                               </div>
                             )}
                           </div>
-                        ))}
                       </div>
                     </td>
+                    <td style={{ padding:"9px 0 9px 0", verticalAlign:"top", borderBottom:cellBd }}>
+                      {legalRefTitle(c.baselineName)
+                        ? <span style={{ fontSize:11.5, color:T.text, lineHeight:1.5 }}>{legalRefTitle(c.baselineName)}</span>
+                        : <span style={{ fontSize:11, color:T.faint }}>—</span>}
+                    </td>
                   </tr>
-                ))}
+                    );
+                  });
+                })}
               </tbody>
             </table>
           </div>
