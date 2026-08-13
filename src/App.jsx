@@ -3683,6 +3683,586 @@ function WasteFormSection({ n, title, children }) {
   );
 }
 
+// ── BAT evaluation data (GL0300 mini-BAT checklist) ────────────────────────────
+// Shipped, global checklist definition — the assessment STATE (verdict, ref,
+// action, owner, target) is per-project, stored on project.batAssessments, and
+// never mutates this array. "Have the following measures been considered?"
+// lead-in rows own lettered sub-points; they're marked as group headers below,
+// not directly assessable rows, matching the source checklist's own structure.
+const BAT_TOPICS = [
+ { id:"1", title:"Energy Management", scope:"Both", items:[
+  { id:"1.1", scope:"Both", bat:false, lead:"Have a power and heat requirement analysis been performed comprising the process and utility systems over the lifetime of the production facility?" },
+  { id:"1.2", scope:"Both", bat:false, lead:"Is there consideration for optimum number, size and design of turbines?" },
+  { id:"1.3", scope:"Both", bat:false, lead:"Have the following measures been considered for minimizing energy demand (when relevant)?" },
+  { id:"1.3a", scope:"Both", bat:true, lead:"well design to minimize water cut and minimize pressure loss" },
+  { id:"1.3b", scope:"Both", bat:true, lead:"maximized operating pressure in first stage separator" },
+  { id:"1.3c", scope:"Both", bat:true, lead:"partly separate process trains for high and low pressure wells" },
+  { id:"1.3d", scope:"Both", bat:true, lead:"use of turbo-expanders (to utilize well pressure)" },
+  { id:"1.3e", scope:"Both", bat:true, lead:"correct sizing of power demanding equipment to achieve maximum efficiency" },
+  { id:"1.3f", scope:"Both", bat:true, lead:"use of variable speed drives on larger equipment with variable loads" },
+  { id:"1.3g", scope:"Both", bat:true, lead:"Direct turbine drive or electric drive on large compressors (including consideration of future electrification)" },
+  { id:"1.3h", scope:"Both", bat:true, lead:"waste heat recovery /process integration to minimize the need for fired heaters or electrical heaters" },
+  { id:"1.3i", scope:"Both", bat:true, lead:"Use of flow improvers for oil export pipelines" },
+  { id:"1.3j", scope:"Both", bat:true, lead:"Energy use monitoring and control systems to allow optimum operation and tuning." },
+  { id:"1.3k", scope:"Both", bat:true, lead:"optimal sizing of long export pipelines for oil and gas to reduce pressure loss" },
+  { id:"1.3l", scope:"Both", bat:true, lead:"Boiler design to optimize use of heat integration (including utilization of heat from boiler flue stack) and minimize use of direct fired steam generation" },
+  { id:"1.3m", scope:"Both", bat:false, lead:"Electrical submersible pumps (ESP) compared to gas-lift" },
+  { id:"1.3n", scope:"Both", bat:false, lead:"Multiphase pumping compared to gas-lift" },
+  { id:"1.3o", scope:"Offshore", bat:false, lead:"Subsea or downhole separation" },
+  { id:"1.3p", scope:"Offshore", bat:false, lead:"Subsea (gas) compression or subsea (oil) pumping" },
+  { id:"1.4", scope:"Both", bat:false, lead:"In order to increase the efficiency of energy production, have the following measures been considered:" },
+  { id:"1.4a", scope:"Both", bat:false, lead:"Gas turbine cycle enhancement, e.g. combined cycle", xref:"scope 2 system optimisation" },
+  { id:"1.4b", scope:"Onshore", bat:false, lead:"Have different sources for power supply (including cogeneration) been evaluated?", xref:"Scope 2 alternative resources" },
+  { id:"1.4c", scope:"Offshore", bat:false, lead:"Integrated or shared power generation with other installations, as well as the possibility of power supply from shore.", xref:"Scope 2 alternative resources" },
+  { id:"1.5", scope:"Both", bat:false, lead:"Has the steam distribution network been optimized for recirculation of steam to the boiler?", xref:"Scope 2 optimization" },
+  { id:"1.6", scope:"Both", bat:false, lead:"Have all hot vessels in cold climates been thoroughly insulated to reduce heat loss?", xref:"Scope 2 - design optimisation" },
+  { id:"1.7", scope:"Both", bat:false, lead:"Have alternative process equipment and processes been considered?", xref:"Scope 2 - system component optimisation" },
+ ]},
+ { id:"2", title:"CO2 management", scope:"Onshore", items:[
+  { id:"2.1", scope:"Onshore", bat:false, lead:"Has the need for Carbon Capture and Storage (CCS) been considered" },
+ ]},
+ { id:"3", title:"NOx control on engines/turbines ( / boilers)", scope:"Both", items:[
+  { id:"3.1", scope:"Both", bat:false, lead:"For larger engines (> 1MW) that will normally be in operation (not stand-by or emergency use), NOx reducing measures should be considered such as:" },
+  { id:"3.1a", scope:"Both", bat:true, lead:"selection of engine design with a low NOx emission rate" },
+  { id:"3.1b", scope:"Both", bat:true, lead:"use of gas fuel (if available)" },
+  { id:"3.1c", scope:"Both", bat:false, lead:"selective catalytic reduction or similar?" },
+  { id:"3.2", scope:"Both", bat:true, lead:"selection of boiler burners with low NOx emissions rate" },
+ ]},
+ { id:"4", title:"Flaring and venting", scope:"Both", items:[
+  { id:"4.1", scope:"Both", bat:false, lead:"The following elements should be evaluated:" },
+  { id:"4.1a", scope:"Both", bat:true, lead:"flare gas recovery systems (recycling of gas from high /low pressure relief systems during normal operation)" },
+  { id:"4.1b", scope:"Both", bat:true, lead:"planning of start-up activities to reduce flaring;" },
+  { id:"4.1c", scope:"Both", bat:true, lead:"recovery of hydrocarbon gas used as blanket gas" },
+  { id:"4.1d", scope:"Both", bat:true, lead:"avoid use of cold vent (venting of unburned gas)" },
+ ]},
+ { id:"5", title:"Oil storage and loading", scope:"Both", items:[
+  { id:"5.1", scope:"Both", bat:true, lead:"Have the oil storage and loading systems (offshore and/or onshore) been designed to minimize emissions of methane and NMVOC?" },
+  { id:"5.3", scope:"Both", bat:false, lead:"The following measures should be considered, but not be limited to:" },
+  { id:"5.3a", scope:"Both", bat:true, lead:"sequential loading/unloading of oil" },
+  { id:"5.3b", scope:"Both", bat:true, lead:"optimized geometry of tanks with respect to evaporation of hydrocarbons" },
+  { id:"5.3c", scope:"Both", bat:true, lead:"loading/discharge rate with respect to evaporation" },
+  { id:"5.3d", scope:"Offshore", bat:true, lead:"use of hydrocarbon gas as blanket gas in floating storage tanks, with recovery" },
+  { id:"5.3e", scope:"Both", bat:true, lead:"installation of a VOC recovery plant to return NMVOC to crude oil (different technologies available)." },
+  { id:"5.3f", scope:"Both", bat:true, lead:"installation of a VOC recovery plant to condense NMVOC and use condensed liquid as fuel (different technologies available)." },
+  { id:"5.3g", scope:"Both", bat:true, lead:"incineration of VOC during loading operations (different technologies available)." },
+  { id:"5.4", scope:"Both", bat:true, lead:"Is design optimized for Reid vapour pressure and True Vapour Pressure and temperature of the oil, in order to minimize emissions of methane and NMVOC?" },
+ ]},
+ { id:"6", title:"Fugitive emissions and cold vents", scope:"Both", items:[
+  { id:"6.1", scope:"Both", bat:false,
+    lead:"The process system should be designed to minimize emissions to air of hydrocarbon gas from different sections of the system. The gas should be either contained or routed back to the process system, if the pressure level and safety considerations allow this. This is considered BAT. This applies, but is not limited to",
+    bullets:["gas from seal oil traps","gas from sampling points","purge gas and leak gas","gas from start up of the fuel gas system","gas from compressor seals","gas from produced water"] },
+  { id:"6.2", scope:"Both", bat:false,
+    lead:"Emissions of hydrocarbon gas to the air, including glycol and BTEX, from stripping processes should be minimized. This is considered BAT. This can be done e.g. by use of:",
+    bullets:["systems that do not require stripping gas (e.g. trace water extraction process)","systems using low glycol concentrations","glycol recycle systems","systems that recover hydrocarbon stripping gas","systems based on vacuum deaeration systems using inert gas"] },
+ ]},
+ { id:"7", title:"Well testing/well clean-up", scope:"Both", items:[
+  { id:"7.1", scope:"Offshore", bat:false, lead:"For testing on a mobile rig, have at least the following options been evaluated?" },
+  { id:"7.1a", scope:"Offshore", bat:false, lead:"downhole testing and separation" },
+  { id:"7.1b", scope:"Offshore", bat:false, lead:"injection of the well fluid at location or at a nearby field, when test separators are designed to handle well stream from testing for this option" },
+  { id:"7.1c", scope:"Both", bat:false, lead:"use of facilities with possibility to collect the oil produced during testing." },
+ ]},
+ { id:"8", title:"Produced water", scope:"Both", items:[
+  { id:"8.1", scope:"Both", bat:false, lead:"The order of priority for produced water management is:",
+    bullets:["BAT: Minimisation of water production","Re-injection to reservoir to maintain pressure","Injection to other geological formations","Treatment (cleaning) and discharge to sea / surface waters for onshore","Treatment (cleaning) and discharge to lined evaporation pond (onshore)"],
+    tail:"Points 2-5 have to be evaluated for each project to conclude on which is BAT." },
+ ]},
+ { id:"9", title:"Drain system", scope:"Both", items:[
+  { id:"9.1", scope:"Both", bat:false, lead:"Have the number of (treatment) stages for water from the open drain system been evaluated?" },
+  { id:"9.2", scope:"Offshore", bat:false, lead:"Has injection of contaminated drainage been considered especially drainage from the drilling area, which may be injected together with contaminated cuttings" },
+  { id:"9.3", scope:"Offshore", bat:false, lead:"Has the deck drainage system been sized to accommodate above average rainfall events for location?" },
+  { id:"9.4", scope:"Offshore", bat:false, lead:"Has the handling of drilling effluents been separated from the deck drainage system?" },
+  { id:"9.5", scope:"Onshore", bat:false, lead:"Has handling of contaminated drainage been considered" },
+ ]},
+ { id:"10", title:"Displacement water", scope:"Both", items:[
+  { id:"10.1", scope:"Both", bat:false, lead:"Has treatment of displacement water been evaluated?" },
+  { id:"10.2", scope:"Both", bat:false, lead:"Has the need for separate treatment of the emulsion/slop phase near the water/oil contact been evaluated?" },
+ ]},
+ { id:"11", title:"Discharges from drilling and well operations", scope:"Both", items:[
+  { id:"11.1", scope:"Onshore", bat:false, lead:"Is safe well and well pad design developed to avoid leakage and contamination to aquifers, soils and watercourses?" },
+  { id:"11.2", scope:"Both", bat:true, lead:"Minimization of drilling waste, and/or discharge of drilling waste to sea" },
+  { id:"11.3", scope:"Both", bat:false, lead:"Have the following technologies been evaluated?",
+    bullets:["slim hole drilling","branched drilling","batch drilling","injection of drill cuttings and used drilling mud","injection of cementing chemicals (excess mix-water)","injection of completion chemicals","injection of slop- and drainage water","BAT: reuse of drilling mud","BAT: heavy metal free pipe dope"] },
+  { id:"11.4", scope:"Both", bat:true, lead:"Mud and cuttings handling systems designed to minimize the risk of spills." },
+  { id:"11.5", scope:"Both", bat:true, lead:"Discharges from cementing is minimized." },
+ ]},
+ { id:"12", title:"Produced sand", scope:"Both", items:[
+  { id:"12.1", scope:"Offshore", bat:false, lead:"Have disposal options for produced sand been considered:",
+    bullets:["injection into a subsea geological structure","cleaning and discharge to sea","shipment ashore for treatment and disposal"] },
+  { id:"12.2", scope:"Onshore", bat:false, lead:"Have the following options for produced sand been considered?",
+    bullets:["re-injection into a geological structure","export for treatment and disposal"] },
+ ]},
+ { id:"13", title:"Chemical and materials", scope:"Both", items:[
+  { id:"13.1", scope:"Both", bat:true, lead:"Choice of materials not requiring corrosion inhibitor" },
+  { id:"13.2", scope:"Both", bat:true, lead:"Material selection to limit the use of chemicals." },
+  { id:"13.3", scope:"Both", bat:true, lead:"System designed with heat tracing to limit use of chemicals." },
+  { id:"13.4", scope:"Both", bat:true, lead:"Direct Electrical heating (DEH)" },
+  { id:"13.5", scope:"Both", bat:true, lead:"Use of environmental friendly chemicals" },
+ ]},
+ { id:"14", title:"Cooling water", scope:"Both", items:[
+  { id:"14.1", scope:"Both", bat:true, lead:"intake of cooling water (depth) optimized with respect to minimize the need for use of chemicals to prevent marine fouling, i.e. growth of algae, mussels, etc?" },
+ ]},
+ { id:"15", title:"Waste", scope:"Both", items:[
+  { id:"15.1", scope:"Both", bat:true, lead:"minimize waste through the design and the choice of materials and chemicals?" },
+  { id:"15.2", scope:"Both", bat:false, lead:"Has equipment and facility maintenance been addressed with regard to generation, containment and storage, and handling of waste materials?" },
+  { id:"15.3", scope:"Offshore", bat:true, lead:"Discharge of slop water to sea." },
+  { id:"15.4", scope:"Onshore", bat:false, lead:"Have measures been implemented to avoid soil and groundwater contamination?" },
+ ]},
+ { id:"16", title:"Decommissioning", scope:"Both", items:[
+  { id:"16.1", scope:"Both", bat:false, lead:"Has decommissioning been considered in design for reuse, recycling or final disposal (on land)?", xref:"add to Scope 3" },
+  { id:"16.2", scope:"Both", bat:true, lead:"Design for easy decommissioning.", xref:"add to Scope 3" },
+ ]},
+ { id:"17", title:"Subsea installations", scope:"Offshore", items:[
+  { id:"17.1", scope:"Offshore", bat:false, lead:"Has a system for leak detection been included in design?", xref:"add to 7" },
+  { id:"17.2", scope:"Offshore", bat:false, lead:"Has the environmental impact of the subsea installation(s) been considered", xref:"add to 5 marine /fwater ecosys - seabed contamination" },
+ ]},
+ { id:"18", title:"Water resources", scope:"Onshore", items:[
+  { id:"18.1", scope:"Both", bat:false, lead:"Has a water management plan been developed?" },
+  { id:"18.2", scope:"Both", bat:false, lead:"Has the use of water been minimized? Has a net environmental effect assessment been conducted on potential water sources?" },
+  { id:"18.3", scope:"Both", bat:false, lead:"Have sufficient sample points been included to enable monitoring of relevant emissions to air and liquid effluents during the operation phase?" },
+  { id:"18.4", scope:"Both", bat:true, lead:"Boiler and interface system design to minimize use of water." },
+ ]},
+ { id:"19", title:"Land use", scope:"Onshore", items:[
+  { id:"19.1", scope:"Onshore", bat:false, lead:"Have location of wells, facilities, pipelines and infrastructure been based on an environmental impact assessment?", xref:"add to 5. Habitat / Ecological survey (desk study/walk over)" },
+  { id:"19.2", scope:"Onshore", bat:false, lead:"Have the facilities been designed and constructed to minimise land impacts?", xref:"add to 5. Habitat / Ecological survey (desk study/walk over)" },
+  { id:"19.3", scope:"Onshore", bat:false, lead:"Is fragmentation of landscape avoided?", xref:"add to 5. Ecological connectivity" },
+  { id:"19.4", scope:"Onshore", bat:false, lead:"Choose BAT construction techniques (e.g. soil cementing) to reduce disturbance.", xref:"add to Scope 2 alternative resources - construction techniques" },
+  { id:"19.5", scope:"Onshore", bat:false, lead:"Has habitat of key wildlife crossing been avoided where possible, or has it otherwise been ensured that an environmental specialist (aquatic) observes construction of the crossing.", xref:"add to 5 ecological connectivity" },
+  { id:"19.6", scope:"Onshore", bat:false, lead:"Has habitat of key wildlife species been avoided?", xref:"add to 5 protected habitat" },
+  { id:"19.7", scope:"Onshore", bat:false, lead:"Has constructing in sensitive soils been avoided?", xref:"add to 5 protected habitat" },
+  { id:"19.8", scope:"Onshore", bat:false, lead:"Have integrated corridors (road, pipeline, powerline) been used?", xref:"add to Scope 2 layout location optimisation" },
+  { id:"19.9", scope:"Onshore", bat:false, lead:"Have existing clearings been used?", xref:"add to Scope 2 layout location optimisation" },
+  { id:"19.10", scope:"Onshore", bat:false, lead:"Have road alternatives been considered? (e.g. in some instances we can make remote stations in favour of roads).", xref:"add to scope 2 alternative resources" },
+ ]},
+ { id:"20", title:"Noise", scope:"Onshore", items:[
+  { id:"20.1", scope:"Onshore", bat:false, lead:"Is the plant designed to minimize noise emissions?", xref:"add to 5 - noise" },
+ ]},
+ { id:"21", title:"Biodiversity", scope:"Onshore", items:[
+  { id:"21.1", scope:"Onshore", bat:true, lead:"Site planning and facility design to minimize impacts to biodiversity e.g. from World Bank/IFC Guidelines and Performance Standards" },
+  { id:"21.2", scope:"Onshore", bat:false, lead:"Has terrestrial and aquatic ecosystem impacts mitigation been evaluated?", xref:"add to 5 marine and fresh water ecosystem" },
+  { id:"21.3", scope:"Onshore", bat:true, lead:"Biodiversity conservation planning and offsets." },
+ ]},
+];
+// Lead-in rows own lettered sub-points; mark as group headers, not assessable rows.
+for (const t of BAT_TOPICS) for (const i of t.items) {
+  i.group = t.items.some(j => j.id !== i.id && j.id.startsWith(i.id) && /[a-z]$/.test(j.id));
+}
+
+const BAT_STATUS = {
+  G:  { key:"G",  label:"Compliant",    short:"Compliant / BAT applied", bg:T.greenBg,  bd:T.greenBd, tx:T.green },
+  Y:  { key:"Y",  label:"Partial",      short:"Partial · in progress",   bg:T.amberBg,  bd:T.amberBd, tx:T.amber },
+  R:  { key:"R",  label:"Gap",          short:"Not compliant · gap",     bg:T.redBg,    bd:T.redBd,   tx:T.red },
+  NA: { key:"NA", label:"N/A",          short:"Out of scope",            bg:T.slateBg,  bd:T.slateBd, tx:T.slate },
+  "": { key:"",   label:"Not assessed", short:"Not assessed",            bg:T.surface2, bd:T.border,  tx:T.muted },
+};
+
+// Project type -> BAT scope. Unrecognised/unset type shows everything (no false hides).
+function batProjectScope(project) {
+  const type = (project.type || "").toLowerCase();
+  if (type.includes("offshore")) return "Offshore";
+  if (type.includes("onshore") || type.includes("industrial")) return "Onshore";
+  return "Both";
+}
+const batInScope = (item, scope) => scope === "Both" || item.scope === "Both" || item.scope === scope;
+const batParentOf = id => (/^([\d.]+?)[a-z]$/.exec(id) || [])[1];
+const batEvid = it => (it.bat ? "Technique selection record or design basis"
+  : /plan|procedure|system/i.test(it.lead) ? "Procedure / management-system document"
+  : "Study, report or calculation reference");
+
+function batSweepBlocks(items, scope) {
+  const out = [], childOf = {};
+  for (const i of items) { const p = batParentOf(i.id); if (p) (childOf[p] = childOf[p] || []).push(i); }
+  for (const i of items) {
+    if (batParentOf(i.id)) continue;
+    const kids = childOf[i.id];
+    if (kids) { out.push({ k:"grp", p:i, kids }); continue; }
+    const skip = !batInScope(i, scope);
+    const last = out[out.length - 1];
+    if (skip) { if (last && last.k === "skip") last.items.push(i); else out.push({ k:"skip", items:[i] }); }
+    else out.push({ k:"row", i });
+  }
+  return out;
+}
+
+// ── BAT primitives ──────────────────────────────────────────────────────────
+function BatStatusDot({ s, size = 8 }) {
+  const p = BAT_STATUS[s || ""];
+  return <span style={{ width:size, height:size, borderRadius:size, background:s ? p.tx : "transparent",
+    border: s ? "none" : "1px dashed "+T.faint, flexShrink:0, display:"inline-block" }}/>;
+}
+function BatStatusPill({ s }) {
+  const p = BAT_STATUS[s || ""];
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:TYPE.data, fontWeight:500,
+      padding:"2px 8px", borderRadius:20, background:p.bg, border:"1px solid "+p.bd, color:p.tx,
+      whiteSpace:"nowrap", letterSpacing:"0.03em", textTransform:"uppercase", fontFamily:T.sans }}>
+      <BatStatusDot s={s} size={6}/>{p.label}
+    </span>
+  );
+}
+function BatStatusPicker({ value, onChange, h = 30 }) {
+  return (
+    <div style={{ display:"flex", gap:3 }}>
+      {["G","Y","R","NA"].map(k => {
+        const p = BAT_STATUS[k], on = value === k;
+        return (
+          <button key={k} className="hit" title={p.short}
+            onClick={e => { e.stopPropagation(); onChange(on ? "" : k); }}
+            style={{ minWidth:30, height:h, padding:"0 11px", borderRadius:4, cursor:"pointer",
+              fontSize:TYPE.body, fontWeight:500, fontFamily:T.sans, letterSpacing:"0.02em",
+              background:on ? p.bg : T.surface, border:"1px solid "+(on ? p.bd : T.border),
+              color:on ? p.tx : T.faint, boxShadow:on ? "inset 0 0 0 1px "+p.bd : "none",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+            <BatStatusDot s={k} size={7}/>{k === "NA" ? "N/A" : p.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+function BatStackBar({ c, w = 52, h = 5 }) {
+  const order = ["G","Y","R","NA",""];
+  const total = order.reduce((a,k) => a + (c[k]||0), 0) || 1;
+  return (
+    <div style={{ display:"flex", width:w, height:h, borderRadius:h, overflow:"hidden", background:T.rowBd, flexShrink:0 }}>
+      {order.map(k => c[k] ? (
+        <div key={k||"u"} style={{ width:(c[k]/total)*100+"%",
+          background: k === "" ? T.border : BAT_STATUS[k].tx, opacity: k === "NA" ? 0.45 : 1 }}/>
+      ) : null)}
+    </div>
+  );
+}
+const BatScopeChip = ({ scope, dim }) => {
+  const p = scope === "Offshore" ? { bg:T.blueBg, bd:T.blueBd, tx:T.blue }
+          : scope === "Onshore"  ? { bg:T.greenBg, bd:T.greenBd, tx:T.green }
+          : { bg:T.slateBg, bd:T.slateBd, tx:T.slate };
+  return <span style={{ fontSize:TYPE.data, fontWeight:500, padding:"1px 6px", borderRadius:3,
+    background:p.bg, border:"1px solid "+p.bd, color:p.tx, letterSpacing:"0.03em", textTransform:"uppercase",
+    whiteSpace:"nowrap", opacity:dim?0.5:1, fontFamily:T.sans }}>{scope}</span>;
+};
+const BatTechBadge = () => <span style={{ fontSize:TYPE.data, fontWeight:700, padding:"1px 4px", borderRadius:3,
+  background:T.teal, color:"#fff", letterSpacing:"0.05em", verticalAlign:1, marginRight:5, fontFamily:T.sans }}>BAT</span>;
+const BatXrefChip = ({ children }) => (
+  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:TYPE.data, fontFamily:T.sans,
+    padding:"1px 7px 1px 5px", borderRadius:3, background:T.purpleBg, border:"1px solid "+T.purpleBd, color:T.purple,
+    maxWidth:260, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+    <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+    {children}
+  </span>
+);
+
+// ── BAT tab — guided sweep ───────────────────────────────────────────────────
+// Assessment state (verdict/ref/action/owner/target) lives on
+// project.batAssessments, keyed by item id — the shipped BAT_TOPICS checklist
+// itself is never mutated. Flags (topic needs a second look) live on
+// project.batFlags. touched/cursor/openSkip/filter/done are pure UI/session
+// state — where you are in the sweep, not what you've decided.
+function BatTab({ project, onChange, notify }) {
+  const scope = batProjectScope(project);
+  const assessments = project.batAssessments || {};
+  const flags = project.batFlags || {};
+
+  const [sel, setSel] = useState(BAT_TOPICS[0].id);
+  const [touched, setTouched] = useState(() => new Set());
+  const [cursor, setCursor] = useState(null);
+  const [openSkip, setOpenSkip] = useState(false);
+  const [filter, setFilter] = useState(null);
+  const [done, setDone] = useState(0);
+
+  const get = it => (batInScope(it, scope) ? (assessments[it.id]?.status || "") : "NA");
+  const V = (id, f) => assessments[id]?.[f] || "";
+  const setV = (id, f, v) => onChange({ ...project,
+    batAssessments: { ...assessments, [id]: { ...assessments[id], [f]:v } } });
+  const setStatus = (id, v) => {
+    onChange({ ...project, batAssessments: { ...assessments, [id]: { ...assessments[id], status:v } } });
+    setTouched(t => new Set(t).add(id)); setCursor(id); setDone(d => d+1);
+  };
+  const toggleFlag = topicId => onChange({ ...project, batFlags: { ...flags, [topicId]: !flags[topicId] } });
+
+  const roll = t => {
+    const c = { G:0, Y:0, R:0, NA:0, "":0, n:0 };
+    for (const i of t.items) { if (i.group) continue; c[get(i)]++; c.n++; }
+    c.applicable = c.n - c.NA; c.assessed = c.G + c.Y + c.R;
+    return c;
+  };
+  const all = BAT_TOPICS.reduce((a,t) => { const c = roll(t); for (const k of ["G","Y","R","NA",""]) a[k] += c[k]; a.n += c.n; return a; }, { G:0, Y:0, R:0, NA:0, "":0, n:0 });
+  const applicable = all.n - all.NA, assessed = all.G + all.Y + all.R, ready = all[""] === 0;
+
+  const idx = BAT_TOPICS.findIndex(t => t.id === sel);
+  const topic = BAT_TOPICS[idx], c = roll(topic);
+  const blocks = batSweepBlocks(topic.items, scope);
+  const parents = new Set(topic.items.map(i => batParentOf(i.id)).filter(Boolean));
+  const queue = topic.items.filter(i => !i.group && batInScope(i, scope) && !parents.has(i.id));
+  const next = BAT_TOPICS[idx+1], prev = BAT_TOPICS[idx-1];
+  const firstOpen = queue.find(i => !get(i) && !touched.has(i.id));
+  const cur = cursor || (firstOpen && firstOpen.id);
+
+  const goTopic = id => { setSel(id); setCursor(null); setTouched(new Set()); setOpenSkip(false); };
+  const advance = id => { const at = queue.findIndex(i => i.id === id); const nx = queue.slice(at+1).find(i => !get(i) && !touched.has(i.id)) || queue[at+1]; setCursor(nx ? nx.id : null); };
+
+  useEffect(() => {
+    const h = e => {
+      if (!cur || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+      const m = { g:"G", y:"Y", r:"R", n:"NA" }[e.key.toLowerCase()];
+      if (m) { e.preventDefault(); setStatus(cur, m); }
+      if (e.key === "Enter") { e.preventDefault(); advance(cur); }
+    };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  });
+
+  const BatKey = ({ children }) => <kbd style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, padding:"1px 5px",
+    borderRadius:3, border:"1px solid "+T.border, borderBottomWidth:2, background:T.surface, color:T.muted }}>{children}</kbd>;
+
+  const Fld = ({ id, f, label, ph, w }) => (
+    <label style={{ flex:w?"none":1, width:w, minWidth:0 }}>
+      <div style={{ fontSize:TYPE.data, fontWeight:500, color:T.muted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4, fontFamily:T.sans }}>{label}</div>
+      <input value={V(id,f)} placeholder={ph} onChange={e => setV(id, f, e.target.value)}
+        style={{ width:"100%", fontSize:TYPE.body, fontFamily:T.sans, color:T.text, border:"1px solid "+T.border,
+          borderRadius:5, padding:"6px 8px", outline:"none", background:T.surface, transition:"border-color .15s" }}
+        onFocus={e => e.target.style.borderColor = T.teal} onBlur={e => e.target.style.borderColor = T.border}/>
+    </label>
+  );
+
+  const Row = ({ it, sub }) => {
+    const s = get(it), p = BAT_STATUS[s], on = it.id === cur;
+    return (
+      <div onClick={() => setCursor(it.id)} style={{ border:"1px solid "+(on ? T.tealBd : T.rowBd),
+        borderLeft:"3px solid "+(s ? p.tx : on ? T.teal : T.rowBd), borderRadius:7, background:T.surface,
+        padding:"11px 13px", marginLeft:sub?12:0, boxShadow:on ? "0 0 0 3px "+T.tealBg : "none", flexShrink:0 }}>
+        <div style={{ display:"flex", gap:10 }}>
+          <span style={{ fontSize:TYPE.body, fontWeight:500, fontFamily:T.sans, color:on ? T.teal : T.faint,
+            fontVariantNumeric:"tabular-nums", paddingTop:2, width:34, flexShrink:0 }}>{it.id}</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:TYPE.cell, lineHeight:1.55, fontFamily:T.sans, color:T.text }}>{it.bat && <BatTechBadge/>}{it.lead}</div>
+            {it.bullets && <ul style={{ margin:"7px 0 0", padding:"0 0 0 16px", fontSize:TYPE.body, lineHeight:1.6, fontFamily:T.sans, color:T.slate }}>
+              {it.bullets.map((b,j) => <li key={j}>{b}</li>)}</ul>}
+            {it.tail && <div style={{ fontSize:TYPE.data, lineHeight:1.5, fontFamily:T.sans, color:T.muted, marginTop:6, fontStyle:"italic" }}>{it.tail}</div>}
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:7, flexWrap:"wrap" }}>
+              <span style={{ fontSize:TYPE.data, fontFamily:T.sans, color:T.faint }}>Evidence expected · {batEvid(it)}</span>
+              {it.xref && <BatXrefChip>{it.xref.replace(/^add to\s*/i,"")}</BatXrefChip>}
+            </div>
+          </div>
+          {it.scope !== "Both" && <BatScopeChip scope={it.scope}/>}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:10, paddingLeft:44, flexWrap:"wrap" }}>
+          <BatStatusPicker value={s} onChange={v => setStatus(it.id, v)}/>
+          {on && !s && <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:TYPE.data, fontFamily:T.sans, color:T.faint }}>
+            <BatKey>G</BatKey><BatKey>Y</BatKey><BatKey>R</BatKey><BatKey>N</BatKey> set · <BatKey>↵</BatKey> next</span>}
+        </div>
+        {s && s !== "NA" && (
+          <>
+            <div style={{ display:"flex", gap:10, marginTop:10, paddingLeft:44 }}>
+              <Fld id={it.id} f="ref" label="Status / report ref" ph="e.g. ENV-REP-014 §4.2" w={210}/>
+              <Fld id={it.id} f="action" label={s === "G" ? "Comment (optional)" : "Action to close the gap"} ph={s === "G" ? "Evidence noted in reference" : "Describe the action…"}/>
+              {s !== "G" && <Fld id={it.id} f="owner" label="Owner" ph="Assign…" w={132}/>}
+              {s !== "G" && <Fld id={it.id} f="due" label="Target" ph="W__ · 2026" w={92}/>}
+            </div>
+            {on && <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:9, paddingLeft:44 }}>
+              <button className="hit" onClick={() => advance(it.id)}
+                style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, padding:"4px 10px", borderRadius:5,
+                  border:"1px solid "+T.tealBd, background:"transparent", color:T.teal, cursor:"pointer" }}>
+                Save &amp; next requirement ↵
+              </button>
+            </div>}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const flagged = !!flags[sel];
+  const jumpUnassessed = () => { const t = BAT_TOPICS.find(t => roll(t)[""] > 0); if (t) goTopic(t.id); };
+  const shown = filter !== null ? BAT_TOPICS.filter(t => roll(t)[filter] > 0) : BAT_TOPICS;
+
+
+  return (
+    <div style={{ flex:1, minHeight:0, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
+        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:600, fontFamily:T.sans, color:T.text }}>BAT evaluation — guided sweep</div>
+          <div style={{ fontSize:TYPE.data, fontFamily:T.sans, color:T.muted, marginTop:2 }}>GL0300 mini-BAT · {batInScope({scope:"Both"}, scope) && scope} scope</div>
+        </div>
+        <button
+          onClick={() => notify(ready ? "BAT statement generation — not yet available" : "Assess every item in scope before generating the statement")}
+          style={{ marginLeft:"auto", padding:"6px 14px", fontSize:12, borderRadius:6, fontFamily:T.sans, fontWeight:500,
+            cursor:"pointer", whiteSpace:"nowrap",
+            border:"1px solid "+(ready ? T.purpleBd : T.border), background:ready ? T.purple : T.surface,
+            color:ready ? "#fff" : T.faint, opacity:ready ? 1 : 0.6 }}>
+          Generate BAT statement
+        </button>
+      </div>
+
+      <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem", display:"flex", flexDirection:"column", gap:10, minHeight:0 }}>
+        {/* KPI tile row — same vocabulary as the other toolkit tabs */}
+        <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+          {[
+            { label:"Requirements in scope", value:applicable, of:all.n, flex:1.3 },
+            { label:"Assessed", value:(applicable ? Math.round(assessed/applicable*100) : 0)+"%", suffix:`${assessed} of ${applicable}`, flex:1.35 },
+            { label:"Compliant", value:all.G, bg:T.greenBg, bd:T.greenBd, tx:T.green, active:filter==="G", onClick:() => setFilter(filter==="G"?null:"G") },
+            { label:"Partial", value:all.Y, bg:T.amberBg, bd:T.amberBd, tx:T.amber, active:filter==="Y", onClick:() => setFilter(filter==="Y"?null:"Y") },
+            { label:"Gaps", value:all.R, bg:T.redBg, bd:T.redBd, tx:T.red, active:filter==="R", onClick:() => setFilter(filter==="R"?null:"R") },
+            { label:"Unassessed", value:all[""], bg:all[""]?T.surface2:T.surface, tx:all[""]?T.text:T.faint, active:filter==="", onClick:() => setFilter(filter===""?null:""), flex:1.1 },
+            { label:"N/A · out of scope", value:all.NA, bg:T.surface2, tx:T.muted, flex:1.2 },
+          ].map((k,i) => (
+            <div key={i} onClick={k.onClick} style={{ flex:k.flex||1, background:k.bg||T.surface, border:"1px solid "+(k.bd||T.border),
+              borderRadius:8, padding:"8px 12px", cursor:k.onClick?"pointer":"default",
+              outline:k.active?"2px solid "+(k.bd||T.border):"none", outlineOffset:-1, minWidth:0 }}>
+              <div style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, color:k.tx||T.muted, letterSpacing:"0.04em",
+                textTransform:"uppercase", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{k.label}</div>
+              <div style={{ display:"flex", alignItems:"baseline", gap:5, marginTop:3 }}>
+                <span style={{ fontSize:20, fontWeight:500, fontFamily:T.sans, color:k.tx||T.text, fontVariantNumeric:"tabular-nums" }}>{k.value}</span>
+                {k.of !== undefined && <span style={{ fontSize:TYPE.body, fontFamily:T.sans, color:T.faint }}>/ {k.of}</span>}
+                {k.suffix && <span style={{ fontSize:TYPE.body, fontFamily:T.sans, color:k.tx||T.faint, opacity:0.8 }}>{k.suffix}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0, padding:"0 2px" }}>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans,
+            letterSpacing:"0.04em", textTransform:"uppercase", padding:"3px 9px", borderRadius:3, whiteSpace:"nowrap",
+            background:ready?T.greenBg:T.amberBg, border:"1px solid "+(ready?T.greenBd:T.amberBd), color:ready?T.green:T.amber }}>
+            {ready ? "Ready to issue" : `BAT statement blocked · ${all[""]} unassessed`}
+          </span>
+          {!ready && <button className="hit" onClick={jumpUnassessed}
+            style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, padding:"4px 10px", borderRadius:5,
+              border:"1px solid "+T.tealBd, background:"transparent", color:T.teal, cursor:"pointer" }}>Next open topic →</button>}
+          {filter !== null && <span onClick={() => setFilter(null)} style={{ fontSize:TYPE.body, fontFamily:T.sans, color:T.teal, cursor:"pointer" }}>
+            Queue filtered to {BAT_STATUS[filter].label.toLowerCase()} — clear ×</span>}
+          <span style={{ marginLeft:"auto", fontSize:TYPE.data, fontFamily:T.sans, color:T.faint, fontVariantNumeric:"tabular-nums" }}>
+            GL0300 rev C · {done} answered this session</span>
+        </div>
+
+        <div style={{ display:"flex", gap:12, flex:1, minHeight:0 }}>
+          {/* topic queue */}
+          <div style={{ width:232, flexShrink:0, background:T.surface, border:"1px solid "+T.border, borderRadius:8, display:"flex", flexDirection:"column", minHeight:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderBottom:"1px solid "+T.rowBd, justifyContent:"space-between", flexShrink:0 }}>
+              <span style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, color:T.faint, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                {filter !== null ? BAT_STATUS[filter].label+" topics" : "All topics"}</span>
+              {filter !== null
+                ? <span onClick={() => setFilter(null)} style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, color:T.teal, cursor:"pointer" }}>Clear ×</span>
+                : <span style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{assessed}/{applicable}</span>}
+            </div>
+            <div style={{ overflowY:"auto", flex:1, padding:"5px 6px 8px" }}>
+              {shown.map(t => {
+                const tc = roll(t), out = tc.applicable === 0, on = t.id === sel, fin = !out && tc.assessed === tc.applicable;
+                return (
+                  <div key={t.id} onClick={() => goTopic(t.id)} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px",
+                    borderRadius:6, cursor:"pointer", background:on?T.tealBg:"transparent", border:"1px solid "+(on?T.tealBd:"transparent"),
+                    opacity:out?0.5:1, marginBottom:1 }}>
+                    <span style={{ width:17, fontSize:TYPE.data, fontFamily:T.sans, color:on?T.teal:T.faint, textAlign:"right", fontVariantNumeric:"tabular-nums", flexShrink:0 }}>{t.id}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:5, minWidth:0 }}>
+                        <span style={{ fontSize:TYPE.body, fontWeight:on?600:400, fontFamily:T.sans, color:on?T.teal:T.text,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.title}</span>
+                        {flags[t.id] && <span title="Flagged for review" style={{ fontSize:TYPE.data, color:T.amber, flexShrink:0 }}>⚑</span>}
+                      </div>
+                      <div style={{ marginTop:4 }}><BatStackBar c={tc} w="100%" h={3}/></div>
+                    </div>
+                    <span style={{ width:16, textAlign:"right", flexShrink:0, fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans,
+                      color:fin?T.green:T.faint, fontVariantNumeric:"tabular-nums" }}>{out?"–":fin?"✓":tc.applicable-tc.assessed}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* focus column */}
+          <div style={{ flex:1, minWidth:0, background:T.surface, border:"1px solid "+T.border, borderRadius:8, display:"flex", flexDirection:"column", minHeight:0 }}>
+            <div style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"11px 16px", borderBottom:"1px solid "+T.rowBd, justifyContent:"space-between", flexShrink:0 }}>
+              <div>
+                <div style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, color:T.faint, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:5 }}>
+                  Topic {idx+1} of {BAT_TOPICS.length}</div>
+                <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                  <h2 style={{ fontSize:16, fontWeight:600, fontFamily:T.sans, color:T.text, margin:0 }}>{topic.id}. {topic.title}</h2>
+                  <BatScopeChip scope={topic.scope}/>
+                  {flagged && <span style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, letterSpacing:"0.04em", textTransform:"uppercase",
+                    padding:"3px 8px", borderRadius:3, background:T.amberBg, border:"1px solid "+T.amberBd, color:T.amber, whiteSpace:"nowrap" }}>⚑ Flagged for review</span>}
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                <div style={{ display:"flex", gap:12 }}>
+                  {["G","Y","R"].map(k => <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:TYPE.body, fontFamily:T.sans, color:T.muted }}>
+                    <BatStatusDot s={k} size={7}/>{c[k]}</span>)}
+                </div>
+                <span style={{ fontSize:TYPE.body, fontWeight:500, fontFamily:T.sans, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{c.assessed}/{c.applicable} done</span>
+              </div>
+            </div>
+
+            <div style={{ overflowY:"auto", flex:1, padding:"12px 16px", display:"flex", flexDirection:"column", gap:9 }}>
+              {blocks.map((b,bi) => {
+                if (b.k === "skip") return (
+                  <div key={"s"+bi} style={{ border:"1px dashed "+T.border, borderRadius:6, background:T.surface2, padding:"7px 11px", flexShrink:0 }}>
+                    <div {...clickable(() => setOpenSkip(!openSkip), (openSkip?"Hide":"Show")+" skipped rows")}
+                      style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+                      <BatStatusPill s="NA"/>
+                      <span style={{ fontSize:TYPE.body, fontFamily:T.sans, color:T.muted, flex:1 }}>
+                        {b.items.length} row{b.items.length>1?"s":""} skipped — out of scope, recorded as N/A in the report</span>
+                      <span style={{ fontSize:TYPE.data, fontWeight:500, fontFamily:T.sans, color:T.teal }}>
+                        {openSkip?"Hide":"Show"} {b.items.map(i=>i.id).join(", ")}</span>
+                    </div>
+                    {openSkip && b.items.map(i => (
+                      <div key={i.id} style={{ display:"flex", gap:8, marginTop:7, fontSize:TYPE.body, lineHeight:1.5, fontFamily:T.sans, color:T.faint }}>
+                        <span style={{ width:34, flexShrink:0 }}>{i.id}</span><span style={{ flex:1 }}>{i.lead}</span><BatScopeChip scope={i.scope} dim/>
+                      </div>
+                    ))}
+                  </div>
+                );
+                if (b.k === "grp") {
+                  const kc = b.kids.filter(k => batInScope(k, scope)), kd = kc.filter(k => get(k)).length;
+                  return (
+                    <div key={b.p.id} style={{ border:"1px solid "+T.border, borderRadius:8, background:T.surface2, overflow:"hidden", flexShrink:0 }}>
+                      <div style={{ padding:"9px 13px", borderBottom:"1px solid "+T.rowBd, background:T.surface }}>
+                        <div style={{ display:"flex", gap:10, alignItems:"baseline" }}>
+                          <span style={{ fontSize:TYPE.body, fontWeight:500, fontFamily:T.sans, color:T.faint, width:34, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{b.p.id}</span>
+                          <div style={{ flex:1, fontSize:TYPE.cell, fontWeight:500, lineHeight:1.5, fontFamily:T.sans, color:T.text }}>{b.p.lead}</div>
+                          <span style={{ fontSize:TYPE.data, fontFamily:T.sans, color:T.faint, whiteSpace:"nowrap" }}>{kd}/{kc.length} techniques</span>
+                        </div>
+                      </div>
+                      <div style={{ padding:"9px 11px", display:"flex", flexDirection:"column", gap:7 }}>
+                        {b.kids.map(k => batInScope(k, scope)
+                          ? <Row key={k.id} it={k} sub/>
+                          : <div key={k.id} style={{ display:"flex", gap:8, alignItems:"center", padding:"5px 11px 5px 22px", fontSize:TYPE.body, fontFamily:T.sans, color:T.faint }}>
+                              <span style={{ width:34 }}>{k.id}</span>
+                              <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{k.lead}</span>
+                              <BatStatusPill s="NA"/>
+                            </div>)}
+                      </div>
+                    </div>
+                  );
+                }
+                return <Row key={b.i.id} it={b.i}/>;
+              })}
+            </div>
+
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"9px 14px",
+              borderTop:"1px solid "+T.rowBd, background:T.surface2, flexShrink:0, borderRadius:"0 0 8px 8px" }}>
+              <button onClick={() => prev && goTopic(prev.id)}
+                style={{ visibility:prev?"visible":"hidden", maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                  fontSize:12, fontFamily:T.sans, padding:"7px 14px", borderRadius:6, border:"1px solid "+T.border, background:T.surface, color:T.text, cursor:"pointer" }}>
+                ◀ {prev && prev.id+". "+prev.title}
+              </button>
+              <div style={{ display:"flex", gap:8 }}>
+                <button className="hit" onClick={() => toggleFlag(sel)}
+                  style={{ fontSize:12, fontFamily:T.sans, fontWeight:500, padding:"7px 14px", borderRadius:6, cursor:"pointer",
+                    border:"1px solid "+(flagged?T.amberBd:T.tealBd), background:flagged?T.amberBg:"transparent", color:flagged?T.amber:T.teal }}>
+                  {flagged ? "⚑ Flagged — undo" : "Flag topic for review"}
+                </button>
+                <button onClick={() => next && goTopic(next.id)}
+                  style={{ maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    fontSize:12, fontFamily:T.sans, fontWeight:500, padding:"7px 14px", borderRadius:6, border:"1px solid "+T.teal,
+                    background:T.teal, color:"#fff", cursor:"pointer" }}>
+                  {next ? next.id+". "+next.title : "Finish sweep"} ▶
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [tab, setTab]                     = useState(initialTab||"dashboard");
   // One toast system for the whole project shell (D3). Children call notify(msg).
@@ -4056,6 +4636,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             && !Array.isArray(src.screeningSkips)) ? src.screeningSkips : {},
           legalRefNotes: (src.legalRefNotes && typeof src.legalRefNotes === "object"
             && !Array.isArray(src.legalRefNotes)) ? src.legalRefNotes : {},
+          batAssessments: (src.batAssessments && typeof src.batAssessments === "object"
+            && !Array.isArray(src.batAssessments)) ? src.batAssessments : {},
+          batFlags: (src.batFlags && typeof src.batFlags === "object"
+            && !Array.isArray(src.batFlags)) ? src.batFlags : {},
           footprintMeta: Array.isArray(src.footprintMeta) ? src.footprintMeta : [],
           // Footprint result — strip row arrays (they're large and session-only)
           footprint: src.footprint ? stripForSave(src.footprint) : null,
@@ -4578,7 +5162,7 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","risks","opportunities","footprint","waste","attendees","changes","settings"];
+  const TABS = ["dashboard","screening","risks","opportunities","footprint","waste","bat","attendees","changes","settings"];
   const tabBtnStyle = active => ({ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
     fontWeight:500, background:"transparent", border:"none", whiteSpace:"nowrap",
     borderBottom: active ? "2px solid "+T.teal : "2px solid transparent",
@@ -4596,6 +5180,7 @@ This cannot be undone.`)) return;
     opportunities: "Opportunities",
     footprint:     "Environmental Budget",
     waste:         "Waste Handling",
+    bat:           "BAT",
     attendees:     "Attendees",
     changes:       "Changes",
     settings:      "Settings",
@@ -4637,7 +5222,7 @@ This cannot be undone.`)) return;
         </div>
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
           {/* Instant-save tabs write on every change — reassure instead of toasting each keystroke */}
-          {(tab==="settings"||tab==="waste"||tab==="attendees") &&
+          {(tab==="settings"||tab==="waste"||tab==="attendees"||tab==="bat") &&
             <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, textTransform:"uppercase", letterSpacing:"0.08em" }}>All changes saved</span>}
           {project.type  && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"3px 8px", borderRadius:3, background:T.slateBg, color:T.slate, border:"1px solid "+T.slateBd, letterSpacing:"0.05em" }}>{project.type}</span>}
           {project.phase && <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"3px 8px", borderRadius:3, background:T.blueBg,  color:T.blue,  border:"1px solid "+T.blueBd,  letterSpacing:"0.05em" }}>{project.phase}</span>}
@@ -5415,6 +6000,8 @@ This cannot be undone.`)) return;
 
 
       {tab === "waste" && <WasteTab project={project} onChange={onChange} notify={notify}/>}
+
+      {tab === "bat" && <BatTab project={project} onChange={onChange} notify={notify}/>}
 
       {tab === "attendees" && (() => {
         const sessions    = project.attendeeSessions || [];
