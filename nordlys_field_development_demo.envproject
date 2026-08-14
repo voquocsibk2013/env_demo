@@ -1,0 +1,743 @@
+{
+  "_envToolkitVersion": "1.0",
+  "_exportedAt": "2026-08-14T10:00:00.000Z",
+  "project": {
+    "id": "demo-nordlys-fd2",
+    "projectId": "PRJ-70142",
+    "name": "Nordlys Field Development — Phase 2 Expansion",
+    "company": "Nordvik Energy AS",
+    "contract": "EPCI-2026-014",
+    "type": "Offshore O&G",
+    "phase": "Construction",
+    "createdAt": "2025-10-15T08:00:00.000Z",
+    "aspects": [
+      {
+        "id": "demo-asp-001", "ref": "ASP-001", "_screeningId": "air_01", "_color": "red",
+        "phase": "Operations & Maintenance", "area": "Plant stack / vent emissions",
+        "activity": "Integrated combustion plant, gas turbines, boilers, heaters",
+        "aspect": "NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Stack NOₓ and PM₁₀ may approach or exceed discharge-permit conditions during sustained high-throughput operation, particularly at peak gas-turbine load.",
+        "receptors": "Ambient air quality at nearest sensitive receptor (Solvik gård, 1.2 km); regional air-quality zone",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 4, "probability": 3,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "Y", "stakeholderConcern": "N",
+        "control": "Continuous emissions monitoring (CEMS) on all stacks; quarterly permit-compliance reporting to Statsforvalteren; low-NOx burner selection (see BAT 3.1a/3.1b)",
+        "legalRef": "Forurensningsloven §11 (M); Forurensningsforskriften Kap.27 (MCP) (M)",
+        "owner": "Hanne Berg — EHS Lead", "status": "Action",
+        "createdAt": "2025-11-18T09:05:00.000Z", "updatedAt": "2025-12-09T10:00:00.000Z"
+      },
+      {
+        "id": "demo-asp-002", "ref": "ASP-002", "_screeningId": "air_03", "_color": "red",
+        "phase": "Commissioning,Operations & Maintenance", "area": "Flaring volumes & composition",
+        "activity": "Commissioning purge, emergency relief, production upsets",
+        "aspect": "Combustion products; unburnt hydrocarbons; black smoke; GHG; NOₓ and CO₂ tax liability",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Commissioning purge and emergency relief events generate short, high-volume flaring with visible black smoke and elevated CO₂/NOₓ tax liability.",
+        "receptors": "Regional air shed; CO2-avgiften and NOx-avgiften tax exposure",
+        "recSensitivity": "Low", "scale": "Regional", "severity": 5, "probability": 2,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Flare gas recovery system in base design (BAT 4.1a); start-up flaring sequence plan under development (see BAT 4.1b, tracked action)",
+        "legalRef": "Aktivitetsforskriften Kap.XI (flaring) (M); CO2-avgiften (M); NOx-avgiften (M)",
+        "owner": "Tor Aas — Process Engineer", "status": "Action",
+        "createdAt": "2025-11-18T09:20:00.000Z", "updatedAt": "2025-11-18T09:20:00.000Z"
+      },
+      {
+        "id": "demo-asp-003", "ref": "ASP-003", "_screeningId": "air_04", "_color": "red",
+        "phase": "Operations & Maintenance", "area": "Fugitive emissions",
+        "activity": "HCs, VOCs from flanges, valve stems, loading operations, tank venting, HVAC, from loosen seals/bolt caused by vibration",
+        "aspect": "Atmospheric VOC / methane release; contribution to GHG inventory",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Fugitive VOC/methane losses from flanges, valves and tank venting contribute to the facility GHG inventory and NMVOC reporting.",
+        "receptors": "Local air quality; corporate Scope 1 GHG inventory",
+        "recSensitivity": "Low", "scale": "Local", "severity": 2, "probability": 3,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "LDAR programme scoped as Opportunity OPP-003; routine leak survey planned quarterly",
+        "legalRef": "Forurensningsloven §7 (M); EU Methane Reg. 2024/1787 LDAR (BP, EEA pending)",
+        "owner": "Tor Aas — Process Engineer", "status": "Action",
+        "createdAt": "2025-11-18T09:35:00.000Z", "updatedAt": "2025-11-18T09:35:00.000Z"
+      },
+      {
+        "id": "demo-asp-004", "ref": "ASP-004", "_screeningId": "air_07", "_color": "red",
+        "phase": "Engineering,Operations & Maintenance", "area": "Energy consumption",
+        "activity": "Process design, utilities, lighting, HVAC, compression systems",
+        "aspect": "Excessive energy consumption; GHG emissions; regulatory or contractual energy targets",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Facility energy demand is approaching the 85 TJ/yr threshold under EU EED 2023/1791, which would trigger a mandatory energy audit obligation.",
+        "receptors": "Corporate energy reporting; regulatory audit obligation",
+        "recSensitivity": "Medium", "scale": "Regional", "severity": 3, "probability": 4,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Energy monitoring via plant CMS (BAT 1.3j); VSD and heat-recovery opportunities tracked under OPP-005/OPP-006",
+        "legalRef": "EU EED 2023/1791 Art.11 (≥85TJ) (M); ISO 50001 (BP unless ≥85TJ)",
+        "owner": "Tor Aas — Process Engineer", "status": "Action",
+        "createdAt": "2025-11-18T09:50:00.000Z", "updatedAt": "2025-11-18T09:50:00.000Z"
+      },
+      {
+        "id": "demo-asp-005", "ref": "ASP-005", "_screeningId": "wat_01", "_color": "blue",
+        "phase": "Installation", "area": "Ballast water (vessels)",
+        "activity": "Vessel operations, installation support vessels",
+        "aspect": "Introduction of non-indigenous species via ballast water exchange",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Installation support vessels transiting from other regions could introduce non-indigenous species via ballast water exchange near the platform location.",
+        "receptors": "Local marine benthic community",
+        "recSensitivity": "Low", "scale": "Local", "severity": 2, "probability": 2,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Ballast water management plan required in vessel charter specification; exchange only in open ocean per D-1/D-2 standard",
+        "legalRef": "Ballastvannforskriften FOR-2017-09-08-1368 (M); IMO BWM Convention 2004 (M)",
+        "owner": "Kari Lindgren — Discharge Permitting", "status": "Info",
+        "createdAt": "2025-11-18T10:10:00.000Z", "updatedAt": "2025-11-18T10:10:00.000Z"
+      },
+      {
+        "id": "demo-asp-006", "ref": "ASP-006", "_screeningId": "wat_05", "_color": "blue",
+        "phase": "Operations & Maintenance", "area": "Produced water",
+        "activity": "Oil & gas production operations",
+        "aspect": "Discharge of produced water with hydrocarbons, scale inhibitors, NORM",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Produced water discharge carries dispersed hydrocarbons, scale inhibitors and trace NORM; the discharge permit sets strict oil-in-water limits.",
+        "receptors": "Regional marine water quality; commercial fishing grounds 8km south",
+        "recSensitivity": "Medium", "scale": "Regional", "severity": 4, "probability": 4,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "Y",
+        "control": "Produced water treatment train sized to <30mg/l target ahead of the regulatory 30mg/l limit; monthly compliance sampling",
+        "legalRef": "Forurensningsloven §11 (M); Aktivitetsforskriften Kap.XI (M); OSPAR Rec.2001/1 (BP)",
+        "owner": "Kari Lindgren — Discharge Permitting", "status": "Action",
+        "createdAt": "2025-11-18T10:25:00.000Z", "updatedAt": "2025-11-18T10:25:00.000Z"
+      },
+      {
+        "id": "demo-asp-007", "ref": "ASP-007", "_screeningId": "wat_07", "_color": "blue",
+        "phase": "Installation", "area": "Seabed sediment disturbance",
+        "activity": "Dredging, trenching, anchor dragging, jetting, structure installation",
+        "aspect": "Sediment plume; burial of benthic communities; contaminant resuspension",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Structure installation and anchor deployment will disturb seabed sediment, creating a temporary plume and potential burial of benthic communities.",
+        "receptors": "Benthic habitat within 500m of installation footprint",
+        "recSensitivity": "High", "scale": "Local", "severity": 3, "probability": 3,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Pre-installation benthic survey completed (see Legal References note on baseline evidence); silt curtain considered for sensitive areas",
+        "legalRef": "Naturmangfoldloven §53 (M, <12nm); Havvernloven 2025 (M, NCS); OSPAR Annex III (M)",
+        "owner": "Marte Fjeld — Ecology Lead", "status": "Action",
+        "createdAt": "2025-11-18T10:45:00.000Z", "updatedAt": "2025-11-18T10:45:00.000Z"
+      },
+      {
+        "id": "demo-asp-008", "ref": "ASP-008", "_screeningId": "wst_03", "_color": "amber",
+        "phase": "Construction,Decommissioning", "area": "Hazardous waste",
+        "activity": "Excavated contaminated soil, chemical containers, insulation, first-fill residues",
+        "aspect": "Improper storage, transport, or disposal of hazardous waste categories",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Excavated contaminated soil and first-fill chemical residues generate hazardous waste streams requiring licensed transport and disposal.",
+        "receptors": "Local soil and groundwater; licensed hazardous waste facility",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 3, "probability": 3,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Hazardous waste segregation and manifest tracking per Avfallsforskriften kap.11; see Waste Handling register WS-001–WS-017",
+        "legalRef": "Avfallsforskriften kap.11 (M); Forurensningsloven §32 (M); NORSOK S-003 (BP)",
+        "owner": "Kristin Moe — Waste Coordinator", "status": "Action",
+        "createdAt": "2025-11-18T11:05:00.000Z", "updatedAt": "2025-11-18T11:05:00.000Z"
+      },
+      {
+        "id": "demo-asp-009", "ref": "ASP-009", "_screeningId": "wst_07", "_color": "amber",
+        "phase": "Operations & Maintenance", "area": "NORM — naturally occurring radioactive material",
+        "activity": "Produced water scaling, pigging returns, sand production, deposition in vessels",
+        "aspect": "Accumulation and disposal of NORM-contaminated scale, sludge, pigging waste",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Produced water scaling and pigging returns accumulate NORM-contaminated scale requiring specialist handling and disposal.",
+        "receptors": "Workers during pigging/descaling operations; specialist NORM disposal contractor",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 4, "probability": 2,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "Y", "stakeholderConcern": "N",
+        "control": "NORM management plan per Strålevernforskriften; dose monitoring for exposed workers; see legal reference note on NORM waste routing",
+        "legalRef": "Strålevernloven (M); Strålevernforskriften (M) — NORM waste; NORSOK S-003 (BP)",
+        "owner": "Bjørn Skage — Radiation Protection Officer", "status": "Action",
+        "createdAt": "2025-11-18T11:20:00.000Z", "updatedAt": "2025-11-18T11:20:00.000Z"
+      },
+      {
+        "id": "demo-asp-010", "ref": "ASP-010", "_screeningId": "wst_12", "_color": "amber",
+        "phase": "Decommissioning", "area": "Subsea structure removal",
+        "activity": "Decommissioning of pipelines, umbilicals, templates, jackets",
+        "aspect": "Contaminated materials, marine litter, seabed disturbance",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "End-of-life removal of subsea structures, pipelines and jackets will generate contaminated materials and marine litter requiring an approved decommissioning plan.",
+        "receptors": "Seabed at removal sites; OSPAR-regulated marine environment",
+        "recSensitivity": "Medium", "scale": "Regional", "severity": 3, "probability": 2,
+        "duration": "Permanent (>10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Full removal presumption under Petroleumsloven §5-3; decommissioning plan to be submitted 2-5 years ahead of cessation",
+        "legalRef": "Petroleumsloven kap.5 (§5-3) (M); OSPAR Dec. 98/3 (M); London Protocol Art.4 (M)",
+        "owner": "Erik Solheim — Project Manager", "status": "Info",
+        "createdAt": "2025-11-18T11:35:00.000Z", "updatedAt": "2025-11-18T11:35:00.000Z"
+      },
+      {
+        "id": "demo-asp-011", "ref": "ASP-011", "_screeningId": "land_01", "_color": "brown",
+        "phase": "Construction", "area": "Bulk excavation",
+        "activity": "Site preparation, foundation works, cable trenching",
+        "aspect": "Loss of topsoil; disturbance of contaminated ground; peat or organic soil release",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Bulk excavation for foundations and cable trenching may disturb organic topsoil and expose previously undocumented ground conditions.",
+        "receptors": "Onshore tie-in site soil and drainage",
+        "recSensitivity": "Low", "scale": "Local", "severity": 2, "probability": 3,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Topsoil stripped and stockpiled separately for reinstatement per method statement MS-14",
+        "legalRef": "Forurensningsforskriften kap.2 (M); Forurensningsloven §7 (M)",
+        "owner": "Nora Haugen — Site EHS Coordinator", "status": "Action",
+        "createdAt": "2025-11-18T13:10:00.000Z", "updatedAt": "2025-11-18T13:10:00.000Z"
+      },
+      {
+        "id": "demo-asp-012", "ref": "ASP-012", "_screeningId": "land_04", "_color": "brown",
+        "phase": "Engineering,Construction", "area": "Land contamination survey",
+        "activity": "Previous industrial use, infilled land, leaking USTs",
+        "aspect": "Contamination of soil or groundwater; worker and receptor exposure",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "The onshore tie-in site has a history of light-industrial use; potential for residual soil/groundwater contamination from a decommissioned fuel store.",
+        "receptors": "Soil and shallow groundwater at tie-in site; site workers",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 3, "probability": 2,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Phase 2 intrusive site investigation completed Sept 2025; no exceedance of Norwegian soil quality guideline values found for target substances",
+        "legalRef": "Forurensningsforskriften kap.2 (M); Forurensningsloven §11 (M)",
+        "owner": "Nora Haugen — Site EHS Coordinator", "status": "Info",
+        "createdAt": "2025-11-18T13:30:00.000Z", "updatedAt": "2025-11-18T13:30:00.000Z"
+      },
+      {
+        "id": "demo-asp-013", "ref": "ASP-013", "_screeningId": "eco_01", "_color": "green",
+        "phase": "Engineering", "area": "Protected habitat & designations",
+        "activity": "Siting, ground clearance, cable/pipeline routing",
+        "aspect": "Loss of or disturbance to Natura 2000, RAMSAR, or nationally protected habitat",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Platform siting, cable and pipeline routing must avoid disturbance to any Natura 2000, Ramsar or nationally protected habitat in the wider development corridor.",
+        "receptors": "Protected coastal and marine habitat designations within the regional development corridor",
+        "recSensitivity": "High", "scale": "Regional", "severity": 5, "probability": 1,
+        "duration": "Permanent (>10yr)", "legalThreshold": "N", "stakeholderConcern": "Y",
+        "control": "Naturbase screening completed (see legal reference note); no designated site within 5km footprint confirmed",
+        "legalRef": "Naturmangfoldloven §§33-51 (M); Ramsar Convention (M); Bern Conv. Art.4 (M)",
+        "owner": "Marte Fjeld — Ecology Lead", "status": "Action",
+        "createdAt": "2025-11-18T13:50:00.000Z", "updatedAt": "2025-11-18T13:50:00.000Z"
+      },
+      {
+        "id": "demo-asp-014", "ref": "ASP-014", "_screeningId": "eco_06", "_color": "green",
+        "phase": "Installation", "area": "Marine / freshwater ecosystem",
+        "activity": "Seabed disturbance, anchoring/trenching, piling, dewatering outfall, cofferdam, seismic surveys, vessel operations, sonar",
+        "aspect": "Disruption to protected species migration/spawning, acoustic disturbance, injury, or displacement; physical damage to cold-water coral, maerl beds, biogenic reef, or priority seabed habitat",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Piling and anchor deployment generate underwater noise and physical seabed disturbance that could displace or injure marine species during the installation window.",
+        "receptors": "Marine mammals and fish within the acoustic disturbance radius",
+        "recSensitivity": "High", "scale": "Local", "severity": 4, "probability": 3,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Soft-start piling procedure; Marine Mammal Observer on watch during all piling operations",
+        "legalRef": "Naturmangfoldloven §§15-27,53 (M); Havvernloven (M outside 12nm); OSPAR Annex III (M)",
+        "owner": "Marte Fjeld — Ecology Lead", "status": "Action",
+        "createdAt": "2025-11-18T14:05:00.000Z", "updatedAt": "2025-11-18T14:05:00.000Z"
+      },
+      {
+        "id": "demo-asp-015", "ref": "ASP-015", "_screeningId": "eco_13", "_color": "green",
+        "phase": "Installation", "area": "Underwater noise — pile driving",
+        "activity": "Offshore monopile installation, jacket installation, subsea piling",
+        "aspect": "Acoustic injury or disturbance to fish and marine mammals",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Jacket piling generates high-intensity underwater noise capable of causing acoustic injury to fish and marine mammals in close proximity.",
+        "receptors": "Marine mammals and fish; commercial fishing interests nearby",
+        "recSensitivity": "High", "scale": "Local", "severity": 4, "probability": 4,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Piling noise modelling completed; soft-start and ramp-up procedure mandated; MMO exclusion zone monitoring",
+        "legalRef": "Naturmangfoldloven §§15-27 (M); OSPAR guidance on underwater noise (BP)",
+        "owner": "Marte Fjeld — Ecology Lead", "status": "Action",
+        "createdAt": "2025-11-18T14:25:00.000Z", "updatedAt": "2025-11-18T14:25:00.000Z"
+      },
+      {
+        "id": "demo-asp-016", "ref": "ASP-016", "_screeningId": "com_01", "_color": "purple",
+        "phase": "Engineering,Construction", "area": "Archaeological impact & desk-based assessment",
+        "activity": "Ground breaking, piling, trenching, seabed operations; any ground disturbance onshore or planning application in areas of archaeological sensitivity",
+        "aspect": "Disturbance or destruction of legally protected remains; failure to identify designated sites before works — stop-work, consent refused or conditions applied without adequate baseline",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Ground-breaking works at the onshore tie-in site carry a residual risk of disturbing unrecorded archaeological remains.",
+        "receptors": "Any undiscovered heritage assets within the construction footprint",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 3, "probability": 2,
+        "duration": "Permanent (>10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Desk-based archaeological assessment completed; chance-find procedure issued to all site personnel",
+        "legalRef": "Kulturminneloven §9 (M); NORSOK S-003 (BP)",
+        "owner": "Erik Solheim — Project Manager", "status": "Action",
+        "createdAt": "2025-11-25T09:15:00.000Z", "updatedAt": "2025-11-25T09:15:00.000Z"
+      },
+      {
+        "id": "demo-asp-017", "ref": "ASP-017", "_screeningId": "com_10", "_color": "purple",
+        "phase": "Engineering,Operations & Maintenance", "area": "Indigenous peoples — Sámi",
+        "activity": "Projects in Sámi traditional lands (Finnmark/Troms/Nordland)",
+        "aspect": "Impact on Sámi reindeer herding, cultural heritage, and traditional land use",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Onshore infrastructure and access routes cross land historically used by Reinbeitedistrikt 14 for reindeer herding.",
+        "receptors": "Sámi reindeer herding district 14 — seasonal grazing and migration routes",
+        "recSensitivity": "High", "scale": "Regional", "severity": 4, "probability": 2,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "Y",
+        "control": "Direct consultation with the reindeer herding district held Nov 2025 (see legal reference note); no active corridor within footprint confirmed, annual liaison scheduled",
+        "legalRef": "Reindriftsloven (M); Finnmarksloven (M); ILO-169 (M)",
+        "owner": "Ingrid Waage — External Affairs", "status": "Action",
+        "createdAt": "2025-11-25T09:40:00.000Z", "updatedAt": "2026-01-14T09:30:00.000Z"
+      },
+      {
+        "id": "demo-asp-018", "ref": "ASP-018", "_screeningId": "emg_01", "_color": "darkred",
+        "phase": "Operations & Maintenance", "area": "Oil spill response plan",
+        "activity": "All offshore and coastal hydrocarbon operations",
+        "aspect": "Inadequate preparedness for accidental oil release; environmental damage",
+        "condition": "Emergency", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "An uncontrolled accidental oil release from the platform or export pipeline would cause significant environmental damage to the surrounding marine environment.",
+        "receptors": "Regional marine environment; coastal receptors within worst-case spill trajectory",
+        "recSensitivity": "High", "scale": "Regional", "severity": 5, "probability": 2,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Oil Spill Contingency Plan (OSCP) in preparation per Forurensningsloven §40; tiered response equipment and NOFO membership confirmed",
+        "legalRef": "Forurensningsloven §40 (M); Aktivitetsforskriften Kap. XIII (M, NCS)",
+        "owner": "Petter Lund — Emergency Preparedness Lead", "status": "Action",
+        "createdAt": "2025-11-25T10:00:00.000Z", "updatedAt": "2025-11-25T10:00:00.000Z"
+      },
+      {
+        "id": "demo-asp-019", "ref": "ASP-019", "_screeningId": "emg_03", "_color": "darkred",
+        "phase": "Operations & Maintenance", "area": "Spill protection — secondary containment",
+        "activity": "Storage tanks, chemical bunds, drip trays, offshore deck drainage",
+        "aspect": "Inadequate bunding or containment allowing release to ground or water",
+        "condition": "Abnormal", "isAbnormal": true, "abnormalType": "Equipment breakdown or malfunction",
+        "abnormalDesc": "Bund integrity loss following freeze-thaw cracking identified during Q1 2026 inspection of the chemical storage bund.",
+        "impact": "Degraded secondary containment could allow a chemical release to reach uncontained ground or drainage in the event of a primary containment failure.",
+        "receptors": "Site soil and surface water drainage",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 3, "probability": 3,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "N", "stakeholderConcern": "N",
+        "control": "Bund repair scheduled; interim daily visual inspection regime in place until remediated",
+        "legalRef": "Forurensningsloven §7 (M); Innretningsforskriften §40 (M, NCS); NORSOK S-003 (BP)",
+        "owner": "Nora Haugen — Site EHS Coordinator", "status": "Action",
+        "createdAt": "2026-01-14T13:45:00.000Z", "updatedAt": "2026-01-14T13:45:00.000Z"
+      },
+      {
+        "id": "demo-asp-020", "ref": "ASP-020", "_screeningId": "emg_05", "_color": "darkred",
+        "phase": "Commissioning,Operations & Maintenance", "area": "Emergency venting & blowdown",
+        "activity": "Process upsets, ESD activation, commissioning activities",
+        "aspect": "Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "Emergency venting and blowdown events during process upsets or ESD activation release unburned gas to atmosphere and accrue CO₂/NOₓ tax liability above the reporting threshold.",
+        "receptors": "Regional air shed; CO2-avgiftsloven and NOx-avgiften tax exposure",
+        "recSensitivity": "Low", "scale": "Regional", "severity": 4, "probability": 3,
+        "duration": "Long-term (1-10yr)", "legalThreshold": "Y", "stakeholderConcern": "N",
+        "control": "ESD cause-and-effect matrix minimises blowdown volume; cold-vent avoidance tracked as an open BAT gap (BAT 4.1d)",
+        "legalRef": "CO2-avgiftsloven (M); NOx-avgiften (M); Aktivitetsforskriften Kap. XI (M, NCS)",
+        "owner": "Tor Aas — Process Engineer", "status": "Info",
+        "createdAt": "2026-01-14T14:05:00.000Z", "updatedAt": "2026-01-14T14:05:00.000Z"
+      },
+      {
+        "id": "demo-asp-021", "ref": "ASP-021", "_screeningId": null, "_color": "",
+        "phase": "Construction", "area": "Site accommodation",
+        "activity": "Diesel generator bank for temporary construction camp power",
+        "aspect": "Noise nuisance to nearest residential receptor from continuous generator operation",
+        "condition": "Normal", "isAbnormal": false, "abnormalType": "", "abnormalDesc": "",
+        "impact": "A noise complaint was received from the nearest residential dwelling regarding continuous generator noise from the temporary construction camp.",
+        "receptors": "Nearest residential dwelling (Solvik gård), 450m NE of the camp",
+        "recSensitivity": "Medium", "scale": "Local", "severity": 2, "probability": 3,
+        "duration": "Temporary (<1yr)", "legalThreshold": "N", "stakeholderConcern": "Y",
+        "control": "Acoustic enclosures fitted to all generators; run schedule restricted to 07:00–21:00; follow-up noise monitoring survey scheduled",
+        "legalRef": "",
+        "owner": "Nora Haugen — Site EHS Coordinator", "status": "Action",
+        "createdAt": "2026-01-09T08:20:00.000Z", "updatedAt": "2026-01-09T08:20:00.000Z"
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "demo-opp-001", "ref": "OPP-001", "_screeningId": "co2", "_color": "red",
+        "type": "Low-Carbon Technology", "materiality": "Both",
+        "description": "Flare gas recovery system reduces continuous flaring during normal operations",
+        "envBenefit": "Cuts routine flaring CO₂e by an estimated 2,450 t/yr and reduces black-carbon/soot deposition.",
+        "bizBenefit": "Recovered gas routed to fuel gas system reduces import fuel gas purchase; avoids CO2-avgiften and NOx-avgiften exposure on flared volumes.",
+        "techBenefit": "Off-the-shelf flare gas recovery compressor package; proven technology on comparable NCS platforms.",
+        "envValue": 5, "bizValue": 4, "feasibility": 4, "owner": "Tor Aas — Process Engineer",
+        "createdAt": "2025-11-18T14:40:00.000Z", "updatedAt": "2026-03-02T11:00:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_001a", "label": "Concept / FEED estimate", "date": "2025-11-18T14:40:00.000Z",
+            "note": "Based on baseline continuous-flare rate from the process design basis.",
+            "lines": [
+              { "id": "s1_co2", "custom": false, "scope": "Scope 1", "type": "CO2", "unit": "kg",
+                "reduction": "2450000", "baseline": "9800000", "cf": 1, "ref": "Flare gas recovery FEED estimate, Doc FS-04 Rev B", "savingType": "identified" }
+            ]
+          },
+          {
+            "id": "ghgp_demo_001b", "label": "Detailed design update", "date": "2026-03-02T11:00:00.000Z",
+            "note": "Revised down after detailed HYSYS re-run confirmed a smaller achievable recovery fraction.",
+            "lines": [
+              { "id": "s1_co2", "custom": false, "scope": "Scope 1", "type": "CO2", "unit": "kg",
+                "reduction": "2100000", "baseline": "9800000", "cf": 1, "ref": "Detailed design HYSYS model v3", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-002", "ref": "OPP-002", "_screeningId": "nox", "_color": "red",
+        "type": "Regulatory Incentive", "materiality": "Environmental",
+        "description": "Selective catalytic reduction retrofit feasibility for main power turbines",
+        "envBenefit": "Reduces NOₓ emissions from main power turbines by an estimated 18.5 t/yr.",
+        "bizBenefit": "Reduces NOx-avgiften liability; strengthens permit compliance margin ahead of tightened stack limits.",
+        "techBenefit": "SCR retrofit feasible within existing turbine enclosure footprint per vendor budgetary study.",
+        "envValue": 4, "bizValue": 3, "feasibility": 2, "owner": "Tor Aas — Process Engineer",
+        "createdAt": "2025-11-18T14:55:00.000Z", "updatedAt": "2025-11-18T14:55:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_002", "label": "Vendor budgetary estimate", "date": "2025-11-18T14:55:00.000Z",
+            "note": "",
+            "lines": [
+              { "id": "s1_nox", "custom": false, "scope": "Scope 1", "type": "NOx", "unit": "kg",
+                "reduction": "18500", "baseline": "62000", "cf": 296, "ref": "SCR vendor budgetary estimate", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-003", "ref": "OPP-003", "_screeningId": "ch4", "_color": "red",
+        "type": "Low-Carbon Technology", "materiality": "Both",
+        "description": "LDAR (leak detection & repair) methane programme",
+        "envBenefit": "Targets an estimated 6.2 t/yr methane reduction from fugitive sources across the process area.",
+        "bizBenefit": "Reduces reportable Scope 1 methane inventory ahead of anticipated EU Methane Regulation LDAR obligations.",
+        "techBenefit": "Optical gas imaging camera survey plus quarterly Method 21 component screening.",
+        "envValue": 5, "bizValue": 4, "feasibility": 5, "owner": "Anders Voll — Process Safety",
+        "createdAt": "2025-11-18T15:05:00.000Z", "updatedAt": "2025-11-18T15:05:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_003", "label": "Baseline survey", "date": "2025-11-18T15:05:00.000Z",
+            "note": "Baseline OGI survey completed October 2025.",
+            "lines": [
+              { "id": "s1_ch4", "custom": false, "scope": "Scope 1", "type": "CH4", "unit": "kg",
+                "reduction": "6200", "baseline": "24800", "cf": 28, "ref": "LDAR programme baseline survey Oct 2025", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-004", "ref": "OPP-004", "_screeningId": "refrig", "_color": "red",
+        "type": "Resource Efficiency", "materiality": "Environmental",
+        "description": "Low-GWP refrigerant retrofit, HVAC and process cooling",
+        "envBenefit": "Displaces an estimated 180kg of high-GWP refrigerant charge, avoiding leakage-equivalent CO₂e over the fluid's service life.",
+        "bizBenefit": "Reduces F-Gas Regulation compliance exposure as HFC phase-down quotas tighten.",
+        "techBenefit": "Drop-in low-GWP alternative compatible with existing compressor lubricant, per OEM guidance.",
+        "envValue": 3, "bizValue": 2, "feasibility": 4, "owner": "Silje Nygård — Rotating Equipment Lead",
+        "createdAt": "2025-11-18T15:20:00.000Z", "updatedAt": "2025-11-18T15:20:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_004", "label": "HVAC / cooling audit", "date": "2025-11-18T15:20:00.000Z",
+            "note": "GWP differential vs. incumbent HFC blend, per OEM refrigerant data sheet.",
+            "lines": [
+              { "id": "s1_refr", "custom": false, "scope": "Scope 1", "type": "Other (e.g. refrigerants / GWP gases)", "unit": "kg",
+                "reduction": "180", "baseline": "", "cf": 1400, "ref": "HVAC & cooling refrigerant inventory audit", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-005", "ref": "OPP-005", "_screeningId": "s2_sys", "_color": "blue",
+        "type": "Resource Efficiency", "materiality": "Both",
+        "description": "Variable speed drives on main export pumps and compressors",
+        "envBenefit": "Reduces indirect Scope 2 electricity demand by an estimated 1.85 GWh/yr.",
+        "bizBenefit": "Lower utility power consumption reduces operating cost and generator fuel burn.",
+        "techBenefit": "VSDs specified on all variable-load rotating equipment >75kW in the electrical load list.",
+        "envValue": 4, "bizValue": 4, "feasibility": 5, "owner": "Silje Nygård — Rotating Equipment Lead",
+        "createdAt": "2025-12-02T09:10:00.000Z", "updatedAt": "2025-12-02T09:10:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_005", "label": "Electrical load list estimate", "date": "2025-12-02T09:10:00.000Z",
+            "note": "",
+            "lines": [
+              { "id": "s2_elec", "custom": false, "scope": "Scope 2", "type": "Reduction in energy consumption", "unit": "kWh",
+                "reduction": "1850000", "baseline": "9200000", "cf": 0.57, "ref": "Electrical load list ELL-09 post-VSD estimate", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-006", "ref": "OPP-006", "_screeningId": "s2_layout", "_color": "blue",
+        "type": "Resource Efficiency", "materiality": "Environmental",
+        "description": "Heat integration study reduces fired heater duty via turbine exhaust waste-heat recovery",
+        "envBenefit": "Estimated 8–12% reduction in fired heater fuel gas demand.",
+        "bizBenefit": "Lower fuel gas consumption frees export capacity; reduces CO2-avgiften exposure on combustion.",
+        "techBenefit": "Waste heat recovery unit (WHRU) sizing under evaluation for combined power/process duty.",
+        "envValue": 3, "bizValue": 2, "feasibility": 3, "owner": "Tor Aas — Process Engineer",
+        "createdAt": "2025-12-02T09:25:00.000Z", "updatedAt": "2025-12-02T09:25:00.000Z",
+        "ghgPhases": [],
+        "qualPhases": [
+          { "id": "qp_demo_006", "label": "Feasibility study", "date": "2025-12-02",
+            "note": "Estimated 8–12% reduction in fired heater fuel gas demand via turbine exhaust heat integration; formal GHG quantification pending detailed design HYSYS model update." }
+        ]
+      },
+      {
+        "id": "demo-opp-007", "ref": "OPP-007", "_screeningId": "s2_alt", "_color": "blue",
+        "type": "Low-Carbon Technology", "materiality": "Both",
+        "description": "Partial electrification via shore power tie-in for utility loads",
+        "envBenefit": "Displaces an estimated 6.4 GWh/yr of turbine-generated power with lower-carbon shore supply.",
+        "bizBenefit": "Long-term operating cost stability; strengthens ESG disclosure position ahead of CSRD reporting.",
+        "techBenefit": "Subsea cable tie-in concept study CS-11 confirms technical feasibility from the nearest grid connection point.",
+        "envValue": 5, "bizValue": 3, "feasibility": 2, "owner": "Erik Solheim — Project Manager",
+        "createdAt": "2026-02-04T10:15:00.000Z", "updatedAt": "2026-02-04T10:15:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_007", "label": "Concept study CS-11", "date": "2026-02-04T10:15:00.000Z",
+            "note": "",
+            "lines": [
+              { "id": "s2_elec", "custom": false, "scope": "Scope 2", "type": "Reduction in energy consumption", "unit": "kWh",
+                "reduction": "6400000", "baseline": "6400000", "cf": 0.57, "ref": "Shore power tie-in concept study CS-11", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-008", "ref": "OPP-008", "_screeningId": "s3_mat", "_color": "teal",
+        "type": "Resource Efficiency", "materiality": "Environmental",
+        "description": "Steel weight reduction via optimised jacket design",
+        "envBenefit": "Reduces embodied-carbon steel demand by an estimated 340 t.",
+        "bizBenefit": "Lower steel procurement volume reduces material cost and fabrication schedule.",
+        "techBenefit": "Structural optimisation study STR-07 confirms design margin allows a lighter jacket configuration.",
+        "envValue": 4, "bizValue": 3, "feasibility": 3, "owner": "Jonas Devik — Structural Lead",
+        "createdAt": "2025-12-02T10:00:00.000Z", "updatedAt": "2025-12-02T10:00:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_008", "label": "Structural optimisation study", "date": "2025-12-02T10:00:00.000Z",
+            "note": "",
+            "lines": [
+              { "id": "s3_steel_simp", "custom": false, "scope": "Scope 3 Cat 1", "type": "Simplified design (Steel)", "unit": "kg",
+                "reduction": "340000", "baseline": "", "cf": 2, "ref": "Structural optimisation study STR-07", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-009", "ref": "OPP-009", "_screeningId": "s3_reuse", "_color": "teal",
+        "type": "Circular Economy", "materiality": "Both",
+        "description": "Reuse of decommissioned topside modules from the adjacent Nordlys-A platform",
+        "envBenefit": "Avoids an estimated 210 t of new-build steel embodied carbon by reusing existing modules.",
+        "bizBenefit": "Reduces new equipment capex; shortens fabrication lead time versus new-build.",
+        "techBenefit": "Module compatibility assessment against current process design basis in progress.",
+        "envValue": 3, "bizValue": 4, "feasibility": 5, "owner": "Ida Skog — Procurement Lead",
+        "createdAt": "2025-12-02T10:20:00.000Z", "updatedAt": "2025-12-02T10:20:00.000Z",
+        "qualPhases": [],
+        "ghgPhases": [
+          {
+            "id": "ghgp_demo_009", "label": "Module transfer assessment", "date": "2025-12-02T10:20:00.000Z",
+            "note": "",
+            "lines": [
+              { "id": "s3_steel_reuse", "custom": false, "scope": "Scope 3 Cat 1", "type": "Reuse of material (Steel)", "unit": "kg",
+                "reduction": "210000", "baseline": "", "cf": 2, "ref": "Nordlys-A decommissioning module transfer assessment", "savingType": "identified" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "demo-opp-010", "ref": "OPP-010", "_screeningId": "s3_waste", "_color": "teal",
+        "type": "Circular Economy", "materiality": "Environmental",
+        "description": "Waste stream characterisation programme lifts landfill diversion rate",
+        "envBenefit": "Target: lift construction-phase waste diversion from landfill from 61% to ≥80%.",
+        "bizBenefit": "Reduced disposal cost per tonne through better segregation and higher-value off-take contracts.",
+        "techBenefit": "Waste characterisation aligned with the EWC catalogue already used in the Waste Handling register.",
+        "envValue": 3, "bizValue": 3, "feasibility": 4, "owner": "Kristin Moe — Waste Coordinator",
+        "createdAt": "2025-12-02T10:40:00.000Z", "updatedAt": "2025-12-02T10:40:00.000Z",
+        "ghgPhases": [],
+        "qualPhases": [
+          { "id": "qp_demo_010", "label": "Baseline characterisation", "date": "2025-12-02",
+            "note": "Target: lift landfill diversion rate from current 61% to ≥80% across construction-phase waste streams via improved segregation and off-take contracts (see Waste Handling register)." }
+        ]
+      },
+      {
+        "id": "demo-opp-011", "ref": "OPP-011", "_screeningId": "s3_trans", "_color": "teal",
+        "type": "Resource Efficiency", "materiality": "Both",
+        "description": "Consolidated supply-vessel logistics run schedule",
+        "envBenefit": "Estimated 15% reduction in supply vessel round-trips through backload consolidation.",
+        "bizBenefit": "Lower vessel charter day-rate exposure through improved utilisation.",
+        "techBenefit": "Logistics baseline trip log under compilation with the marine coordination team.",
+        "envValue": 3, "bizValue": 4, "feasibility": 4, "owner": "Fredrik Bakke — Logistics Coordinator",
+        "createdAt": "2025-12-02T10:55:00.000Z", "updatedAt": "2025-12-02T10:55:00.000Z",
+        "ghgPhases": [],
+        "qualPhases": [
+          { "id": "qp_demo_011", "label": "Logistics baseline", "date": "2025-12-02",
+            "note": "Estimated 15% reduction in supply-vessel round trips through backload consolidation and delivery-window pooling with adjacent field logistics. Fuel-based CO₂e quantification to follow once the baseline trip log is confirmed." }
+        ]
+      },
+      {
+        "id": "demo-opp-012", "ref": "OPP-012", "_screeningId": "s3_remote", "_color": "teal",
+        "type": "Resource Efficiency", "materiality": "Environmental",
+        "description": "Remote/automated ROV inspection replacing diver mobilisation for subsea integrity surveys",
+        "envBenefit": "Could avoid an estimated 60% of planned diver mobilisations, reducing associated vessel-days.",
+        "bizBenefit": "Lower day-rate cost versus a saturation diving spread; improved personnel safety.",
+        "techBenefit": "ROV inspection scope and coverage under review against class integrity survey requirements.",
+        "envValue": 2, "bizValue": 3, "feasibility": 2, "owner": "Subsea Engineering Lead",
+        "createdAt": "2025-12-02T11:10:00.000Z", "updatedAt": "2025-12-02T11:10:00.000Z",
+        "ghgPhases": [],
+        "qualPhases": [
+          { "id": "qp_demo_012", "label": "Technology scoping", "date": "2025-12-02",
+            "note": "ROV-based remote inspection could replace an estimated 60% of planned diver mobilisations for subsea integrity surveys over field life, reducing vessel-days and associated Scope 3 emissions; business case under review against dive contractor day-rate." }
+        ]
+      },
+      {
+        "id": "demo-opp-013", "ref": "OPP-013", "_screeningId": null, "_color": "",
+        "type": "Circular Economy", "materiality": "Both",
+        "description": "Materials exchange agreement with neighbouring field operator for surplus MEG and drilling fluids",
+        "envBenefit": "", "bizBenefit": "", "techBenefit": "",
+        "envValue": 3, "bizValue": 3, "feasibility": 3, "owner": "Ida Skog — Procurement Lead",
+        "createdAt": "2026-02-18T09:00:00.000Z", "updatedAt": "2026-02-18T09:00:00.000Z",
+        "ghgPhases": [], "qualPhases": []
+      }
+    ],
+    "changelog": [
+      { "id": "demo-chg-01", "ts": "2025-11-18T09:05:00.000Z", "action": "Added aspect",
+        "detail": "ASP-001 — NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits",
+        "fields": [
+          { "k": "Aspect", "v": "NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits" },
+          { "k": "Phase", "v": "Operations & Maintenance" },
+          { "k": "Area", "v": "Plant stack / vent emissions" },
+          { "k": "Condition", "v": "Normal" },
+          { "k": "Risk score", "v": "C3×P3" }
+        ] },
+      { "id": "demo-chg-02", "ts": "2025-11-18T10:25:00.000Z", "action": "Added aspect",
+        "detail": "ASP-006 — Discharge of produced water with hydrocarbons, scale inhibitors, NORM",
+        "fields": [
+          { "k": "Aspect", "v": "Discharge of produced water with hydrocarbons, scale inhibitors, NORM" },
+          { "k": "Phase", "v": "Operations & Maintenance" },
+          { "k": "Area", "v": "Produced water" },
+          { "k": "Condition", "v": "Normal" },
+          { "k": "Risk score", "v": "C4×P4" }
+        ] },
+      { "id": "demo-chg-03", "ts": "2025-11-18T14:40:00.000Z", "action": "Added opportunity",
+        "detail": "OPP-001 — Low-Carbon Technology",
+        "fields": [
+          { "k": "Type", "v": "Low-Carbon Technology" },
+          { "k": "Description", "v": "Flare gas recovery system reduces continuous flaring during normal operations" },
+          { "k": "Score", "v": "Env5×Biz4×Feas3=60" }
+        ] },
+      { "id": "demo-chg-04", "ts": "2025-11-18T13:50:00.000Z", "action": "Added aspect",
+        "detail": "ASP-013 — Loss of or disturbance to Natura 2000, RAMSAR, or nationally protected habitat",
+        "fields": [
+          { "k": "Aspect", "v": "Loss of or disturbance to Natura 2000, RAMSAR, or nationally protected habitat" },
+          { "k": "Phase", "v": "Engineering" },
+          { "k": "Area", "v": "Protected habitat & designations" },
+          { "k": "Condition", "v": "Normal" },
+          { "k": "Risk score", "v": "C5×P1" }
+        ] },
+      { "id": "demo-chg-05", "ts": "2025-11-18T15:05:00.000Z", "action": "Added opportunity",
+        "detail": "OPP-003 — Low-Carbon Technology",
+        "fields": [
+          { "k": "Type", "v": "Low-Carbon Technology" },
+          { "k": "Description", "v": "LDAR (leak detection & repair) methane programme" },
+          { "k": "Score", "v": "Env5×Biz4×Feas5=100" }
+        ] },
+      { "id": "demo-chg-06", "ts": "2025-12-09T10:00:00.000Z", "action": "Edited aspect",
+        "detail": "ASP-001 — NOₓ, SO₂, CO, PM₁₀ exceeding permit or regulatory limits",
+        "fields": [
+          { "k": "Risk score", "from": "C3×P3", "to": "C4×P3" },
+          { "k": "Status", "from": "Info", "to": "Action" }
+        ] },
+      { "id": "demo-chg-07", "ts": "2026-01-14T09:30:00.000Z", "action": "Added aspect",
+        "detail": "ASP-017 — Impact on Sámi reindeer herding, cultural heritage, and traditional land use",
+        "fields": [
+          { "k": "Aspect", "v": "Impact on Sámi reindeer herding, cultural heritage, and traditional land use" },
+          { "k": "Phase", "v": "Engineering" },
+          { "k": "Area", "v": "Indigenous peoples — Sámi" },
+          { "k": "Condition", "v": "Normal" },
+          { "k": "Risk score", "v": "C4×P2" }
+        ] },
+      { "id": "demo-chg-08", "ts": "2026-01-14T14:05:00.000Z", "action": "Added aspect",
+        "detail": "ASP-020 — Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes",
+        "fields": [
+          { "k": "Aspect", "v": "Uncontrolled gas or hydrocarbon release to atmosphere or sea; CO₂ and NOₓ tax liability on vented/flared volumes" },
+          { "k": "Phase", "v": "Commissioning,Operations & Maintenance" },
+          { "k": "Area", "v": "Emergency venting & blowdown" },
+          { "k": "Condition", "v": "Normal" },
+          { "k": "Risk score", "v": "C4×P3" }
+        ] },
+      { "id": "demo-chg-09", "ts": "2026-02-04T10:15:00.000Z", "action": "Added opportunity",
+        "detail": "OPP-007 — Low-Carbon Technology",
+        "fields": [
+          { "k": "Type", "v": "Low-Carbon Technology" },
+          { "k": "Description", "v": "Partial electrification via shore power tie-in for utility loads" },
+          { "k": "Score", "v": "Env5×Biz3×Feas2=30" }
+        ] },
+      { "id": "demo-chg-10", "ts": "2026-03-02T11:00:00.000Z", "action": "Edited opportunity",
+        "detail": "OPP-001 — Flare gas recovery system reduces continuous flaring during normal operations",
+        "fields": [
+          { "k": "Score", "from": "60", "to": "80" }
+        ] }
+    ],
+    "screeningSkips": {
+      "land_05": true,
+      "wst_08": true,
+      "eco_09": true,
+      "com_03": true
+    },
+    "legalRefNotes": {
+      "air_01#0": "Emission permit application ref 2024/8891 submitted to Miljødirektoratet; conditions expected to include continuous stack monitoring — see ENV-REP-014.",
+      "wst_07#1": "Radiation Protection Officer confirms the NORM management plan covers scale removal frequency and consignment routing; no special exemption held.",
+      "eco_01#0": "No Ramsar or nationally protected habitat within 5km of the platform location per Miljødirektoratet Naturbase screening (Oct 2025).",
+      "com_10#0": "Reinbeitedistrikt 14 consulted Nov 2025; district confirms no active herding corridor within the project footprint."
+    },
+    "batAssessments": {
+      "1.3a": { "status": "G", "ref": "Well design basis DB-014 rev C", "action": "Confirmed in the reservoir engineering well design basis.", "owner": "", "due": "" },
+      "1.3b": { "status": "G", "ref": "Process design basis PDB-02", "action": "First-stage separator pressure maximised per HYSYS case run 7.", "owner": "", "due": "" },
+      "1.3e": { "status": "G", "ref": "Electrical load list ELL-09", "action": "Motor sizing verified against actual duty point; no oversizing found.", "owner": "", "due": "" },
+      "1.3f": { "status": "G", "ref": "VSD schedule EL-VSD-003", "action": "VSDs specified on all variable-load pumps and compressors >75kW.", "owner": "", "due": "" },
+      "1.3j": { "status": "G", "ref": "CMS spec IA-CMS-01", "action": "Continuous energy monitoring via plant CMS with monthly efficiency reporting.", "owner": "", "due": "" },
+      "1.3g": { "status": "Y", "ref": "", "action": "Electric drive selected for 2 of 3 main compressors; third under FEED trade study pending grid tie-in decision.", "owner": "Silje Nygård — Rotating Equipment Lead", "due": "W12 · 2026" },
+      "1.3h": { "status": "Y", "ref": "", "action": "Waste heat recovery on WHRU sized for power gen only — process integration study for the hot oil loop not yet complete.", "owner": "Tor Aas — Process Engineer", "due": "W20 · 2026" },
+      "1.3d": { "status": "R", "ref": "", "action": "Turbo-expander not currently in design — wellhead pressure margin considered insufficient; re-evaluate post first-year production data.", "owner": "Reservoir Engineering", "due": "W30 · 2026" },
+      "3.1a": { "status": "G", "ref": "Turbine spec TS-GT-02", "action": "Dry low-NOx combustor selected for all main power turbines.", "owner": "", "due": "" },
+      "3.1b": { "status": "G", "ref": "Fuel gas system P&ID", "action": "Fuel gas (not diesel) is the primary fuel for all continuously-run turbines.", "owner": "", "due": "" },
+      "3.2":  { "status": "G", "ref": "Boiler datasheet BLR-01", "action": "Low-NOx burners specified on both auxiliary boilers.", "owner": "", "due": "" },
+      "4.1a": { "status": "G", "ref": "Flare system design FS-04", "action": "HP/LP flare gas recovery compressor included in base design.", "owner": "", "due": "" },
+      "4.1c": { "status": "G", "ref": "Blanket gas system BGS-01", "action": "Blanket gas recovered to fuel gas system rather than vented.", "owner": "", "due": "" },
+      "4.1b": { "status": "Y", "ref": "", "action": "Start-up flaring sequence drafted; not yet validated against a comparable previous project's actual start-up flare volumes.", "owner": "Commissioning Manager", "due": "W6 · 2026" },
+      "4.1d": { "status": "R", "ref": "", "action": "Cold venting still used on 2 relief paths (compressor seal gas, sample points) — routing study to the fuel gas system in progress.", "owner": "Anders Voll — Process Safety", "due": "W16 · 2026" },
+      "5.1":  { "status": "G", "ref": "Storage tank design ST-01", "action": "Fixed-roof tanks with vapour balancing specified to limit methane/NMVOC loss.", "owner": "", "due": "" },
+      "5.4":  { "status": "G", "ref": "Crude assay + RVP study", "action": "Loading design based on measured RVP/TVP for field crude; margin confirmed against loading arm spec.", "owner": "", "due": "" },
+      "5.3e": { "status": "Y", "ref": "", "action": "VOC recovery plant included in the Class III cost estimate; final selection between condensing vs. absorption technology pending vendor quotes.", "owner": "Topsides Engineering", "due": "W10 · 2026" },
+      "6.1":  { "status": "G", "ref": "Process P&ID set rev D", "action": "All identified fugitive gas sources (seal traps, sample points, purge) routed back to the process system.", "owner": "", "due": "" },
+      "8.1":  { "status": "Y", "ref": "", "action": "Re-injection selected as the primary route; treated-discharge fallback design not yet finalised pending injectivity test results.", "owner": "Kari Lindgren — Discharge Permitting", "due": "W24 · 2026" },
+      "7.1a": { "status": "R", "ref": "", "action": "Downhole testing/separation not evaluated in the current well test programme — to be added to the next DEP revision.", "owner": "Well Test Engineering", "due": "W8 · 2026" }
+    },
+    "batFlags": {
+      "4": true,
+      "7": true
+    },
+    "attendeeSessions": [
+      {
+        "id": "demo-att-01", "date": "2025-11-18", "label": "Environmental Screening Workshop #1 — Risks, Opportunities & Legal References",
+        "rows": [
+          { "name": "Hanne Berg", "role": "EHS Lead" },
+          { "name": "Tor Aas", "role": "Process Engineer" },
+          { "name": "Kari Lindgren", "role": "Discharge Permitting" },
+          { "name": "Marte Fjeld", "role": "Ecology Lead" },
+          { "name": "Erik Solheim", "role": "Project Manager" }
+        ]
+      },
+      {
+        "id": "demo-att-02", "date": "2026-02-04", "label": "Mini-BAT Sweep Review — Energy, Flaring & Produced Water",
+        "rows": [
+          { "name": "Hanne Berg", "role": "EHS Lead" },
+          { "name": "Tor Aas", "role": "Process Engineer" },
+          { "name": "Silje Nygård", "role": "Rotating Equipment Lead" },
+          { "name": "Anders Voll", "role": "Process Safety" },
+          { "name": "Kari Lindgren", "role": "Discharge Permitting" }
+        ]
+      }
+    ],
+    "wasteRows": [
+      {
+        "id": "demo-ws-018", "isStd": false, "ref": "WS-018",
+        "product": "Retired ROV umbilical cable", "fraction": "Other",
+        "ewc": "16 01 22", "cls": "Non-hazardous",
+        "phase": "Operations & Maintenance", "domain": "Offshore", "status": "Active",
+        "carrier": "Nordvest Metallgjenvinning AS · lic. NO-AVF-4471", "consign": "", "avoided": false,
+        "construction": "", "startup": "", "operation": "640", "unit": "kg",
+        "treatment": "Recycling", "methods": [],
+        "measures": "Retired during ROV skid change-out; copper core recovered separately from the outer sheathing."
+      },
+      {
+        "id": "demo-ws-019", "isStd": false, "ref": "WS-019",
+        "product": "Contaminated PPE — hydrocarbon exposure", "fraction": "Chemicals",
+        "ewc": "15 02 02*", "cls": "Hazardous",
+        "phase": "Operations & Maintenance", "domain": "Offshore", "status": "Monitoring",
+        "carrier": "Stena Recycling AS · lic. NO-AVF-1187", "consign": "CN-26-0142", "avoided": false,
+        "construction": "", "startup": "", "operation": "18", "unit": "kg",
+        "treatment": "Disposal", "methods": [],
+        "measures": "Oil-soaked coveralls and gloves from produced-water treatment maintenance; segregated hazardous incineration stream."
+      }
+    ],
+    "footprintCorOverrides": {},
+    "footprintMeta": []
+  }
+}
