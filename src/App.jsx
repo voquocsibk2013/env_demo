@@ -2765,12 +2765,16 @@ const WASTE_PHILOSOPHY = [
 // the `-bg` tint. In this palette the semantic token is already opaque, so it
 // equals `color` — the design mock only needed a separate mid-tone because it
 // had no dark theme. Pair a solid fill with var(--bar-ink) for text on it (P21).
+// Tier keys stay the OLD internal identifiers (Prevention/Recycling/Recovery/Disposal) —
+// they're persisted verbatim in every row's `treatment` field (W2). Only the display
+// `label` was refreshed to the terser Reduce/Reuse/Recycle/Recover/Residual wording;
+// no stored data needs migrating.
 const WASTE_HIERARCHY = [
-  { key:"Prevention", label:"Prevention",           rank:1, color:"var(--green)", bg:"var(--green-bg)", bd:"var(--green-bd)", solid:"var(--green)", desc:"Avoid generating the waste in the first place" },
-  { key:"Reuse",      label:"Preparing for re-use", rank:2, color:"var(--teal)",  bg:"var(--teal-bg)",  bd:"var(--teal-bd)",  solid:"var(--teal)",  desc:"Reuse the material with little or no processing" },
-  { key:"Recycling",  label:"Recycling",            rank:3, color:"var(--blue)",  bg:"var(--blue-bg)",  bd:"var(--blue-bd)",  solid:"var(--blue)",  desc:"Reprocess into new materials or products" },
-  { key:"Recovery",   label:"Recovery",             rank:4, color:"var(--amber)", bg:"var(--amber-bg)", bd:"var(--amber-bd)", solid:"var(--amber)", desc:"Energy recovery / incineration with energy capture" },
-  { key:"Disposal",   label:"Disposal",             rank:5, color:"var(--red)",   bg:"var(--red-bg)",   bd:"var(--red-bd)",   solid:"var(--red)",   desc:"Landfill or other final disposal (least preferred)" },
+  { key:"Prevention", label:"Reduce",   rank:1, color:"var(--green)", bg:"var(--green-bg)", bd:"var(--green-bd)", solid:"var(--green)", desc:"Avoid generating the waste in the first place" },
+  { key:"Reuse",      label:"Reuse",    rank:2, color:"var(--teal)",  bg:"var(--teal-bg)",  bd:"var(--teal-bd)",  solid:"var(--teal)",  desc:"Reuse the material with little or no processing" },
+  { key:"Recycling",  label:"Recycle",  rank:3, color:"var(--blue)",  bg:"var(--blue-bg)",  bd:"var(--blue-bd)",  solid:"var(--blue)",  desc:"Reprocess into new materials or products" },
+  { key:"Recovery",   label:"Recover",  rank:4, color:"var(--amber)", bg:"var(--amber-bg)", bd:"var(--amber-bd)", solid:"var(--amber)", desc:"Energy recovery / incineration with energy capture" },
+  { key:"Disposal",   label:"Residual", rank:5, color:"var(--red)",   bg:"var(--red-bg)",   bd:"var(--red-bd)",   solid:"var(--red)",   desc:"Landfill or other final disposal (least preferred)" },
 ];
 const WASTE_UNITS = ["kg","tonne","m³","L","pcs"];
 // Only mass units convert to tonnes; m³/L/pcs are disclosed as excluded, never silently zeroed (W3).
@@ -3079,6 +3083,91 @@ function CatalogueCombo({ value, onText, onPick, placeholder, compact, idBase="w
   );
 }
 
+// Free-text quick-edit cell for the waste register — click to focus, blur to
+// commit (value already lives in project state via onChange, so there is no
+// separate save step). Mirrors the drawer's input styling at table scale.
+function WasteInlineText({ value, onChange, placeholder, mono, tint, align }) {
+  const [f, setF] = useState(false);
+  return (
+    <input value={value==null?"":value} placeholder={placeholder}
+      onFocus={()=>setF(true)} onBlur={()=>setF(false)}
+      onChange={e=>onChange(e.target.value)}
+      style={{ width:"100%", boxSizing:"border-box", fontFamily: mono?T.mono:T.sans, fontSize:12,
+        color: tint || T.text, textAlign: align||"left", background: f?T.surface:"transparent",
+        border:"1px solid "+(f?T.teal:"transparent"), borderRadius:4, padding:"5px 6px", outline:"none",
+        fontVariantNumeric: mono?"tabular-nums":undefined }}/>
+  );
+}
+
+// Chip-styled quick-edit dropdown for the waste register — a native <select>
+// sits invisibly over the styled chip so it's a real, keyboard-operable form
+// control (not a custom listbox). The chevron sits at reduced opacity by
+// default and reaches full opacity on hover OR focus — never opacity:0 — so
+// the control is discoverable without a mouse (Band 4 C2; this exact table
+// had a hover-only affordance regression found and fixed here once already).
+function WasteInlineChipSelect({ value, options, onChange, chip, ariaLabel }) {
+  const [foc, setFoc] = useState(false);
+  const [hov, setHov] = useState(false);
+  const show = foc || hov;
+  // A freshly-added stream starts with an empty phase/domain/treatment (W6 —
+  // those are chosen in the drawer). Guarantee the current value always has a
+  // matching <option> so the native control never silently drops it.
+  const v = value || "";
+  const optsFull = options.some(o => o.value === v) ? options : [{ value:v, label:"—" }, ...options];
+  return (
+    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{ position:"relative", display:"inline-flex", alignItems:"center", gap:4, padding:"3px 4px", borderRadius:5 }}>
+      {chip}
+      <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke={T.faint} strokeWidth="1.6" strokeLinecap="round"
+        style={{ opacity: show?1:0.35, transition:"opacity .12s", flexShrink:0 }}>
+        <path d="M2 3.5l3 3 3-3"/>
+      </svg>
+      <select value={v} onChange={e=>onChange(e.target.value)}
+        onFocus={()=>setFoc(true)} onBlur={()=>setFoc(false)} aria-label={ariaLabel}
+        style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity:0, cursor:"pointer", border:"none", padding:0, margin:0 }}>
+        {optsFull.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// Focusable "reveal the formula" popover for a KPI card — click/Enter to open,
+// Escape or an outside click to close. Deliberately NOT hover-only: a
+// mouseenter/mouseleave-only tooltip has no keyboard or touch equivalent,
+// which this app's own accessibility bar (Band 4 C2, the drawer's focus-
+// reachable fields) requires every informational affordance to clear.
+function WasteStatFormula({ lines }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = e => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return (
+    <div ref={ref} style={{ position:"absolute", top:8, right:8 }}>
+      <button className="hit" onClick={()=>setOpen(o=>!o)} aria-label="Show formula" aria-expanded={open}
+        style={{ width:16, height:16, borderRadius:"50%", border:"1px solid currentColor", background:"transparent",
+          color:"inherit", opacity:0.55, fontSize:9, fontFamily:T.mono, fontWeight:700, cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:0, lineHeight:1 }}>i</button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:50, minWidth:200,
+          background:T.surface, border:"1px solid "+T.border, borderRadius:6, boxShadow:"var(--shadow-menu)", padding:"9px 11px" }}>
+          <div style={{ fontFamily:T.mono, fontSize:9, fontWeight:600, color:T.faint, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:5 }}>Formula</div>
+          {lines.map((l,i) => (
+            <div key={i} style={{ fontFamily:T.sans, fontSize:11, lineHeight:1.5,
+              fontWeight: i===0?500:400, color: i===0?T.text:i===1?T.teal:T.muted,
+              fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap" }}>{l}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── WasteTab component (needs useState, must be a real component not an IIFE) ──
 // Directions 1 + 2 merged, per the chosen board: the hierarchy funnel sits
 // directly above the register on ONE screen (no view switcher, no view state
@@ -3087,7 +3176,9 @@ function CatalogueCombo({ value, onText, onPick, placeholder, compact, idBase="w
 // reference/waste-d12.jsx (WasteHierarchyRegister).
 function WasteTab({ project, onChange, notify }) {
   const [editId, setEditId]         = useState(null);
-  const [tierFilter, setTierFilter] = useState(null);   // funnel band ∪ breakdown row — null = All
+  // [] = All. Plain click = exclusive select (or clear if re-clicking the only
+  // selected tier); ctrl/cmd-click adds or removes that tier from the selection.
+  const [tierFilter, setTierFilter] = useState([]);
   const [clsFilter, setClsFilter]   = useState("All");  // class chips — composes with tierFilter
   const [armedDel, armDel]          = useArmedConfirm();
   const dialogRef = React.useRef(null);
@@ -3179,9 +3270,13 @@ function WasteTab({ project, onChange, notify }) {
   const maxTier = Math.max(1, ...WASTE_HIERARCHY.map(h => tierTotals[h.key]));
 
   // ── Filter — funnel band ∪ breakdown row (tier) composes with class chips (W8) ──
-  const pickTier = (k) => setTierFilter(prev => prev === k ? null : k);
+  // add=true (ctrl/cmd-click) toggles k in/out of the selection; plain click
+  // replaces the selection with just k, or clears it if k was the only one on.
+  const pickTier = (k, add) => setTierFilter(prev => add
+    ? (prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k])
+    : (prev.length === 1 && prev[0] === k ? [] : [k]));
   const visible = logged.filter(r =>
-    (tierFilter === null || r.treatment === tierFilter) &&
+    (tierFilter.length === 0 || tierFilter.includes(r.treatment)) &&
     (clsFilter === "All" || r.cls === clsFilter));
   const visibleTonnes = visible.reduce((a,r) => a + toTonnes(r), 0);
 
@@ -3218,9 +3313,16 @@ function WasteTab({ project, onChange, notify }) {
         <Btn variant="primary" onClick={addStream}>+ Add waste stream</Btn>
       </div>
 
-      {/* KPI strip — 5 cards, tonnage-weighted (W3) */}
+      {/* KPI strip — 5 cards, tonnage-weighted (W3). Each carries a focusable "i"
+          that reveals the formula behind the number — click/Enter to open,
+          Escape or an outside click to close (never hover-only). */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, flexShrink:0 }}>
-        <div style={card}>
+        <div style={{ ...card, position:"relative" }}>
+          <WasteStatFormula lines={[
+            "Σ qty across mass-unit streams",
+            fmtNb(totalT,1)+" t across "+physical.length+" stream"+(physical.length!==1?"s":""),
+            excluded.length ? excluded.length+" stream"+(excluded.length!==1?"s":"")+" in non-mass units excluded — see note below" : "Every logged stream is in kg or tonnes",
+          ]}/>
           <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
             {fmtNb(totalT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
           </div>
@@ -3232,25 +3334,45 @@ function WasteTab({ project, onChange, notify }) {
             </div>
           )}
         </div>
-        <div style={{ ...card, background:T.tealBg, borderColor:T.tealBd }}>
+        <div style={{ ...card, background:T.tealBg, borderColor:T.tealBd, position:"relative" }}>
+          <WasteStatFormula lines={[
+            "Total − to residual",
+            fmtNb(totalT,1)+" − "+fmtNb(disposeT,1)+" = "+fmtNb(divertedT,1)+" t",
+            "Reuse + Recycle + Recover mass, tonnage-weighted",
+          ]}/>
           <div style={{ fontSize:22, fontWeight:700, color:T.teal, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
             {fmtNb(divertedT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.teal }}> t</span>
           </div>
-          <div style={{ fontSize:TYPE.data, color:T.teal, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diverted from landfill</div>
+          <div style={{ fontSize:TYPE.data, color:T.teal, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Diverted from residual</div>
         </div>
-        <div style={{ ...card, background:T.amberBg, borderColor:T.amberBd }}>
+        <div style={{ ...card, background:T.amberBg, borderColor:T.amberBd, position:"relative" }}>
+          <WasteStatFormula lines={[
+            "Σ qty where tier = Residual",
+            fmtNb(disposeT,1)+" t across "+tierCounts["Disposal"]+" stream"+(tierCounts["Disposal"]!==1?"s":""),
+            "Final treatment route",
+          ]}/>
           <div style={{ fontSize:22, fontWeight:700, color:T.amber, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
             {fmtNb(disposeT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.amber }}> t</span>
           </div>
-          <div style={{ fontSize:TYPE.data, color:T.amber, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>To disposal</div>
+          <div style={{ fontSize:TYPE.data, color:T.amber, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>To residual</div>
         </div>
-        <div style={{ ...card, background: hazRows.length?T.redBg:T.surface, borderColor: hazRows.length?T.redBd:T.border }}>
+        <div style={{ ...card, background: hazRows.length?T.redBg:T.surface, borderColor: hazRows.length?T.redBd:T.border, position:"relative" }}>
+          <WasteStatFormula lines={[
+            "Σ qty where class = Hazardous",
+            fmtNb(hazT,1)+" t of "+fmtNb(totalT,1)+" t total",
+            hazRows.length+" stream"+(hazRows.length!==1?"s":"")+" carry a Hazardous classification",
+          ]}/>
           <div style={{ fontSize:22, fontWeight:700, color: hazRows.length?T.red:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
             {fmtNb(hazT, 1)}<span style={{ fontSize:12, fontWeight:500, color:T.muted }}> t</span>
           </div>
           <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Hazardous mass</div>
         </div>
-        <div style={card}>
+        <div style={{ ...card, position:"relative" }}>
+          <WasteStatFormula lines={[
+            "count(logged rows)",
+            logged.length+" streams · "+physical.length+" physical, "+(logged.length-physical.length)+" avoided",
+            "A stream counts as logged once it has any quantity, treatment, method, note, or EWC entered",
+          ]}/>
           <div style={{ fontSize:22, fontWeight:700, color:T.text, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{logged.length}</div>
           <div style={{ fontSize:TYPE.data, color:T.muted, marginTop:3, textTransform:"uppercase", letterSpacing:"0.05em" }}>Waste streams</div>
         </div>
@@ -3273,8 +3395,8 @@ function WasteTab({ project, onChange, notify }) {
               {WASTE_HIERARCHY.map(h => {
                 const v = tierTotals[h.key];
                 const w = Math.max(0.13, v / maxTier);
-                const on = tierFilter === h.key;
-                const dim = tierFilter !== null && !on;
+                const on = tierFilter.includes(h.key);
+                const dim = tierFilter.length > 0 && !on;
                 const pct = totalT ? Math.round((v / totalT) * 100) : 0;
                 const n = tierCounts[h.key];
                 return (
@@ -3283,8 +3405,9 @@ function WasteTab({ project, onChange, notify }) {
                       <span style={{ fontSize:11, fontWeight: on?700:500, color:h.color }}>{h.label}</span>
                     </div>
                     <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
-                      <button className="hit" onClick={() => pickTier(h.key)}
+                      <button className="hit" onClick={e => pickTier(h.key, e.ctrlKey || e.metaKey)}
                         aria-label={h.label + " — " + fmtT(v) + ", " + n + " stream" + (n!==1?"s":"")}
+                        title={on ? "Click to clear · ctrl-click to remove from selection" : "Click to filter · ctrl-click to add to selection"}
                         aria-pressed={on}
                         style={{ width:(w*100)+"%", height:40, background:h.solid, border:"none", borderRadius:7,
                           display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0,
@@ -3313,16 +3436,17 @@ function WasteTab({ project, onChange, notify }) {
             <div>
               <p style={{ ...lbl, marginBottom:2 }}>Diversion rate</p>
               <div style={{ fontSize:27, fontWeight:700, color:T.teal, fontVariantNumeric:"tabular-nums", lineHeight:1.1, marginTop:2 }}>{fmtNb(diversionRate,1)}%</div>
-              <div style={{ fontSize:11, color:T.muted, marginTop:4, maxWidth:160, lineHeight:1.45 }}>{fmtT(divertedT)} kept from landfill of {fmtT(totalT)} logged.</div>
+              <div style={{ fontSize:11, color:T.muted, marginTop:4, maxWidth:160, lineHeight:1.45 }}>{fmtT(divertedT)} kept from residual treatment of {fmtT(totalT)} logged.</div>
             </div>
           </div>
           <div style={{ ...card, flex:1, minHeight:0, display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
             <p style={{ ...lbl, marginBottom:2 }}>Tier breakdown</p>
             {WASTE_HIERARCHY.map(h => {
               const v = tierTotals[h.key];
-              const on = tierFilter === h.key;
+              const on = tierFilter.includes(h.key);
               return (
-                <button key={h.key} className="hit" onClick={() => pickTier(h.key)} aria-pressed={on}
+                <button key={h.key} className="hit" onClick={e => pickTier(h.key, e.ctrlKey || e.metaKey)} aria-pressed={on}
+                  title={on ? "Click to clear · ctrl-click to remove from selection" : "Click to filter · ctrl-click to add to selection"}
                   style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", padding:"3px 0", cursor:"pointer" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
                     <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, fontWeight: on?600:500, color: on?h.color:T.muted }}>
@@ -3331,7 +3455,7 @@ function WasteTab({ project, onChange, notify }) {
                     <span style={{ fontSize:11, fontWeight:500, color:T.text, fontVariantNumeric:"tabular-nums" }}>{fmtT(v)}</span>
                   </div>
                   <div style={{ height:6, background:T.rowBd, borderRadius:3, overflow:"hidden" }}>
-                    <div style={{ width:Math.max(2,(v/maxTier)*100)+"%", height:"100%", background:h.solid, borderRadius:3, opacity: tierFilter!==null && !on ? 0.42 : 1 }}/>
+                    <div style={{ width:Math.max(2,(v/maxTier)*100)+"%", height:"100%", background:h.solid, borderRadius:3, opacity: tierFilter.length>0 && !on ? 0.42 : 1 }}/>
                   </div>
                 </button>
               );
@@ -3346,17 +3470,23 @@ function WasteTab({ project, onChange, notify }) {
           borderBottom:"1px solid "+T.border, flexShrink:0, gap:12, flexWrap:"wrap" }}>
           <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
             <span style={{ fontSize:13, fontWeight:600, color:T.text }}>Waste register</span>
-            {tierFilter && (() => {
-              const h = hier(tierFilter);
+            {tierFilter.map(k => {
+              const h = hier(k);
               return (
-                <span style={{ display:"inline-flex", alignItems:"center", gap:7, fontSize:11, fontWeight:500,
+                <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:7, fontSize:11, fontWeight:500,
                   padding:"3px 5px 3px 9px", borderRadius:20, background:h.bg, border:"1px solid "+h.bd, color:h.color }}>
                   <span style={{ width:6, height:6, borderRadius:3, background:h.solid }}/>{h.label}
-                  <button className="hit" onClick={() => setTierFilter(null)} aria-label="Clear tier filter"
+                  <button className="hit" onClick={() => setTierFilter(f => f.filter(x => x !== k))} aria-label={"Remove "+h.label+" filter"}
                     style={{ background:"transparent", border:"none", cursor:"pointer", color:h.color, fontSize:12, lineHeight:1, padding:"0 3px" }}>×</button>
                 </span>
               );
-            })()}
+            })}
+            {tierFilter.length > 1 && (
+              <button className="hit" onClick={() => setTierFilter([])}
+                style={{ fontSize:11, color:T.muted, background:"transparent", border:"none", cursor:"pointer", textDecoration:"underline", padding:"2px 2px" }}>
+                Clear all
+              </button>
+            )}
             <div style={{ width:1, height:18, background:T.border }}/>
             <div style={{ display:"flex", gap:6 }}>
               {["All", ...WASTE_CLASSES].map(f => (
@@ -3382,45 +3512,77 @@ function WasteTab({ project, onChange, notify }) {
                 const tone = wasteClassTone[r.cls] || wasteClassTone["Non-hazardous"];
                 const st = statusTone[r.status] || statusTone.Active;
                 const tot = rowTotal(r);
+                // Tighter padding for cells now hosting an inline control — the
+                // control's own internal padding does the rest.
+                const tdi = { ...td, padding:"2px 3px" };
                 return (
-                  <tr key={r.id} onClick={() => setEditId(r.id)}
-                    style={{ cursor:"pointer", boxShadow:"inset 3px 0 0 "+tone.bd }}
+                  <tr key={r.id}
+                    style={{ boxShadow:"inset 3px 0 0 "+tone.bd }}
                     onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                     onMouseLeave={e => e.currentTarget.style.background="transparent"}>
                     <td style={td}><span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:500, color:T.teal, letterSpacing:"0.02em" }}>{r.ref || "—"}</span></td>
-                    <td style={{ ...td, fontWeight:500, color:T.text }}>
-                      {r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}
+                    <td style={tdi}>
+                      {/* Standard (isStd) streams keep their name locked — same
+                          protection as the drawer — so the seed catalogue can't
+                          be silently renamed away from its EWC identity. */}
+                      {r.isStd
+                        ? <span style={{ fontWeight:500, color:T.text, padding:"0 4px" }}>{r.product || <span style={{ color:T.muted, fontStyle:"italic" }}>Unnamed stream</span>}</span>
+                        : <WasteInlineText value={r.product} placeholder="Unnamed stream" onChange={v => updateRow(r.id, { product:v })}/>}
                     </td>
-                    <td style={{ ...td, fontFamily:T.mono, fontSize:TYPE.data, color:T.muted, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap" }}>{r.ewc || "—"}</td>
-                    <td style={td}>
-                      {r.cls
-                        ? <span style={{ fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>
-                            {r.cls==="Non-hazardous" ? "NON-HAZ" : r.cls}
-                          </span>
-                        : <span style={{ color:T.faint }}>—</span>}
+                    <td style={tdi}>
+                      <WasteInlineText mono tint={T.muted} value={r.ewc} placeholder="—" onChange={v => updateRow(r.id, { ewc:v })}/>
                     </td>
-                    <td style={td}>
-                      {h
-                        ? <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:h.bg, color:h.color, border:"1px solid "+h.bd, whiteSpace:"nowrap" }}>{h.label}</span>
-                        : <span style={{ color:T.faint }}>—</span>}
+                    <td style={tdi}>
+                      <WasteInlineChipSelect ariaLabel="Hazard classification" value={r.cls}
+                        options={WASTE_CLASSES.map(c => ({ value:c, label:c }))}
+                        onChange={v => updateRow(r.id, { cls:v })}
+                        chip={r.cls
+                          ? <span style={{ fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:tone.bg, color:tone.c, border:"1px solid "+tone.bd }}>
+                              {r.cls==="Non-hazardous" ? "NON-HAZ" : r.cls}
+                            </span>
+                          : <span style={{ color:T.faint }}>—</span>}/>
                     </td>
-                    <td style={{ ...td, color:T.muted, whiteSpace:"nowrap" }}>{r.phase || "—"}</td>
-                    <td style={{ ...td, color:T.muted }}>{r.domain || "—"}</td>
+                    <td style={tdi}>
+                      <WasteInlineChipSelect ariaLabel="Waste hierarchy tier" value={r.treatment}
+                        options={WASTE_HIERARCHY.map(t => ({ value:t.key, label:t.label }))}
+                        onChange={v => updateRow(r.id, { treatment:v })}
+                        chip={h
+                          ? <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:h.bg, color:h.color, border:"1px solid "+h.bd, whiteSpace:"nowrap" }}>{h.label}</span>
+                          : <span style={{ color:T.faint }}>—</span>}/>
+                    </td>
+                    <td style={tdi}>
+                      <WasteInlineChipSelect ariaLabel="EPCIC phase" value={r.phase}
+                        options={PHASES.map(p => ({ value:p, label:p }))}
+                        onChange={v => updateRow(r.id, { phase:v })}
+                        chip={<span style={{ color: r.phase?T.muted:T.faint, whiteSpace:"nowrap" }}>{r.phase || "—"}</span>}/>
+                    </td>
+                    <td style={tdi}>
+                      <WasteInlineChipSelect ariaLabel="Project context" value={r.domain}
+                        options={WASTE_DOMAINS.map(d => ({ value:d, label:d }))}
+                        onChange={v => updateRow(r.id, { domain:v })}
+                        chip={<span style={{ color: r.domain?T.muted:T.faint }}>{r.domain || "—"}</span>}/>
+                    </td>
                     <td style={{ ...td, textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:500, whiteSpace:"nowrap", color:T.text }}>
                       {tot ? fmtNb(tot,2)+" "+r.unit : <span style={{ color:T.faint, fontWeight:400 }}>—</span>}
                     </td>
-                    <td style={{ ...td, color:T.muted }}>{r.route || "—"}</td>
-                    <td style={td}>
-                      <span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:st.bg, color:st.c, border:"1px solid "+st.bd, whiteSpace:"nowrap" }}>
-                        {(r.status||"Active").toUpperCase()}
-                      </span>
+                    <td style={tdi}>
+                      <WasteInlineText tint={T.muted} value={r.route} placeholder="—" onChange={v => updateRow(r.id, { route:v })}/>
+                    </td>
+                    <td style={tdi}>
+                      <WasteInlineChipSelect ariaLabel="Status" value={r.status||"Active"}
+                        options={WASTE_STATUSES.map(s => ({ value:s, label:s }))}
+                        onChange={v => updateRow(r.id, { status:v })}
+                        chip={<span style={{ fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:st.bg, color:st.c, border:"1px solid "+st.bd, whiteSpace:"nowrap" }}>{(r.status||"Active").toUpperCase()}</span>}/>
                     </td>
                     <td style={{ ...td, textAlign:"right", whiteSpace:"nowrap" }}>
-                      {/* The row stays a plain table row (role=row) so its cells stay
-                          screen-reader visible; this button is the keyboard path (Band 4 C2 —
-                          the same fix already applied to this exact table once before). */}
-                      <button className="hit" onClick={e => { e.stopPropagation(); setEditId(r.id); }}
-                        aria-label={"Open " + (r.product || r.ref || "waste stream")}
+                      {/* Cells above are quick-edit for the scalar fields; this
+                          button opens the full record for quantity-by-phase,
+                          hazard compliance (carrier, consignment note), reduction
+                          methods and notes, and — for custom streams — delete.
+                          Always-visible keyboard path (Band 4 C2 — the same fix
+                          already applied to this exact table once before). */}
+                      <button className="hit" onClick={() => setEditId(r.id)}
+                        aria-label={"Open full record for " + (r.product || r.ref || "waste stream")}
                         style={{ fontSize:11, color:T.teal, background:"transparent", border:"none",
                           padding:"4px 6px", cursor:"pointer", fontFamily:T.sans }}>›</button>
                     </td>
