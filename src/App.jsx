@@ -4654,7 +4654,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'.benefit{font-size:9px;color:var(--teal);margin-top:2px}'
         +'.num{font-variant-numeric:tabular-nums}'
         +'.dash{color:var(--faint)}'
-        +'.fps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}'
+        +'.fps{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}'
         +'.fp{padding:10px 14px;border-radius:7px;border:1px solid var(--border);background:var(--surface)}'
         +'.fp .l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;font-weight:500}'
         +'.fp .v{font-size:16px;font-weight:600;color:var(--teal-dk);margin-top:2px;font-variant-numeric:tabular-nums}'
@@ -4707,6 +4707,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +(fp?'<div class="block">'+SEC("Environmental Budget")+'<div class="fps">'
           +'<div class="fp"><div class="l">MTO</div><div class="v">'+nb3(fp.mtoTotal)+' tCO\u2082e</div></div>'
           +'<div class="fp"><div class="l">MEL</div><div class="v">'+nb3(fp.melTotal)+' tCO\u2082e</div></div>'
+          +(Number(fp.manualTotal)?'<div class="fp"><div class="l">Manual</div><div class="v">'+nb3(fp.manualTotal)+' tCO\u2082e</div></div>':'')
           +'<div class="fp hl"><div class="l">Combined</div><div class="v">'+nb3(fp.combined)+' tCO\u2082e</div></div>'
           +'</div></div>':'')
         +'<div class="rblock">'+SEC("Risk Register ("+aspects.length+" aspects)")
@@ -4803,6 +4804,11 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           batFlags: (src.batFlags && typeof src.batFlags === "object"
             && !Array.isArray(src.batFlags)) ? src.batFlags : {},
           footprintMeta: Array.isArray(src.footprintMeta) ? src.footprintMeta : [],
+          // Itemised dashboard budget — absent stays undefined so an older file's
+          // single footprintSummary is still shown (fpEntriesOf converts it).
+          footprintEntries: Array.isArray(src.footprintEntries)
+            ? ensureArr(src.footprintEntries).map(e => ({ ...e, lines: ensureArr(e.lines) }))
+            : undefined,
           // Footprint result — strip row arrays (they're large and session-only)
           footprint: src.footprint ? stripForSave(src.footprint) : null,
         };
@@ -5402,71 +5408,8 @@ This cannot be undone.`)) return;
             <StatCard label="Opportunities ›" value={opps.length}                                         filterId="opps" color={T.purple} border={T.purpleBd} bg={T.purpleBg}/>
           </div>
 
-          {/* ── Footprint card (if pinned) ── */}
-          {project.footprintSummary && (() => {
-            const fp   = project.footprintSummary;
-            const fmtT = v => Number(v).toFixed(3) + " tCO₂e";
-            const d    = fp.date ? new Date(fp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "";
-            const s3c1 = Number(fp.combined || 0);
-            const s1   = Number(fp.scope1   || 0);
-            const s2   = Number(fp.scope2   || 0);
-            const grandTotal = s1 + s2 + s3c1;
-            const np   = Number(fp.npTotal  || 0);
-            const rp   = Number(fp.rpTotal  || 0);
-            const npPct = s3c1 > 0 ? Math.min(100, (np / s3c1) * 100) : 0;
-            const rpPct = s3c1 > 0 ? Math.min(100, (rp / s3c1) * 100) : 0;
-            const cats = fp.catBreakdown || [];
-            const CAT_COLORS = [T.teal,T.blue,T.purple,T.amber,T.green,T.slate,T.red,T.tealDark];
-            return (
-              <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden",
-                border:"1px solid "+T.border, background:T.surface }}>
-                <div style={{ padding:"9px 14px", background:T.surface2,
-                  borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text,
-                    textTransform:"uppercase", letterSpacing:"0.08em" }}>Environmental Budget</span>
-                  {d && <span style={{ fontFamily:T.mono, fontSize:10, color:T.muted }}>{d}</span>}
-                  <button onClick={()=>setTab("footprint")}
-                    style={{ marginLeft:"auto", fontSize:11, padding:"4px 12px", borderRadius:5,
-                      border:"1px solid "+T.tealBd, background:"transparent",
-                      color:T.teal, cursor:"pointer", fontFamily:T.sans, fontWeight:500 }}>
-                    Open budget →
-                  </button>
-                  <button onClick={()=>{ const upd={...project}; delete upd.footprintSummary; onChange(upd); }}
-                    style={{ fontSize:12, padding:"3px 8px", borderRadius:4,
-                      border:"1px solid "+T.border, background:"transparent",
-                      color:T.faint, cursor:"pointer" }}>×</button>
-                </div>
-                <div style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                  {s3c1>0 && <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                    <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.teal, textTransform:"uppercase", letterSpacing:"0.07em" }}>Scope 3 Cat 1</span>
-                    <span style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:T.teal }}>{fmtT(s3c1)}</span>
-                    {(np>0||rp>0) && <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:T.border, width:140, marginTop:2 }}>
-                      <div style={{ width:npPct+"%", background:T.teal }}/><div style={{ width:rpPct+"%", background:T.blue }}/>
-                    </div>}
-                    {(np>0||rp>0) && <div style={{ display:"flex", gap:8 }}>
-                      {np>0&&<span style={{ fontSize:TYPE.data, color:T.teal }}>NP {fmtT(np)}</span>}
-                      {rp>0&&<span style={{ fontSize:TYPE.data, color:T.blue }}>RP {fmtT(rp)}</span>}
-                    </div>}
-                  </div>}
-                  {cats.length>1 && <div style={{ flex:1, minWidth:160 }}>
-                    {cats.slice(0,4).map(({cat,tco2e},ci) => {
-                      const col=[T.teal,T.blue,T.purple,T.amber][ci%4];
-                      const pct=s3c1>0?Math.min(100,(tco2e/s3c1)*100):0;
-                      return (<div key={cat} style={{ marginBottom:4 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:1 }}>
-                          <span style={{ fontSize:TYPE.data, color:T.muted }}>{cat}</span>
-                          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:col }}>{tco2e.toFixed(2)}t</span>
-                        </div>
-                        <div style={{ height:3, borderRadius:2, background:T.border, overflow:"hidden" }}>
-                          <div style={{ height:"100%", width:pct+"%", background:col, borderRadius:2 }}/>
-                        </div>
-                      </div>);
-                    })}
-                  </div>}
-                </div>
-              </div>
-            );
-          })()}
+          {/* ── Environmental Budget — itemised, additive, editable ── */}
+          <EnvBudgetCard project={project} onChange={onChange} setTab={setTab} notify={notify}/>
 
           {/* ── GHG savings strip ── */}
           {opps.length > 0 && totalGhgSaving > 0 && (() => {
@@ -6157,7 +6100,7 @@ This cannot be undone.`)) return;
       )}
 
       <div style={{ display: tab === "footprint" ? undefined : "none" }}>
-        <FootprintTab project={project} onChange={onChange}/>
+        <FootprintTab project={project} onChange={onChange} onOpenDashboard={() => setTab("dashboard")}/>
       </div>
 
 
@@ -7423,33 +7366,338 @@ function applyOverrides(calcResult, overrides) {
 // in-session result and is available via the Download Excel button.
 const stripForSave = r => !r ? null : (({ allRows:_, mtoRows:__, melRows:___, errors:____, ...rest }) => rest)(r);
 
-// Build a small, persistable summary (totals + NP/RP split + category breakdown) from a
-// full calculation result. This is what the dashboard / portfolio show after a reload.
-function summarizeFootprint(r) {
-  if (!r || !r.success) return null;
-  const rows = (r.allRows || []).filter(x => x && x.status === "VALID");
+// ── Environmental Budget — itemised, ADDITIVE dashboard entries ───────────────
+// The Environmental Budget tab computes MTO / MEL footprints from an uploaded
+// workbook. "Add to dashboard" APPENDS those results here as entries — it never
+// replaces what is already on the dashboard, every entry names its source
+// (MTO / MEL / Manual), and every line stays editable in place. Edits are
+// written to the project changelog.
+//   project.footprintEntries = [{ id, source, label, file, addedAt, note?,
+//                                 lines: [{ id, category, mhc, tco2e, rows?, note? }] }]
+// project.footprintSummary is DERIVED from the entries (fpSummaryFromEntries) and
+// re-written on every change, so the portfolio overview and the PDF report —
+// which read it — stay in step without knowing about entries.
+const FP_SOURCES    = ["MTO", "MEL", "Manual"];
+const FP_CATEGORIES = [...new Set(COR_LOOKUP.map(c => c.cat))];
+const fpUid = () => "fp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const fpN   = v => { const n = Number(v); return isFinite(n) ? n : 0; };
+const fpFmt = v => fpN(v).toFixed(3);
+const fpTone = src => src === "MTO" ? { c:T.teal, bg:T.tealBg, bd:T.tealBd }
+                    : src === "MEL" ? { c:T.blue, bg:T.blueBg, bd:T.blueBd }
+                    :                 { c:T.purple, bg:T.purpleBg, bd:T.purpleBd };
+
+// Group VALID calculation rows into editable lines: one per COR category × NP/RP.
+function fpLinesFromRows(rows) {
+  const m = new Map();
+  rows.forEach(r => {
+    const category = r.category || "Uncategorised";
+    const mhc = r.mhc === "RP" ? "RP" : r.mhc === "NP" ? "NP" : "";
+    const k = category + "|" + mhc;
+    const cur = m.get(k) || { category, mhc, tco2e: 0, rows: 0 };
+    cur.tco2e += fpN(r.emissionTco2e); cur.rows += 1;
+    m.set(k, cur);
+  });
+  return [...m.values()].sort((a, b) => b.tco2e - a.tco2e)
+    .map(l => ({ id: fpUid(), category: l.category, mhc: l.mhc, tco2e: Number(l.tco2e.toFixed(6)), rows: l.rows, note: "" }));
+}
+
+// Projects saved before entries existed carry one merged footprintSummary. Show it
+// as editable entries (one per source, totals only — the old blob never stored a
+// per-source category split) instead of losing it.
+function fpLegacyEntries(s) {
+  if (!s || typeof s !== "object") return [];
+  const mk = (source, v) => ({
+    id: "fp_legacy_" + source.toLowerCase(), source, label: "Earlier summary", file: "",
+    addedAt: s.date || "",
+    note: "Carried over from the earlier single-summary format — re-add from the Environmental Budget tab for a category breakdown.",
+    lines: [{ id: "fp_legacy_" + source.toLowerCase() + "_l", category: "All categories", mhc: "", tco2e: fpN(v), note: "" }],
+  });
+  const out = [];
+  if (fpN(s.mtoTotal)) out.push(mk("MTO", s.mtoTotal));
+  if (fpN(s.melTotal)) out.push(mk("MEL", s.melTotal));
+  if (!out.length && fpN(s.combined)) out.push(mk("Manual", s.combined));
+  return out;
+}
+function fpEntriesOf(project) {
+  const raw = project && project.footprintEntries;
+  if (Array.isArray(raw) && raw.length) {
+    return raw.filter(e => e && typeof e === "object")
+      .map(e => ({ ...e, lines: Array.isArray(e.lines) ? e.lines.filter(l => l && typeof l === "object") : [] }));
+  }
+  return fpLegacyEntries(project && project.footprintSummary);
+}
+
+// The persisted summary shape the portfolio overview / PDF already read.
+function fpSummaryFromEntries(entries) {
+  const lines = entries.flatMap(e => (e.lines || []).map(l => ({ ...l, source: e.source })));
+  const sum = arr => arr.reduce((s, l) => s + fpN(l.tco2e), 0);
   const byCat = {};
-  rows.forEach(x => { const k = x.category || "Uncategorised"; byCat[k] = (byCat[k] || 0) + (x.emissionTco2e || 0); });
-  const catBreakdown = Object.entries(byCat)
-    .filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
-    .map(([cat, tco2e]) => ({ cat, tco2e }));
+  lines.forEach(l => { const k = (l.category || "").trim() || "Uncategorised"; byCat[k] = (byCat[k] || 0) + fpN(l.tco2e); });
   return {
-    scope:    "Scope 3 Cat 1",
-    combined: r.combined != null ? r.combined : (r.mtoTotal || 0) + (r.melTotal || 0),
-    mtoTotal: r.mtoTotal || 0,
-    melTotal: r.melTotal || 0,
-    npTotal:  rows.filter(x => x.mhc === "NP").reduce((s, x) => s + (x.emissionTco2e || 0), 0),
-    rpTotal:  rows.filter(x => x.mhc === "RP").reduce((s, x) => s + (x.emissionTco2e || 0), 0),
-    catBreakdown,
+    scope:       "Scope 3 Cat 1",
+    combined:    sum(lines),
+    mtoTotal:    sum(lines.filter(l => l.source === "MTO")),
+    melTotal:    sum(lines.filter(l => l.source === "MEL")),
+    manualTotal: sum(lines.filter(l => l.source !== "MTO" && l.source !== "MEL")),
+    npTotal:     sum(lines.filter(l => l.mhc === "NP")),
+    rpTotal:     sum(lines.filter(l => l.mhc === "RP")),
+    catBreakdown: Object.entries(byCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+      .map(([cat, tco2e]) => ({ cat, tco2e })),
     date: new Date().toISOString(),
   };
+}
+
+// Commit-on-blur input for budget cells: typing is a local draft, so the project
+// (and the changelog) records one clean edit — not one per keystroke. Enter
+// commits, Escape reverts.
+function BudgetInput({ value, onCommit, num, align, mono, placeholder, ariaLabel, list }) {
+  const [draft, setDraft] = useState(null);
+  const [f, setF] = useState(false);
+  const cancelled = React.useRef(false);
+  const raw = value == null ? "" : String(value);
+  const shown = draft !== null ? draft : (num && !f && raw !== "" ? fpFmt(value) : raw);
+  const commit = () => {
+    if (cancelled.current) { cancelled.current = false; setDraft(null); return; }
+    if (draft === null) return;
+    let v = draft.trim();
+    if (num) {
+      const n = parseFloat(v.replace(",", "."));
+      if (!isFinite(n)) { setDraft(null); return; }
+      v = n;
+    }
+    setDraft(null);
+    if (String(v) !== raw) onCommit(v);
+  };
+  return (
+    <input value={shown} placeholder={placeholder} aria-label={ariaLabel} list={list}
+      inputMode={num ? "decimal" : undefined}
+      onFocus={() => setF(true)}
+      onBlur={() => { setF(false); commit(); }}
+      onChange={e => setDraft(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        else if (e.key === "Escape") { cancelled.current = true; e.currentTarget.blur(); }
+      }}
+      style={{ width:"100%", boxSizing:"border-box", fontFamily: mono ? T.mono : T.sans, fontSize:12,
+        color:T.text, textAlign: align || "left", background: f ? T.surface : "transparent",
+        border:"1px solid " + (f ? T.teal : "transparent"), borderRadius:4, padding:"5px 6px", outline:"none",
+        fontVariantNumeric: mono ? "tabular-nums" : undefined }}/>
+  );
+}
+
+// Dashboard card — the project's itemised Environmental Budget. Every line is an
+// editable row; totals, the source split (MTO / MEL / Manual), the NP/RP split and
+// the category bars are all derived live from the entries.
+function EnvBudgetCard({ project, onChange, setTab, notify }) {
+  const entries = fpEntriesOf(project);
+  const [collapsed, setCollapsed] = useState({});
+  const [armed, arm] = useArmedConfirm();   // "line:<id>" | "entry:<id>" | "clear"
+  if (!entries.length) return null;
+
+  const sm      = fpSummaryFromEntries(entries);
+  const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }) : "";
+  const lastAt  = entries.reduce((m, e) => (e.addedAt && e.addedAt > m ? e.addedAt : m), "");
+  const total   = sm.combined;
+  const share   = v => total > 0 ? Math.max(0, Math.min(100, (v / total) * 100)) : 0;
+  const entryTotal = e => (e.lines || []).reduce((s, l) => s + fpN(l.tco2e), 0);
+
+  // One place that persists a change: entries + derived summary + changelog entry.
+  const commit = (next, action, detail, fields) => {
+    const log = { id: fpUid(), ts: new Date().toISOString(), action, detail, fields: fields || [] };
+    const upd = { ...project, footprintEntries: next, changelog: [...(project.changelog || []), log] };
+    if (next.length) upd.footprintSummary = fpSummaryFromEntries(next); else delete upd.footprintSummary;
+    onChange(upd);
+  };
+  const tag = e => e.source + " · " + (e.label || "Untitled");
+  const patchEntry = (id, patch) => entries.map(e => e.id === id ? { ...e, ...patch } : e);
+  const patchLine  = (eid, lid, patch) => entries.map(e => e.id !== eid ? e
+    : { ...e, lines: e.lines.map(l => l.id === lid ? { ...l, ...patch } : l) });
+
+  const editLine = (e, l, field, label, val, show) => {
+    const from = show ? show(l[field]) : (l[field] || "—");
+    const to   = show ? show(val)      : (val || "—");
+    commit(patchLine(e.id, l.id, { [field]: val }), "Edited budget line",
+      tag(e) + " — " + (l.category || "(no category)"), [{ k:label, from:String(from), to:String(to) }]);
+  };
+  const addLine = e => {
+    const nl = { id: fpUid(), category: "", mhc: "NP", tco2e: 0, note: "" };
+    commit(entries.map(x => x.id === e.id ? { ...x, lines: [...x.lines, nl] } : x),
+      "Added budget line", tag(e), [{ k:"Line", v:"New empty line" }]);
+    setCollapsed(c => ({ ...c, [e.id]: false }));
+  };
+  const delLine = (e, l) => {
+    commit(entries.map(x => x.id === e.id ? { ...x, lines: x.lines.filter(y => y.id !== l.id) } : x),
+      "Deleted budget line", tag(e) + " — " + (l.category || "(no category)"),
+      [{ k:"NP/RP", v: l.mhc || "—" }, { k:"tCO₂e", v: fpFmt(l.tco2e) }]);
+    if (notify) notify("Budget line deleted");
+  };
+  const delEntry = e => {
+    commit(entries.filter(x => x.id !== e.id), "Deleted budget entry", tag(e),
+      [{ k:"Lines", v: String(e.lines.length) }, { k:"tCO₂e", v: fpFmt(entryTotal(e)) }]);
+    if (notify) notify(e.source + " entry removed from the dashboard");
+  };
+  const addManual = () => {
+    const ne = { id: fpUid(), source: "Manual", label: "Manual entry", file: "", addedAt: new Date().toISOString(),
+      lines: [{ id: fpUid(), category: "", mhc: "NP", tco2e: 0, note: "" }] };
+    commit([...entries, ne], "Added budget entry", tag(ne), [{ k:"Source", v:"Manual" }]);
+  };
+  const clearAll = () => {
+    commit([], "Deleted budget entry", "All budget entries cleared (" + entries.length + ")",
+      [{ k:"tCO₂e", v: fpFmt(total) }]);
+    if (notify) notify("Environmental budget cleared");
+  };
+
+  const GRID = "minmax(130px,1.5fr) 84px 52px 104px minmax(110px,1.5fr) 44px";
+  const th   = { fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:T.muted,
+                 textTransform:"uppercase", letterSpacing:"0.06em", padding:"0 6px" };
+  const badge = (src) => { const t = fpTone(src); return (
+    <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:700, padding:"2px 7px", borderRadius:3,
+      background:t.bg, color:t.c, border:"1px solid "+t.bd, letterSpacing:"0.05em" }}>{src}</span>); };
+  const mhcChip = (m) => m === "NP"
+    ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:T.tealBg, color:T.teal, border:"1px solid "+T.tealBd }}>NP</span>
+    : m === "RP"
+    ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, padding:"2px 7px", borderRadius:3, background:T.blueBg, color:T.blue, border:"1px solid "+T.blueBd }}>RP</span>
+    : <span style={{ color:T.faint }}>—</span>;
+  const ghost = { fontSize:11, padding:"4px 10px", borderRadius:5, border:"1px solid "+T.border, background:"transparent",
+                  color:T.muted, cursor:"pointer", fontFamily:T.sans, whiteSpace:"nowrap" };
+
+  return (
+    <div style={{ marginBottom:"1rem", borderRadius:9, overflow:"hidden", border:"1px solid "+T.border, background:T.surface }}>
+      <datalist id="fp-cat-list">{FP_CATEGORIES.map(c => <option key={c} value={c}/>)}</datalist>
+
+      {/* Header */}
+      <div style={{ padding:"9px 14px", background:T.surface2, borderBottom:"1px solid "+T.border,
+        display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:700, color:T.text, textTransform:"uppercase", letterSpacing:"0.08em" }}>Environmental Budget</span>
+        <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.muted }}>
+          Scope 3 Cat 1 · {entries.length} entr{entries.length !== 1 ? "ies" : "y"}{lastAt ? " · last added " + fmtDate(lastAt) : ""}
+        </span>
+        <span style={{ marginLeft:"auto", display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+          <button className="hit" onClick={addManual} style={ghost}>+ Add entry</button>
+          <button className="hit" onClick={() => setTab("footprint")}
+            style={{ ...ghost, border:"1px solid "+T.tealBd, color:T.teal, fontWeight:500 }}>Open budget →</button>
+          {armed === "clear"
+            ? <button className="hit" onClick={() => { arm(null); clearAll(); }}
+                style={{ ...ghost, border:"1px solid "+T.redBd, color:T.red, fontWeight:600 }}>Clear all? Click again</button>
+            : <button className="hit" onClick={() => arm("clear")} aria-label="Clear all budget entries" style={{ ...ghost, color:T.faint }}>Clear</button>}
+        </span>
+      </div>
+
+      {/* Totals — by source, then NP/RP and category */}
+      <div style={{ padding:"12px 14px", display:"flex", gap:12, flexWrap:"wrap", alignItems:"stretch" }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:2, paddingRight:14, borderRight:"1px solid "+T.rowBd }}>
+          <span style={{ fontFamily:T.mono, fontSize:TYPE.data, color:T.teal, textTransform:"uppercase", letterSpacing:"0.07em" }}>Total</span>
+          <span style={{ fontFamily:T.mono, fontSize:18, fontWeight:700, color:T.teal }}>{fpFmt(total)} tCO₂e</span>
+          {(sm.npTotal !== 0 || sm.rpTotal !== 0) && <div style={{ display:"flex", height:5, borderRadius:3, overflow:"hidden", background:T.border, width:140, marginTop:2 }}>
+            <div style={{ width:share(sm.npTotal)+"%", background:T.teal }}/><div style={{ width:share(sm.rpTotal)+"%", background:T.blue }}/>
+          </div>}
+          {(sm.npTotal !== 0 || sm.rpTotal !== 0) && <div style={{ display:"flex", gap:8 }}>
+            {sm.npTotal !== 0 && <span style={{ fontSize:TYPE.data, color:T.teal }}>NP {fpFmt(sm.npTotal)}</span>}
+            {sm.rpTotal !== 0 && <span style={{ fontSize:TYPE.data, color:T.blue }}>RP {fpFmt(sm.rpTotal)}</span>}
+          </div>}
+        </div>
+        {[["MTO", sm.mtoTotal], ["MEL", sm.melTotal], ["Manual", sm.manualTotal]].filter(([s, v]) => v !== 0 || s !== "Manual").map(([s, v]) => (
+          <div key={s} style={{ display:"flex", flexDirection:"column", gap:3, minWidth:110 }}>
+            <span>{badge(s)}</span>
+            <span style={{ fontFamily:T.mono, fontSize:15, fontWeight:700, color:fpTone(s).c }}>{fpFmt(v)} tCO₂e</span>
+            <span style={{ fontSize:TYPE.data, color:T.muted }}>{share(v).toFixed(0)}% of total</span>
+          </div>
+        ))}
+        {sm.catBreakdown.length > 1 && <div style={{ flex:1, minWidth:180 }}>
+          {sm.catBreakdown.slice(0, 4).map(({ cat, tco2e }, ci) => {
+            const col = [T.teal, T.blue, T.purple, T.amber][ci % 4];
+            return (
+              <div key={cat} style={{ marginBottom:4 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:1 }}>
+                  <span style={{ fontSize:TYPE.data, color:T.muted }}>{cat}</span>
+                  <span style={{ fontFamily:T.mono, fontSize:TYPE.data, fontWeight:600, color:col }}>{tco2e.toFixed(2)}t</span>
+                </div>
+                <div style={{ height:3, borderRadius:2, background:T.border, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:share(tco2e)+"%", background:col, borderRadius:2 }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>}
+      </div>
+
+      {/* Entries — each labelled MTO / MEL / Manual, every line editable */}
+      {entries.map(e => {
+        const isCol = !!collapsed[e.id];
+        return (
+          <div key={e.id} style={{ borderTop:"1px solid "+T.border }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 14px", background:T.surface2, flexWrap:"wrap" }}>
+              <button className="hit" aria-expanded={!isCol} aria-label={(isCol ? "Expand " : "Collapse ") + tag(e)}
+                onClick={() => setCollapsed(c => ({ ...c, [e.id]: !isCol }))}
+                style={{ background:"transparent", border:"none", color:T.muted, cursor:"pointer", fontSize:12, padding:"2px 4px" }}>{isCol ? "▸" : "▾"}</button>
+              <WasteInlineChipSelect ariaLabel={"Source of " + (e.label || "entry")} value={e.source}
+                options={FP_SOURCES.map(s => ({ value:s, label:s }))}
+                onChange={v => commit(patchEntry(e.id, { source:v }), "Edited budget entry", tag(e), [{ k:"Source", from:e.source, to:v }])}
+                chip={badge(e.source)}/>
+              <div style={{ flex:1, minWidth:150 }}>
+                <BudgetInput ariaLabel="Entry label" value={e.label} placeholder="Entry label"
+                  onCommit={v => commit(patchEntry(e.id, { label:v }), "Edited budget entry", tag(e), [{ k:"Label", from:e.label || "—", to:v || "—" }])}/>
+              </div>
+              <span style={{ fontSize:TYPE.data, color:T.muted }}>
+                {e.file ? e.file + " · " : ""}{e.addedAt ? "added " + fmtDate(e.addedAt) + " · " : ""}{e.lines.length} line{e.lines.length !== 1 ? "s" : ""}
+              </span>
+              <span style={{ fontFamily:T.mono, fontSize:12, fontWeight:700, color:fpTone(e.source).c }}>{fpFmt(entryTotal(e))} tCO₂e</span>
+              {armed === "entry:" + e.id
+                ? <button className="hit" onClick={() => { arm(null); delEntry(e); }}
+                    style={{ ...ghost, border:"1px solid "+T.redBd, color:T.red, fontWeight:600 }}>Delete entry? Click again</button>
+                : <button className="hit" onClick={() => arm("entry:" + e.id)} aria-label={"Delete " + tag(e)} style={{ ...ghost, color:T.faint }}>Delete</button>}
+            </div>
+
+            {!isCol && (
+              <div style={{ padding:"4px 14px 10px", overflowX:"auto" }}>
+                {e.note && <p style={{ margin:"4px 0 6px", fontSize:11, color:T.muted, lineHeight:1.5 }}>{e.note}</p>}
+                <div style={{ minWidth:620 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:GRID, alignItems:"center", padding:"6px 0",
+                    borderBottom:"1px solid "+T.border }}>
+                    <span style={th}>Category</span><span style={th}>NP / RP</span>
+                    <span style={{ ...th, textAlign:"right" }}>Rows</span><span style={{ ...th, textAlign:"right" }}>tCO₂e</span>
+                    <span style={th}>Note</span><span/>
+                  </div>
+                  {e.lines.map(l => (
+                    <div key={l.id} style={{ display:"grid", gridTemplateColumns:GRID, alignItems:"center", padding:"2px 0",
+                      borderBottom:"1px solid "+T.rowBd }}>
+                      <BudgetInput ariaLabel="Category" list="fp-cat-list" value={l.category} placeholder="Category…"
+                        onCommit={v => editLine(e, l, "category", "Category", v)}/>
+                      <WasteInlineChipSelect ariaLabel="NP or RP" value={l.mhc || ""}
+                        options={[{ value:"NP", label:"NP" }, { value:"RP", label:"RP" }, { value:"", label:"—" }]}
+                        onChange={v => editLine(e, l, "mhc", "NP/RP", v)} chip={mhcChip(l.mhc)}/>
+                      <span style={{ textAlign:"right", fontFamily:T.mono, fontSize:11, color:T.muted, padding:"0 6px" }}>{l.rows != null ? l.rows : "—"}</span>
+                      <BudgetInput num mono align="right" ariaLabel="tCO₂e" value={l.tco2e}
+                        onCommit={v => editLine(e, l, "tco2e", "tCO₂e", v, fpFmt)}/>
+                      <BudgetInput ariaLabel="Note" value={l.note} placeholder="Note…"
+                        onCommit={v => editLine(e, l, "note", "Note", v)}/>
+                      {armed === "line:" + l.id
+                        ? <button className="hit" onClick={() => { arm(null); delLine(e, l); }}
+                            aria-label="Confirm delete line" style={{ fontSize:11, color:T.red, background:"transparent", border:"none", cursor:"pointer", fontWeight:600, padding:"4px 2px" }}>Delete?</button>
+                        : <button className="hit" onClick={() => arm("line:" + l.id)} aria-label={"Delete line " + (l.category || "")}
+                            style={{ fontSize:14, color:T.faint, background:"transparent", border:"none", cursor:"pointer", padding:"2px 8px", lineHeight:1 }}>×</button>}
+                    </div>
+                  ))}
+                  {e.lines.length === 0 && <div style={{ padding:"10px 6px", fontSize:11, color:T.muted }}>No lines — add one below.</div>}
+                </div>
+                <button className="hit" onClick={() => addLine(e)} style={{ ...ghost, marginTop:8 }}>+ Add line</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div style={{ padding:"7px 14px", borderTop:"1px solid "+T.border, fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>
+        NP — New Permanently · RP — Removal of Permanent items. Edit any cell in place; each change is recorded in the project's Changes log.
+      </div>
+    </div>
+  );
 }
 
 // ── Session cache — survives React remounts (key changes) within the same tab ─
 // Keyed by project ID so switching projects and back restores the right rows.
 const _fpRowCache = new Map(); // projectId → { allRows, mtoRows, melRows }
 
-function FootprintTab({ project, onChange }) {
+function FootprintTab({ project, onChange, onOpenDashboard }) {
   const [step, setStep]           = useState("upload");
   const [fileName, setFileName]   = useState(project.footprintFile || "");
   const [sheetMetas, setSheetMetas] = useState(project.footprintMeta || []);
@@ -7469,6 +7717,14 @@ function FootprintTab({ project, onChange }) {
   const [overrideInput, setOverrideInput] = useState({});  // rowKey -> typed string
   const [remapSelections, setRemapSelections] = useState({});  // unknownCode -> selectedReplacement
   const [toast, setToast] = useState("");
+  // "Add to dashboard" panel — per source (MTO / MEL): include?, entry label, and
+  // what to do if the same file's entry is already on the dashboard.
+  const [addOpen,  setAddOpen]  = useState(false);
+  const [addSel,   setAddSel]   = useState({});   // src -> false when unticked
+  const [addLabel, setAddLabel] = useState({});   // src -> typed label
+  const [addMode,  setAddMode]  = useState({});   // src -> "add" | "replace"
+  const projectRef = React.useRef(project);        // always the latest project, for async worker callbacks
+  projectRef.current = project;
   const [view, setView]   = useState("summary");
   const [dFilter, setDFilter] = useState("ALL");
   const [dSearch, setDSearch] = useState("");
@@ -7732,8 +7988,11 @@ function FootprintTab({ project, onChange }) {
         setWorkerBusy(false);
         setResult(cal); setView("summary"); setStep("result");
         setCorOverrides({});
-        onChange({ ...project, footprint: stripForSave(cal),
-                   footprintSummary: summarizeFootprint(cal),  // compact totals persist across reloads
+        setAddOpen(false);
+        // A calculation never touches the dashboard budget — only "Add to dashboard"
+        // does, and that appends. projectRef (not the closure's `project`) so edits
+        // made to the dashboard budget while the worker ran are not overwritten.
+        onChange({ ...projectRef.current, footprint: stripForSave(cal),
                    footprintFile: fileName,
                    footprintMeta: sheetMetas, footprintSuggestions: {}, footprintCorOverrides: {} });
         setSuggestions({});
@@ -7811,62 +8070,57 @@ function FootprintTab({ project, onChange }) {
     commitOverrides(upd, n + " row" + (n !== 1 ? "s" : "") + " remapped → " + toCode);
   };
 
-  // Stamp the current footprint result to the project dashboard
-  const addToProject = () => {
-    if (!displayResult) { setToast("No result to save yet."); setTimeout(()=>setToast(""),2000); return; }
-    if (!displayResult.success) { setToast("Calculation has errors — cannot save."); setTimeout(()=>setToast(""),2500); return; }
-
-    const vRows = (displayResult.allRows || []).filter(r => r.status === "VALID");
-    const tot   = displayResult.combined;
-
-    const byCat = {};
-    vRows.forEach(r => {
-      const k = r.category || "Unknown";
-      byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0);
+  // ── Add to dashboard ─────────────────────────────────────────────────────────
+  // ADDITIVE: appends one itemised entry per source (MTO / MEL) to the dashboard
+  // budget. Existing entries — including any the user has since edited — are kept.
+  // The only way an earlier entry changes is the explicit "Replace" choice shown
+  // when the same file's entry for that source is already there.
+  const flash = (msg, ms = 2500) => { setToast(msg); setTimeout(() => setToast(""), ms); };
+  const openAdd = () => {
+    if (!displayResult) return flash("No result to add yet.", 2000);
+    if (!displayResult.success) return flash("Calculation has errors — cannot add.");
+    setAddOpen(o => !o);
+  };
+  const confirmAdd = (sources) => {
+    const chosen = sources.filter(s => addSel[s.src] !== false);
+    if (!chosen.length) return;
+    let next = fpEntriesOf(projectRef.current);
+    const now  = new Date().toISOString();
+    const logs = [];
+    chosen.forEach(s => {
+      const label = (addLabel[s.src] || "").trim() || ((fileName || "Workbook") + " · " + s.src);
+      const dup   = fileName ? [...next].reverse().find(e => e.source === s.src && e.file === fileName) : null;
+      const entry = { id: fpUid(), source: s.src, label, file: fileName, addedAt: now, lines: s.lines };
+      const replacing = addMode[s.src] === "replace" && dup;
+      next = replacing ? next.map(e => e.id === dup.id ? entry : e) : [...next, entry];
+      logs.push({
+        id: fpUid(), ts: now,
+        action: replacing ? "Edited budget entry" : "Added budget entry",
+        detail: s.src + " · " + label,
+        fields: [
+          { k: "Source",  v: s.src },
+          { k: "File",    v: fileName || "—" },
+          { k: "Lines",   v: String(s.lines.length) },
+          { k: "tCO₂e",   v: fpFmt(s.tco2e) },
+          ...(replacing ? [{ k: "Replaced", v: "earlier " + s.src + " entry from this file" }] : []),
+        ],
+      });
     });
-    const catBreakdown = Object.entries(byCat)
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1])
-      .map(([cat, v]) => ({ cat, tco2e: v }));
-
-    const summary = {
-      scope:    "Scope 3 Cat 1",
-      combined: tot,
-      mtoTotal: displayResult.mtoTotal || 0,
-      melTotal: displayResult.melTotal || 0,
-      npTotal:  vRows.filter(r => r.mhc === "NP").reduce((s, r) => s + (r.emissionTco2e || 0), 0),
-      rpTotal:  vRows.filter(r => r.mhc === "RP").reduce((s, r) => s + (r.emissionTco2e || 0), 0),
-      catBreakdown,
-      date: new Date().toISOString(),
-    };
-
-    const entry = {
-      id: Date.now().toString(), ts: new Date().toISOString(),
-      action: "Updated Scope 3 Cat 1 emission footprint",
-      detail: tot.toFixed(3) + " tCO₂e",
-      fields: [
-        { k: "Scope",    v: "Scope 3 Cat 1 — Purchased goods & services" },
-        { k: "NP",       v: summary.npTotal.toFixed(3) + " tCO₂e" },
-        { k: "RP",       v: summary.rpTotal.toFixed(3) + " tCO₂e" },
-        { k: "Combined", v: tot.toFixed(3) + " tCO₂e" },
-      ]
-    };
-
-    // Explicitly include ALL current footprint state so this save is fully
-    // self-contained — never relies on project prop being up-to-date
-    // (prevents stale-closure race with the worker's own onChange call)
+    const base = projectRef.current;
     onChange({
-      ...project,
+      ...base,
+      // Keep the tab's own working state saved with the same call, so this is
+      // self-contained and can't race the worker's onChange.
       footprint:             stripForSave(result),
       footprintCorOverrides: corOverrides,
       footprintMeta:         sheetMetas,
       footprintFile:         fileName,
-      footprintSummary:      summary,
-      changelog: [...(project.changelog || []), entry],
+      footprintEntries:      next,
+      footprintSummary:      fpSummaryFromEntries(next),
+      changelog:             [...(base.changelog || []), ...logs],
     });
-
-    setToast("Scope 3 footprint saved to project dashboard ✓");
-    setTimeout(() => setToast(""), 2500);
+    setAddOpen(false); setAddSel({}); setAddLabel({}); setAddMode({});
+    flash(chosen.map(s => s.src).join(" + ") + " added to the dashboard budget ✓ — " + fpFmt(chosen.reduce((a, s) => a + s.tco2e, 0)) + " tCO₂e");
   };
 
   // ── Session-only notice for row table ──────────────────────────────────────────
@@ -8333,13 +8587,38 @@ function FootprintTab({ project, onChange }) {
   else if (dFilter === "ERROR")  dRows = allRows.filter(r => r.status === "ERROR");
   if (dSearch) { const q = dSearch.toLowerCase(); dRows = dRows.filter(r => (r.desc || "").toLowerCase().includes(q) || (r.cor || "").toLowerCase().includes(q)); }
 
+  // What "Add to dashboard" would append — one itemised entry per source present in
+  // this result — and what is already on the dashboard. Built only while the panel
+  // is open (grouping is a pass over every row).
+  const onDash      = fpEntriesOf(project);
+  const onDashTotal = onDash.reduce((s, e) => s + e.lines.reduce((a, l) => a + fpN(l.tco2e), 0), 0);
+  const addSources  = !addOpen ? [] : ["MTO", "MEL"].map(src => {
+    const rows = validRows.filter(r => r.source === src);
+    return { src, rows: rows.length, lines: fpLinesFromRows(rows),
+             tco2e: rows.reduce((s, r) => s + fpN(r.emissionTco2e), 0),
+             errors: allRows.filter(r => r.source === src && r.status === "ERROR").length };
+  }).filter(s => s.rows > 0);
+  const nSel  = addSources.filter(s => addSel[s.src] !== false).length;
+  const dupOf = src => fileName ? [...onDash].reverse().find(e => e.source === src && e.file === fileName) : null;
+
   return (
     <div style={{ padding: "1.25rem", background: T.bg }}>
       {/* ── Header ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: T.teal }}>Environmental Budget</h2>
-          <p style={{ margin: 0, fontSize: 11, color: T.muted }}>{fileName}</p>
+          <p style={{ margin: 0, fontSize: 11, color: T.muted }}>
+            {fileName}
+            {onDash.length > 0 && <>
+              {" · "}
+              {onOpenDashboard
+                ? <button className="hit" onClick={onOpenDashboard}
+                    style={{ background:"transparent", border:"none", padding:0, color:T.teal, cursor:"pointer", fontSize:11, fontFamily:T.sans, textDecoration:"underline" }}>
+                    On dashboard: {onDash.length} entr{onDash.length !== 1 ? "ies" : "y"} · {fpFmt(onDashTotal)} tCO₂e →
+                  </button>
+                : <span>On dashboard: {onDash.length} entr{onDash.length !== 1 ? "ies" : "y"} · {fpFmt(onDashTotal)} tCO₂e</span>}
+            </>}
+          </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setStep("mapping")} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>
@@ -8348,11 +8627,11 @@ function FootprintTab({ project, onChange }) {
           <button onClick={exportXLSX} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32, color: T.teal, borderColor: T.tealBd }}>
             ↓ Download Excel
           </button>
-          <button onClick={addToProject}
+          <button onClick={openAdd} aria-expanded={addOpen}
             style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans,
               border: "1px solid " + T.greenBd, background: T.greenBg, color: T.green,
               fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            📌 Add to project
+            📌 Add to dashboard
           </button>
           <label style={{ padding: "6px 14px", borderRadius: 6, background: T.teal, color: "#fff", fontSize: 12,
             fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", minHeight: 32, boxSizing: "border-box" }}>
@@ -8361,6 +8640,75 @@ function FootprintTab({ project, onChange }) {
         </div>
 
       </div>
+
+      {/* ── Add to dashboard — additive, source-labelled ── */}
+      {addOpen && (
+        <div role="region" aria-label="Add to dashboard"
+          style={{ marginBottom: "1rem", padding: "14px 16px", borderRadius: 8, border: "1px solid " + T.greenBd, background: T.surface }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Add to dashboard</span>
+            <button className="hit" onClick={() => setAddOpen(false)} aria-label="Close"
+              style={{ marginLeft: "auto", fontSize: 16, lineHeight: 1, padding: "2px 8px", border: "none", background: "transparent", color: T.muted, cursor: "pointer" }}>×</button>
+          </div>
+          <p style={{ margin: "0 0 10px", fontSize: 11, color: T.muted, lineHeight: 1.55 }}>
+            Adds itemised lines (COR category × NP/RP) to this project's Dashboard budget, each entry labelled MTO or MEL.
+            Nothing already on the dashboard is overwritten, and every line stays editable there.
+          </p>
+          {!hasRows && (
+            <p style={{ margin: "0 0 10px", fontSize: 11, color: T.amber, lineHeight: 1.5 }}>
+              Row-level detail isn't kept after a reload — re-upload the workbook (or re-run the calculation) to add itemised lines.
+            </p>
+          )}
+          {addSources.map(s => {
+            const on  = addSel[s.src] !== false;
+            const dup = on ? dupOf(s.src) : null;
+            const t   = fpTone(s.src);
+            return (
+              <div key={s.src} style={{ padding: "9px 0", borderTop: "1px solid " + T.rowBd }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <input type="checkbox" checked={on} aria-label={"Include " + s.src}
+                    onChange={e => setAddSel(p => ({ ...p, [s.src]: e.target.checked }))}
+                    style={{ width: 16, height: 16, accentColor: T.teal, margin: 0 }} />
+                  <span style={{ fontFamily: T.mono, fontSize: TYPE.data, fontWeight: 700, padding: "2px 7px", borderRadius: 3,
+                    background: t.bg, color: t.c, border: "1px solid " + t.bd, letterSpacing: "0.05em" }}>{s.src}</span>
+                  <input value={addLabel[s.src] ?? ((fileName || "Workbook") + " · " + s.src)} aria-label={s.src + " entry label"}
+                    onChange={e => setAddLabel(p => ({ ...p, [s.src]: e.target.value }))}
+                    style={{ flex: 1, minWidth: 180, boxSizing: "border-box", fontSize: 12, padding: "5px 8px", borderRadius: 5,
+                      border: "1px solid " + T.border, background: T.surface, color: T.text, fontFamily: T.sans }} />
+                  <span style={{ fontFamily: T.mono, fontSize: 11, color: t.c }}>
+                    {s.lines.length} line{s.lines.length !== 1 ? "s" : ""} · {s.rows} row{s.rows !== 1 ? "s" : ""} · {fpFmt(s.tco2e)} tCO₂e
+                  </span>
+                </div>
+                {s.errors > 0 && (
+                  <p style={{ margin: "6px 0 0 26px", fontSize: 11, color: T.amber }}>
+                    {s.errors} {s.src} row{s.errors !== 1 ? "s" : ""} with errors {s.errors !== 1 ? "are" : "is"} left out until fixed.
+                  </p>
+                )}
+                {dup && (
+                  <div style={{ margin: "6px 0 0 26px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 11, color: T.amber }}>
+                    <span>An {s.src} entry from this file is already on the dashboard{dup.addedAt ? " (added " + new Date(dup.addedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) + ")" : ""}.</span>
+                    <select value={addMode[s.src] || "add"} aria-label={"If " + s.src + " already added"}
+                      onChange={e => setAddMode(p => ({ ...p, [s.src]: e.target.value }))}
+                      style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: "1px solid " + T.border, background: T.surface, color: T.text, fontFamily: T.sans }}>
+                      <option value="add">Add as a separate entry</option>
+                      <option value="replace">Replace the earlier entry (discards its edits)</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 6, paddingTop: 10, borderTop: "1px solid " + T.rowBd }}>
+            <button onClick={() => setAddOpen(false)} style={{ ...btnSm(false), padding: "6px 14px", minHeight: 32 }}>Cancel</button>
+            <button onClick={() => confirmAdd(addSources)} disabled={!hasRows || nSel === 0}
+              style={{ padding: "6px 14px", borderRadius: 6, minHeight: 32, fontFamily: T.sans, fontSize: 12, fontWeight: 600,
+                border: "1px solid " + T.greenBd, background: T.greenBg, color: T.green,
+                cursor: (!hasRows || nSel === 0) ? "not-allowed" : "pointer", opacity: (!hasRows || nSel === 0) ? 0.45 : 1 }}>
+              Add {nSel} entr{nSel !== 1 ? "ies" : "y"} to dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Status ── */}
       <div style={{ padding: "9px 14px", borderRadius: 7, marginBottom: "1rem",
