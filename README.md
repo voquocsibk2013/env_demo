@@ -37,7 +37,7 @@ High-level project summary — not a data table.
 | **Opportunities** | Total opportunity count |
 
 ### Summary panels
-- **Environmental Budget card** — shown if a footprint has been pinned; displays Scope 3 Cat 1 combined total, NP/RP split, top-category bar chart, link to the Environmental Budget tab; dismissible
+- **Environmental Budget card** — the project's itemised budget. Totals split by **MTO / MEL / Manual**, each with its own **NP and RP** total; category bars; one block per entry (badged MTO / MEL / Manual) with an editable line table — category, NP/RP, tCO₂e, note. Add / delete lines and entries (two-click confirm); every edit is written to the Changes log. Links to the Environmental Budget tab
 - **GHG savings strip** — total identified tCO₂e savings across all scored opportunities, broken down by Scope 1 / 2 / 3
 - **Risk Profile by Category** — horizontal stacked bar per environmental category; each segment coloured by significance (red = Significant, amber = Medium, green = Low); total count on right
 - **Top 5 Open Risks** — highest C×P scoring Action aspects; significance colour, ref, aspect text, area, status badge; click-to-edit
@@ -190,10 +190,14 @@ Calculates Scope 3 Category 1 embodied carbon from MTO / MEL Excel files. Runs i
 - Full **undo/redo** (Ctrl/Cmd+Z / Ctrl+Shift+Z)
 - Overrides persist in `project.footprintCorOverrides` across sessions
 
-### Dashboard pin (Add to project)
-- Saves a `footprintSummary` snapshot including: combined total, MTO/MEL split, NP/RP split, top-category breakdown, `mtoTotal`, `melTotal`
-- Explicitly writes all current footprint state (`result`, `corOverrides`, `meta`, `fileName`) in one atomic `onChange` call — prevents stale-closure race conditions that previously caused intermittent save failures
-- Shows descriptive toast feedback on success or failure
+### Add to dashboard
+- **Additive** — appends itemised entries to `project.footprintEntries`; nothing already on the dashboard is overwritten. A calculation never touches the dashboard on its own
+- The panel lists each source present in the workbook (**MTO**, **MEL**) with its lines, rows, tCO₂e and NP/RP; tick which to add and rename each entry. Rows with errors are left out and called out
+- Each entry is one source × COR category × NP/RP lines, labelled with its source, file and date. Entries are snapshots of the result when added
+- If an entry for the same source from the same file (or an earlier pre-entries summary) is already there, the panel warns it would be counted twice. Default is "add as a separate entry"; "replace" is an explicit choice behind a second confirm click and logs what was discarded
+- After a reload the row detail is gone, so only per-source totals can be added (one "All categories" line each)
+- Writes the tab's working state (`result`, `corOverrides`, `meta`, `fileName`) and the entries in one atomic `onChange`; the calculation-complete handler reads the latest project via a ref so dashboard edits made while it runs aren't overwritten
+- Dashboard edits commit on blur/Enter (Escape reverts; numbers accept `12.5`, `12,5`, `1 234,5`; an unparseable number is kept and flagged, never silently dropped). Each edit is a Changes-log entry with before → after
 
 ### Excel export (↓ Download Excel)
 Produces a structured `.xlsx` with three sheets:
@@ -274,7 +278,7 @@ A4 landscape, full-colour (`print-color-adjust: exact`), opened via Blob URL.
 3. **Matrices** (side by side)
    - Environmental Risk Matrix (5×5, plain number axes, coloured dots)
    - Opportunity Priority Matrix (5×5, Environmental Value × Feasibility, dot size = Business Value)
-4. **Environmental Budget** — MTO / MEL / Combined cards (shown only if pinned)
+4. **Environmental Budget** — MTO / MEL / Manual / Combined cards (shown only if the dashboard has budget entries)
 5. **Risk Register table** — Ref · Aspect · Area · Phase · Significance · Status (no score columns)
 6. **Opportunity Register table** — Ref · Description · Type · Priority (quadrant) · GHG saving (no score column)
 7. **Footer** — toolkit name, project name, date
@@ -292,7 +296,7 @@ Click **🖨 Print / Save as PDF** in the top-right of the report window, then c
 Cross-project view from the sidebar.
 
 - Projects grouped by contract, then individually listed
-- Per-project: total aspects, Significant / Medium / Low bar, total opportunities, GHG savings, Environmental Budget total (if pinned)
+- Per-project: total aspects, Significant / Medium / Low bar, total opportunities, GHG savings, Environmental Budget total with its MTO / MEL split (if the project has budget entries)
 - Contract-level and portfolio totals
 
 ---
@@ -336,7 +340,8 @@ project {
   footprintCorOverrides — user COR remaps
   footprintMeta      — sheet-to-column mappings from last upload
   footprintFile      — source file name
-  footprintSummary   — pinned dashboard snapshot (combined, mtoTotal, melTotal, npTotal, rpTotal, catBreakdown, date)
+  footprintEntries   — the itemised dashboard budget: [{ id, source: MTO|MEL|Manual, label, file, addedAt, lines: [{ id, category, mhc: NP|RP|"", tco2e, rows?, note? }] }]
+  footprintSummary   — DERIVED from footprintEntries and rewritten on every change (combined, mtoTotal, melTotal, manualTotal, npTotal, rpTotal, per-source total/NP/RP, catBreakdown, date); read by the portfolio overview and PDF. Projects saved before entries existed show their old summary as editable "Earlier summary" entries
 }
 ```
 
