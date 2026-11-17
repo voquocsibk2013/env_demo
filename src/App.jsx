@@ -1011,11 +1011,16 @@ function calcSig(a) {
   return matrixZone(c, p);
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
+// "Scored" = the item has both axes of its matrix, so it can be plotted and ranked. Every matrix,
+// register cell, filter and the PDF use these two, so they never disagree about what is unscored.
+// A risk needs a consequence and a probability; an opportunity needs an environmental value and a
+// feasibility (business value only sizes its dot and feeds the numeric Score).
+const isAspectScored = a => calcScore(a) !== null;
+const isOppScored    = o => !!(o.envValue && o.feasibility);
 // The one priority vocabulary: quadrant label + its colors travel together (D7).
 // calcOppScore stays as the numeric Score column / dot-size input; it no longer names priority.
 function oppQuadrant(o) {
-  // No quadrant until both of its axes (environmental value, feasibility) are scored
-  if (!o.envValue || !o.feasibility) return { label:"Not scored", c:T.muted, bg:T.surface2, bd:T.border, rank:-1 };
+  if (!isOppScored(o)) return { label:"Not scored", c:T.muted, bg:T.surface2, bd:T.border, rank:-1 };
   const hE = o.envValue >= 4, hF = o.feasibility >= 4;
   if (hE && hF)  return { label:"Quick win",    c:T.green,  bg:T.greenBg,  bd:T.greenBd,  rank:3 };
   if (!hE && hF) return { label:"Pursue",       c:T.purple, bg:T.purpleBg, bd:T.purpleBd, rank:2 };
@@ -1355,14 +1360,18 @@ const aspectIncomplete = f => !(f.impact||"").trim();
 const RequiredHint = ({ show, children }) => show
   ? <span style={{ fontSize:11, color:T.amber, alignSelf:"center" }}>{children}</span> : null;
 
-// Aspect as the form edits it. Reference text typed by hand in an earlier version (anything that is
-// neither the shipped citation list nor today's) moves to the free-text box so it is not lost.
+// Aspect as the form edits it. Only a record saved before the free-text box existed (it has no
+// legalRefExtra field at all) can hold hand-typed references in legalRef: the parts that are not one
+// of the guide word's citations, under its shipped or current name, move to the free-text box so they
+// are not lost. A record saved since keeps its own text in legalRefExtra, and its legalRef is just the
+// citation names at the time, refreshed on save, so a later rename is never mistaken for typing.
 function aspectForForm(aspect) {
   const f = { ...emptyAspect(), ...aspect };
   const item = riskItemById(f._screeningId);
-  if (item && f.legalRef && !f.legalRefExtra && f.legalRef !== item.legalRef
-      && f.legalRef !== legalRefText(legalCitationsFor(item, readLegalOverrides()))) {
-    f.legalRefExtra = f.legalRef;
+  if (item && f.legalRef && !(aspect && "legalRefExtra" in aspect)) {
+    const known = new Set(legalCitationsFor(item, readLegalOverrides()).flatMap(c => [c.name, c.baselineName]));
+    f.legalRefExtra = parseLegalRef(f.legalRef).filter(p => !known.has(p.cite))
+      .map(p => p.cite + (p.qualifier ? " ("+p.qualifier+")" : "")).join("; ");
   }
   return f;
 }
@@ -2505,21 +2514,52 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
 }
 
 // ── Screening tab ─────────────────────────────────────────────────────────────
+// Where a popup anchored to `el` fits. The Screening list scrolls inside its own box, so the room
+// around the mark is the window cut down by every scrolling (clipping) ancestor, not the window alone.
+// Rectangles are in window pixels; the content pane can be zoomed, so offsets and sizes are turned
+// back into the popup's own CSS pixels with the zoom of the nearest scrolling box.
+// Returns { above, left (offset from the mark), width, maxHeight } in CSS pixels.
+function popupPlacement(el, want = { width:380, height:300 }) {
+  const r = el.getBoundingClientRect();
+  let top = 0, left = 0, bottom = window.innerHeight, right = window.innerWidth, z = 0;
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const s = getComputedStyle(p);
+    if (!/auto|scroll|hidden|clip/.test(s.overflowY + " " + s.overflowX)) continue;
+    const b = p.getBoundingClientRect();
+    if (!b.width || !b.height) continue;                       // not laid out
+    let bt = b.top, bl = b.left, bb = b.bottom, br = b.right;
+    if (!z) {
+      // the nearest scrolling box sets the zoom, and only its inside counts (no border, no scrollbar)
+      z = p.offsetWidth ? b.width / p.offsetWidth : 1;
+      if (!(z > 0.25 && z < 4)) z = 1;
+      bt += (p.clientTop || 0) * z;  bl += (p.clientLeft || 0) * z;
+      if (p.clientHeight) bb = Math.min(bb, bt + p.clientHeight * z);
+      if (p.clientWidth)  br = Math.min(br, bl + p.clientWidth * z);
+    }
+    top = Math.max(top, bt); left = Math.max(left, bl); bottom = Math.min(bottom, bb); right = Math.min(right, br);
+  }
+  z = z || 1;
+  const gap   = 8 * z;
+  const below = bottom - r.bottom, above = r.top - top;
+  const up    = below < want.height * z && above > below;
+  const width = Math.max(160, Math.min(want.width, (right - left - 2 * gap) / z));
+  const x     = Math.max(left + gap, Math.min(r.left - gap, right - gap - width * z));   // popup's left edge
+  return { above:up, left:(x - r.left) / z, width, maxHeight:Math.max(80, ((up ? above : below) - 2 * gap) / z) };
+}
+
 // Guide words for one Screening opportunity button: a small "i" mark beside the row's label that
 // shows the template's guide words while it is hovered or focused. Escape or a click elsewhere closes
-// it; clicking the mark keeps it open (for touch screens). It opens above or to the left when the
-// row is close to the bottom or right edge of the window.
+// it; clicking the mark keeps it open (for touch screens). It opens above the row when there is more
+// room there, and stays inside the visible part of the Screening list (scrolling if it is taller).
 function GuideWordsHint({ btn, color }) {
   const [open, setOpen]     = useState(false);
   const [pinned, setPinned] = useState(false);
-  const [place, setPlace]   = useState({ above:false, right:false });
+  const [place, setPlace]   = useState({ above:false, left:-8, width:380, maxHeight:420 });
   const tipId   = "gw-" + React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const wrapRef = React.useRef(null);
   const hovered = React.useRef(false);  // pointer over the mark or its popup
   const show = () => {
-    const r = wrapRef.current && wrapRef.current.getBoundingClientRect();
-    if (r) setPlace({ above: window.innerHeight - r.bottom < 300 && r.top > window.innerHeight - r.bottom,
-                      right: r.left + 400 > window.innerWidth });
+    if (wrapRef.current) setPlace(popupPlacement(wrapRef.current));
     setOpen(true);
   };
   const hide = () => { setOpen(false); setPinned(false); };
@@ -2550,11 +2590,11 @@ function GuideWordsHint({ btn, color }) {
       </button>
       {open && (
         <div id={tipId} role="tooltip"
-          style={{ position:"absolute", zIndex:40, width:380, maxWidth:"80vw",
-                   ...(place.right ? { right:-8 } : { left:-8 }),
+          style={{ position:"absolute", zIndex:40, left:place.left, width:place.width, boxSizing:"border-box",
                    ...(place.above ? { bottom:"100%", paddingBottom:6 } : { top:"100%", paddingTop:6 }) }}>
           <div style={{ background:T.surface, border:"1px solid "+T.border, borderTop:"3px solid "+color.head,
-                        borderRadius:8, boxShadow:"var(--shadow-menu)", padding:"10px 12px", cursor:"auto" }}>
+                        borderRadius:8, boxShadow:"var(--shadow-menu)", padding:"10px 12px", cursor:"auto",
+                        maxHeight:place.maxHeight, overflowY:"auto", boxSizing:"border-box" }}>
             <p style={{ margin:"0 0 6px", fontSize:11, fontWeight:600, color:color.head }}>Guide words · {label}</p>
             <OppGuideWords cats={oppGuideFor({ _screeningId:btn.id })} plain/>
             <p style={{ margin:"7px 0 0", fontSize:TYPE.data, color:T.muted }}>From the screening template.</p>
@@ -2563,6 +2603,18 @@ function GuideWordsHint({ btn, color }) {
       )}
     </span>
   );
+}
+
+// Register entries keyed by the guide word (_screeningId) they were made from, in register order.
+const NO_ENTRIES = [];
+function entriesByGuideWord(list) {
+  const m = new Map();
+  for (const x of list) {
+    if (!x._screeningId) continue;
+    if (!m.has(x._screeningId)) m.set(x._screeningId, []);
+    m.get(x._screeningId).push(x);
+  }
+  return m;
 }
 
 function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump = () => {} }) {
@@ -2578,10 +2630,13 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
   const skipped    = project.screeningSkips || {};
   const toggleSkip = id => onChange({ ...project,
     screeningSkips: { ...skipped, [id]: !skipped[id] } });
-  // Register entries already made from a guide word. One guide word can hold several.
-  const allOpps   = project.opportunities || project.opps || [];
-  const aspectsOf = id => (project.aspects||[]).filter(a => a._screeningId === id);
-  const oppsOf    = id => allOpps.filter(o => o._screeningId === id);
+  // Register entries already made from a guide word, grouped once per change of the registers
+  // rather than filtered per row. One guide word can hold several.
+  const aspectsById = React.useMemo(() => entriesByGuideWord(project.aspects || []), [project.aspects]);
+  const oppsById    = React.useMemo(() => entriesByGuideWord(project.opportunities || project.opps || []),
+                                    [project.opportunities, project.opps]);
+  const aspectsOf   = id => aspectsById.get(id) || NO_ENTRIES;
+  const oppsOf      = id => oppsById.get(id) || NO_ENTRIES;
 
   const isRisks = mode === "risks";
   const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
@@ -4791,7 +4846,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       // risk matrix cells
       const mGrid={};
       // unscored aspects (no consequence or probability yet) are not plotted
-      aspects.forEach(a=>{if(!a.severity||!a.probability)return;const sv=Math.min(5,Math.max(1,parseInt(a.severity)||0));const pb=Math.min(5,Math.max(1,parseInt(a.probability)||0));if(sv&&pb){const k=sv+","+pb;if(!mGrid[k])mGrid[k]=[];mGrid[k].push(a);}});
+      aspects.forEach(a=>{if(!isAspectScored(a))return;const sv=Math.min(5,Math.max(1,parseInt(a.severity)||0));const pb=Math.min(5,Math.max(1,parseInt(a.probability)||0));if(sv&&pb){const k=sv+","+pb;if(!mGrid[k])mGrid[k]=[];mGrid[k].push(a);}});
       const zCls=(sv,pb)=>{const z=matrixZone(sv,pb);return z==="SIGNIFICANT"?"z-s":z==="MEDIUM"?"z-m":"z-l";};
       const cLbl={5:"Catastrophic",4:"Major",3:"Moderate",2:"Minor",1:"Negligible"};
       const pLbl={1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
@@ -4803,10 +4858,12 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       // opp matrix cells
       const oGrid={};
       // unscored opportunities (no environmental value or feasibility yet) are not plotted
-      opps.forEach(o=>{if(!o.envValue||!o.feasibility)return;const ev=Math.min(5,Math.max(1,parseInt(o.envValue)||1));const fe=Math.min(5,Math.max(1,parseInt(o.feasibility)||1));const k=ev+","+fe;if(!oGrid[k])oGrid[k]=[];oGrid[k].push(o);});
-      const oQcls=(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"q-g":(!hE&&hF)?"q-p":(hE&&!hF)?"q-b":"q-n";};
-      const oQc =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"var(--green)":(!hE&&hF)?"var(--purple)":(hE&&!hF)?"var(--blue)":"var(--slate)";};
-      const oQL =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";};
+      opps.forEach(o=>{if(!isOppScored(o))return;const ev=Math.min(5,Math.max(1,parseInt(o.envValue)||1));const fe=Math.min(5,Math.max(1,parseInt(o.feasibility)||1));const k=ev+","+fe;if(!oGrid[k])oGrid[k]=[];oGrid[k].push(o);});
+      // matrix cells take their quadrant from oppQuadrant, like the register rows below, so the two never differ
+      const oQ   =(ev,fe)=>oppQuadrant({envValue:ev,feasibility:fe});
+      const oQcls=(ev,fe)=>["q-n","q-b","q-p","q-g"][oQ(ev,fe).rank];
+      const oQc  =(ev,fe)=>oQ(ev,fe).c;
+      const oQL  =(ev,fe)=>oQ(ev,fe).label;
       const oCr =(ev,fe)=>(ev===5&&fe===5)||(ev===3&&fe===5)||(ev===5&&fe===3)||(ev===3&&fe===3);
       const eLbl={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"};
       const fLbl2={5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"Very difficult"};
@@ -5300,8 +5357,11 @@ This cannot be undone.`)) return;
                     : aspects;
 
   const filteredAspects = (() => {
-    // "Not scored" is its own filter: an aspect without a consequence and probability is not Low
-    let r = aspFilter==="All" ? aspects : aspects.filter(a=>(calcSig(a)||"Not scored")===aspFilter);
+    // "Not scored" lists every aspect still missing a consequence or probability, including one that a
+    // legal threshold or stakeholder concern already makes SIGNIFICANT (it shows under both filters)
+    let r = aspFilter==="All"        ? aspects
+          : aspFilter==="Not scored" ? aspects.filter(a=>!isAspectScored(a))
+          :                            aspects.filter(a=>calcSig(a)===aspFilter);
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"MEDIUM":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
@@ -5611,7 +5671,8 @@ This cannot be undone.`)) return;
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
-                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<NotScored/>}</td>
+                {/* Priority needs only the matrix axes, so a missing business value does not hide it */}
+                <td style={{ padding:"9px 12px" }}>{sc.rank>=0?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<NotScored/>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
@@ -6007,14 +6068,14 @@ This cannot be undone.`)) return;
 
             const rGrid = {};
             aspects.forEach(a => {
-              if (!a.severity || !a.probability) return;
+              if (!isAspectScored(a)) return;
               const sv = Math.min(5,Math.max(1,parseInt(a.severity)));
               const pb = Math.min(5,Math.max(1,parseInt(a.probability)));
               const k  = sv+","+pb;
               if (!rGrid[k]) rGrid[k] = [];
               rGrid[k].push(a);
             });
-            const unplotted = aspects.filter(a => !a.severity || !a.probability);
+            const unplotted = aspects.filter(a => !isAspectScored(a));
 
             const CON_ROWS = [
               {v:5,lbl:"Catastrophic"},
@@ -6250,9 +6311,9 @@ This cannot be undone.`)) return;
                 (ev===1&&feas===5)||(ev===5&&feas===5)||(ev===1&&feas===1)||(ev===5&&feas===1);
               const oGrid = {};
               // Not scored yet (no environmental value or feasibility) = not plotted; counted under the matrix
-              const unplottedOpps = opps.filter(o => !o.envValue || !o.feasibility);
+              const unplottedOpps = opps.filter(o => !isOppScored(o));
               opps.forEach(o => {
-                if (!o.envValue || !o.feasibility) return;
+                if (!isOppScored(o)) return;
                 const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
                 const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
                 const k = ev+","+feas;
@@ -6809,6 +6870,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const closed=asp.filter(a=>a.status==="Info").length;
     const hi=opp.filter(o=>oppQuadrant(o).label==="Quick win").length;
     const tot=asp.length;
+    const unsc=tot-sig-watch-low;   // no significance yet: not scored and no legal / stakeholder flag
     return (
       <div {...clickable(()=>{onSelect(p.id);onClose();}, "Open project "+(p.name||"Unnamed"))}
         style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:10,
@@ -6835,11 +6897,13 @@ function PortfolioView({ projects, onClose, onSelect }) {
               {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }} title={"Significant: "+sig}/>}
               {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }} title={"Watch: "+watch}/>}
               {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }} title={"Low: "+low}/>}
+              {unsc>0&&<div style={{ flex:unsc,background:"var(--border)",minWidth:4 }} title={"Not scored: "+unsc}/>}
             </div>:<div style={{ height:7,borderRadius:4,background:"var(--border)" }}/>}
-            <div style={{ display:"flex",gap:8,marginTop:5 }}>
+            <div style={{ display:"flex",gap:8,marginTop:5,flexWrap:"wrap" }}>
               {[{l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
                 {l:"Medium",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
-                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].map(({l,v,bg,c,bd})=>(
+                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"},
+                ...(unsc>0?[{l:"Not scored",v:unsc,bg:"var(--surface2)",c:"var(--muted)",bd:"var(--border)"}]:[])].map(({l,v,bg,c,bd})=>(
                 <span key={l} style={{ fontSize:10,display:"inline-flex",alignItems:"center",gap:3,
                                        padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                   {l} <strong style={{ fontWeight:700 }}>{v}</strong>
@@ -6918,6 +6982,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
     const watch=asp.filter(a=>calcSig(a)==="MEDIUM").length;
     const low=asp.filter(a=>calcSig(a)==="Low").length;
+    const unsc=asp.length-sig-watch-low;   // no significance yet
     const openN=asp.filter(a=>a.status==="Action").length;
     const inP=0;
     const cls=asp.filter(a=>a.status==="Info").length;
@@ -6926,6 +6991,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
       {key:"Pursue",       l:"Pursue",       bg:"var(--purple-bg)",c:"var(--purple)", bd:"var(--purple-bd)"},
       {key:"Plan",         l:"Plan",         bg:"var(--blue-bg)",  c:"var(--blue)",   bd:"var(--blue-bd)"},
       {key:"Deprioritize", l:"Deprioritize", bg:"var(--slate-bg)", c:"var(--slate)",  bd:"var(--slate-bd)"},
+      {key:"Not scored",   l:"Not scored",   bg:"var(--surface2)", c:"var(--muted)",  bd:"var(--border)"},
     ];
     const oppQuadCounts = opp.reduce((m,o)=>{ const l=oppQuadrant(o).label; m[l]=(m[l]||0)+1; return m; }, {});
     const oppQuad = oppQuadDefs.map(d=>({...d, v:oppQuadCounts[d.key]||0}));
@@ -6963,12 +7029,13 @@ function PortfolioView({ projects, onClose, onSelect }) {
                 {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }}/>}
                 {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }}/>}
                 {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }}/>}
-                {asp.length-sig-watch-low>0&&<div style={{ flex:asp.length-sig-watch-low,background:"var(--border)",minWidth:2 }}/>}
+                {unsc>0&&<div style={{ flex:unsc,background:"var(--border)",minWidth:2 }}/>}
               </div>
               <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
                 {[{l:"Significant",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
                   {l:"Medium",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
-                  {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                  {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"},
+                  {l:"Not scored",v:unsc,bg:"var(--surface2)",c:"var(--muted)",bd:"var(--border)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
                   <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                     {l} <strong>{v}</strong>
                   </span>

@@ -68,7 +68,7 @@ Structured guide-word screening to systematically identify risks and opportuniti
 ### Opportunity screening
 - Scope-based prompts: Scope 1 (direct), Scope 2 (energy / system), Scope 3 (materials, transport, lifecycle, re-use)
 - Each prompt opens the opportunity form with its type and the relevant GHG saving lines; the **description** starts empty and is required, and all scoring starts unset
-- **Guide words** — a small **i** after each row's label; hovering or focusing it shows that category's guide words from the "Sustainability opportunities" sheet of the screening template (S-TPL-022). Escape or a click elsewhere closes it; a click on the **i** keeps it open (touch screens)
+- **Guide words** — a small **i** after each row's label; hovering or focusing it shows that category's guide words from the "Sustainability opportunities" sheet of the screening template (S-TPL-022). Escape or a click elsewhere closes it; a click on the **i** keeps it open (touch screens). It opens above the row when there is more room there and stays inside the visible part of the list, scrolling if the list is short
 - **Opportunity sub-descriptions always stay visible** after registration (same treatment as risk hints)
 - NOₓ tax warning for NOₓ-related opportunities
 - Skip / undo-skip. No search box and no blank form; a registered row links to its entries in the Opportunities register, and **+** adds another entry under the same category
@@ -121,6 +121,7 @@ Every scoring field (receptor sensitivity, scale, duration, C, P, legal threshol
 ### Risk table
 - Columns: Ref · Phase · Area · Activity · Aspect · C · P · Score · Significance · Status · Condition · Scale · Created · Modified
 - Sortable by any column; filter by significance: All / Significant / Medium / Low / Not scored. No search box and no add button
+- The **Not scored** filter lists every aspect still missing C or P, including one that a legal threshold or stakeholder concern already makes Significant (it shows under both filters)
 - Row left-border coloured by environmental category
 - Bulk select → bulk delete or bulk status change
 
@@ -145,7 +146,7 @@ Every scoring field (receptor sensitivity, scale, duration, C, P, legal threshol
 - **Environmental Value (1–5):** dropdown — 1 Negligible · 2 Minor · 3 Moderate · **4 Significant** · **5 Major**
 - **Business Value (1–5):** dropdown — 1 No benefit · 2 Low · 3 Moderate · **4 High** · **5 Strategic**
 - **Feasibility (1–5):** dropdown — 1 Very difficult · 2 Difficult · 3 Moderate · **4 Achievable** · **5 Easy**
-- All three scores start unset (**—**); the score reads **N/A** and the priority **Not scored** until they are chosen
+- All three scores start unset (**—**). The score reads **N/A** until all three are chosen; the priority reads **Not scored** until Environmental Value and Feasibility are chosen (Business Value only feeds the score and the dot size), the same rule the matrix and the PDF use
 - **Phase** — the same EPCIC phase chips as the risk form
 - **Guide words** — the template's guide words for the opportunity's category, shown beside the description. The description is required and starts empty
 - Owner
@@ -314,8 +315,8 @@ Click **🖨 Print / Save as PDF** in the top-right of the report window, then c
 Cross-project view from the sidebar.
 
 - Projects grouped by contract, then individually listed
-- Per-project: total aspects, Significant / Medium / Low bar, total opportunities, GHG savings, Environmental Budget total with its MTO / MEL split (if the project has budget entries)
-- Contract-level and portfolio totals
+- Per-project: total aspects, Significant / Medium / Low / Not scored bar (Not scored only when there are some), total opportunities, GHG savings, Environmental Budget total with its MTO / MEL split (if the project has budget entries)
+- Contract-level and portfolio totals; the contract summary also counts aspects and opportunities that are not scored yet
 
 ---
 
@@ -363,7 +364,7 @@ project {
 }
 ```
 
-**Aspect fields:** ref · phase · area · activity · aspect · condition · impact · receptors · recSensitivity · scale · severity (C 1–5, 0 = not scored) · probability (P 1–5, 0 = not scored) · legalThreshold · stakeholderConcern · control · legalRef (for a guide-word aspect: the citation list as text, refreshed on save) · legalRefExtra (free-text other reference) · owner · status (Action / Info) · `_color` · `_screeningId`
+**Aspect fields:** ref · phase · area · activity · aspect · condition · impact · receptors · recSensitivity · scale · severity (C 1–5, 0 = not scored) · probability (P 1–5, 0 = not scored) · legalThreshold · stakeholderConcern · control · legalRef (for a guide-word aspect: the citation list as text, refreshed on save) · legalRefExtra (free-text other reference; an aspect saved before this field existed has any hand-typed references that are not the guide word's citations moved here when it is next opened) · owner · status (Action / Info) · `_color` · `_screeningId`
 
 **Opportunity fields:** ref · type · phase · description · scope · envValue · bizValue · feasibility (each 1–5, 0 = not scored) · owner · materiality · qualPhases[] (read-only, from earlier versions) · ghgPhases[] (full GHG saving line tables per snapshot)
 
