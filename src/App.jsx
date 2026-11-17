@@ -309,6 +309,96 @@ const OPP_SCOPE3_BUTTONS = [
     desc:"Opportunity to reduce Scope 3 Cat 6 / Cat 9 emissions through remote monitoring, digital twins or automated inspection replacing physical presence." },
 ];
 
+// ── Opportunity guide words, involved disciplines and phase of savings ────────
+// Transcribed from the "Sustainability opportunities" sheet of the S-TPL-022 template.
+// `buttons` lists the Screening buttons a category explains. Every guide word carries one
+// flag per OPP_DISCIPLINES entry (`d`) and one per OPP_SAVING_PHASES entry (`p`): "1" where
+// the template has an x. Wording is the template's, with its spelling slips corrected.
+const OPP_DISCIPLINES   = ["Process","Mechanical","Piping layout","Structural","Electrical","Instrument controls","HVAC","Tech safety","PRE PRB"];
+const OPP_SAVING_PHASES = ["Project phase study / execution","Installation & commissioning","Operation & maintenance","End of life / decommissioning"];
+const OPP_GUIDE = [
+  { id:"og_direct", scope:"Scope 1 — Direct Emissions", category:"Reduction in direct emissions", sub:"", buttons:["co2","nox","ch4","nmvoc","refrig","other1"], words:[
+    { t:"e.g. use of flare recovery systems", d:"110000000", p:"0010" },
+    { t:"e.g. promote Dry Low Emissions (DLE), scrubbers etc.", d:"110000000", p:"0010" },
+    { t:"e.g. reduce combustion processes of turbines, generators etc.", d:"110000000", p:"0010" },
+    { t:"e.g. reduced atmospheric venting", d:"110000100", p:"0010" },
+    { t:"e.g. reduction in fugitive emissions", d:"111001100", p:"0010" },
+    { t:"other ways to reduce direct emissions?", d:"111001110", p:"0000" },
+  ]},
+  { id:"og_system", scope:"Scope 2 — Indirect Emissions", category:"System / component optimization", sub:"to improve efficiency and reduce energy consumption", buttons:["s2_sys"], words:[
+    { t:"e.g. system re-bundling or design simplification", d:"110010100", p:"1010" },
+    { t:"e.g. waste heat recovery", d:"110000000", p:"1010" },
+    { t:"e.g. auxiliary system improvements to sealing systems or utilities", d:"011011000", p:"1010" },
+    { t:"e.g. switchgear or other electrical components / equipment to reduce heat dissipation", d:"010010000", p:"1010" },
+    { t:"e.g. use of Variable Speed Drive (VSD) not Direct Online Starters (DOL)", d:"000010000", p:"1010" },
+    { t:"e.g. LED lighting", d:"000010000", p:"1010" },
+    { t:"other system component optimization to reduce energy consumption", d:"111111110", p:"0000" },
+  ]},
+  { id:"og_layout", scope:"Scope 2 — Indirect Emissions", category:"Layout, design or location optimization", sub:"to improve operational efficiency and reduce material or maintenance", buttons:["s2_layout"], words:[
+    { t:"e.g. survey for optimized pipe routing including optimal supporting", d:"001000100", p:"1110" },
+    { t:"e.g. use standard components from \"Pipe Support Standard Detail\" WI where possible (L-WI-008)", d:"001100000", p:"1100" },
+    { t:"e.g. consider modular pipe supports for smaller non critical piping", d:"001100110", p:"1100" },
+    { t:"e.g. tech safety fire water system, hydropher tank, pressure control, dead-legs", d:"000000010", p:"1100" },
+    { t:"other layout design or location optimization to improve efficiency, reduce material or maintenance", d:"111111110", p:"0000" },
+  ]},
+  { id:"og_altres", scope:"Scope 2 — Indirect Emissions", category:"Alternative resources", sub:"to reduce utilities requirements", buttons:["s2_alt"], words:[
+    { t:"e.g. reduce requirement for fresh water offshore (creation of, or reduced shipping)", d:"110000000", p:"0110" },
+    { t:"e.g. reduce energy consumption", d:"111111110", p:"0110" },
+    { t:"e.g. reduce requirements for instrument air (creation of, or reduced shipping)", d:"000000000", p:"0110" },
+    { t:"other utility reductions?", d:"111111110", p:"0000" },
+  ]},
+  { id:"og_material", scope:"Scope 3 — Value Chain Emissions", category:"Material", sub:"weight reductions or alternatives", buttons:["s3_mat"], words:[
+    { t:"Additive Manufacturing - 3D printing for parts/repairs/upgrades", eg:["e.g. plugging / covers for electrics or repairs to valves"], d:"011111100", p:"0110" },
+    { t:"Sustainable / environmentally friendly material requirements and selection", eg:["e.g. lifetime/lifespan material properties for equipment and piping","e.g. reduced weight and painting / coating, use of GRP, aluminium etc","e.g. use of low carbon concrete in civil construction"], d:"011111110", p:"0101" },
+    { t:"simplified solutions to reduce material/weight and / or installation time", eg:["e.g. consider types of passive fire protection"], d:"111111110", p:"1000" },
+  ]},
+  { id:"og_chemicals", scope:"Scope 3 — Value Chain Emissions", category:"Chemicals", sub:"", buttons:["s3_chem"], words:[
+    { t:"alternative chemicals, most environmentally friendly chemicals for installation / operation", d:"111001110", p:"0110" },
+    { t:"lowest chemical consumption for installation, operation, maintenance etc.", d:"000000000", p:"0000" },
+  ]},
+  { id:"og_lifecycle", scope:"Scope 3 — Value Chain Emissions", category:"Lifecycle", sub:"", buttons:["s3_lca"], words:[
+    { t:"increase lifespan of equipment or facility", d:"111111110", p:"0001" },
+    { t:"Purchase Order / Tech spec request for Environmental Product Declarations (EPDs)", d:"011111111", p:"1111" },
+  ]},
+  { id:"og_reuse", scope:"Scope 3 — Value Chain Emissions", category:"Re-use, Re-cycle", sub:"", buttons:["s3_reuse","s3_recycle"], words:[
+    { t:"re-use of existing material or equipment", d:"011111111", p:"1101" },
+    { t:"check / evaluate surplus stock", d:"011111111", p:"1001" },
+    { t:"consider environmental benefits of hiring over buying equipment / tools / non-permanent support/structure/equipment", d:"010100011", p:"1101" },
+  ]},
+  { id:"og_waste", scope:"Scope 3 — Value Chain Emissions", category:"Waste evaluation", sub:"", buttons:["s3_waste"], words:[
+    { t:"recycling potential considered", d:"011111111", p:"1001" },
+    { t:"reuse elsewhere on facility or add to surplus stock", d:"011111110", p:"1001" },
+    { t:"consider decommissioning / disposal methods", d:"011111110", p:"1001" },
+  ]},
+  { id:"og_transport", scope:"Scope 3 — Value Chain Emissions", category:"Transport", sub:"", buttons:["s3_trans"], words:[
+    { t:"source as locally as possible", d:"011111111", p:"1000" },
+    { t:"ship in bulk", d:"011111111", p:"1100" },
+    { t:"consider transport mode overland/sea e-transport and route of lowest emissions", d:"000000001", p:"1000" },
+    { t:"for surveys use installation personnel on the platform", d:"001100110", p:"1100" },
+    { t:"use 3rd party inspection if supplier is not local", d:"011011000", p:"1000" },
+  ]},
+  { id:"og_remote", scope:"Scope 3 — Value Chain Emissions", category:"Remote technology", sub:"", buttons:["s3_remote"], words:[
+    { t:"e.g. Surveys: Drones/HoloLens/Ayelix/Capnor, 3D modelling", d:"111100100", p:"1100" },
+  ]},
+  { id:"og_automated", scope:"Scope 3 — Value Chain Emissions", category:"Automated solutions", sub:"", buttons:["s3_remote"], words:[
+    { t:"e.g. online monitoring options / sensors / remote configuration and maintenance /patch updates / standardized (off-the-shelf) solutions", d:"111111110", p:"1000" },
+  ]},
+];
+
+// Guide-word categories for one opportunity: by the Screening button it came from, else by its type.
+function oppGuideFor(o) {
+  const id = o && o._screeningId;
+  if (id) { const hit = OPP_GUIDE.filter(c => c.buttons.includes(id)); if (hit.length) return hit; }
+  const t = (o && o.type) || "";
+  if (!/^Scope [123]/.test(t)) return [];
+  if (t.startsWith("Scope 1")) return OPP_GUIDE.filter(c => c.id==="og_direct");
+  const rules = [[/System/i,"og_system"],[/Layout|Design/i,"og_layout"],[/Alternative/i,"og_altres"],[/Material/i,"og_material"],
+                 [/Chemical/i,"og_chemicals"],[/Lifecycle/i,"og_lifecycle"],[/Re-?use|Re-?cycle/i,"og_reuse"],[/Waste/i,"og_waste"],
+                 [/Transport/i,"og_transport"],[/Remote|Automated/i,"og_remote og_automated"]];
+  const hit = rules.find(([re]) => re.test(t));
+  return hit ? OPP_GUIDE.filter(c => hit[1].split(" ").includes(c.id)) : [];
+}
+
 
 // ── Environmental aspect categories (from aspects reference library) ──────────
 const RISK_CATEGORIES = [
@@ -800,6 +890,30 @@ function parseLegalRef(ref) {
   });
 }
 
+// The Legal references page and the risk form read citations through the same two helpers,
+// so a reference renamed on the page shows under its new name wherever it appears.
+const LEGALREF_OVERRIDE_KEY = "env-legalref-overrides";
+function readLegalOverrides() {
+  try { return JSON.parse(localStorage.getItem(LEGALREF_OVERRIDE_KEY) || "{}") || {}; } catch { return {}; }
+}
+// Effective citations of one guide-word item: shipped legalRef split per instrument, overrides folded in.
+function legalCitationsFor(item, overrides) {
+  const ov = overrides || {};
+  return parseLegalRef(item.legalRef).map((p, idx) => {
+    const key = item.id + "#" + idx, o = ov[key];
+    return { key, idx, qualifier:p.qualifier, tag:p.tag,
+             name: o?.name ?? p.cite, url: o?.url ?? legalRefLink(p.cite),
+             baselineName: p.cite, baselineUrl: legalRefLink(p.cite), override: o };
+  });
+}
+const riskItemById = id => {
+  if (!id) return null;
+  for (const cat of RISK_CATEGORIES) { const it = cat.items.find(i => i.id === id); if (it) return it; }
+  return null;
+};
+// "Name (qualifier); Name 2 (qualifier)" — the text stored on an aspect, same shape as the shipped legalRef.
+const legalRefText = cits => cits.map(c => c.name + (c.qualifier ? " ("+c.qualifier+")" : "")).join("; ");
+
 // ── Color map for guide word categories ──────────────────────────────────────
 const COLOR_MAP = {
   teal:   { bg:"var(--cat-teal-bg)",   border:"var(--cat-teal-bd)",   text:"var(--cat-teal-tx)",   head:"var(--cat-teal-hd)" },
@@ -887,19 +1001,27 @@ function matrixZone(c, p) {
   return "MEDIUM";
 }
 function calcSig(a) {
-  const score = calcScore(a);
-  if (score === null) return null;
+  // A legal threshold or stakeholder concern makes an aspect significant on its own, scored or not
   if (a.legalThreshold === "Y" || a.stakeholderConcern === "Y") return "SIGNIFICANT";
+  const score = calcScore(a);
+  if (score === null) return null;   // not scored yet
   const c = Math.min(5, Math.max(1, parseInt(a.severity)   || 0));
   const p = Math.min(5, Math.max(1, parseInt(a.probability) || 0));
   if (!c || !p) return null;
   return matrixZone(c, p);
 }
 function calcOppScore(o) { return (o.envValue||0)*(o.bizValue||0)*(o.feasibility||0); }
+// "Scored" = the item has both axes of its matrix, so it can be plotted and ranked. Every matrix,
+// register cell, filter and the PDF use these two, so they never disagree about what is unscored.
+// A risk needs a consequence and a probability; an opportunity needs an environmental value and a
+// feasibility (business value only sizes its dot and feeds the numeric Score).
+const isAspectScored = a => calcScore(a) !== null;
+const isOppScored    = o => !!(o.envValue && o.feasibility);
 // The one priority vocabulary: quadrant label + its colors travel together (D7).
 // calcOppScore stays as the numeric Score column / dot-size input; it no longer names priority.
 function oppQuadrant(o) {
-  const hE = (o.envValue||1) >= 4, hF = (o.feasibility||1) >= 4;
+  if (!isOppScored(o)) return { label:"Not scored", c:T.muted, bg:T.surface2, bd:T.border, rank:-1 };
+  const hE = o.envValue >= 4, hF = o.feasibility >= 4;
   if (hE && hF)  return { label:"Quick win",    c:T.green,  bg:T.greenBg,  bd:T.greenBd,  rank:3 };
   if (!hE && hF) return { label:"Pursue",       c:T.purple, bg:T.purpleBg, bd:T.purpleBd, rank:2 };
   if (hE && !hF) return { label:"Plan",         c:T.blue,   bg:T.blueBg,   bd:T.blueBd,   rank:1 };
@@ -952,13 +1074,14 @@ function inferOppType(oppText) {
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
+// Scoring starts unset: 0 / "" mean "not scored yet" everywhere (calcScore → null), never "lowest".
 const emptyAspect = () => ({
   phase:"", area:"", activity:"", aspect:"", condition:"Normal",
   isAbnormal:false, abnormalType:"", abnormalDesc:"",
-  impact:"", receptors:"", recSensitivity:"Medium", scale:"Local",
-  severity:1, probability:1, duration:"Temporary (<1yr)",
-  legalThreshold:"N", stakeholderConcern:"N",
-  control:"", legalRef:"", owner:"", status:"Action", _color:"",
+  impact:"", receptors:"", recSensitivity:"", scale:"",
+  severity:0, probability:0, duration:"",
+  legalThreshold:"", stakeholderConcern:"",
+  control:"", legalRef:"", legalRefExtra:"", owner:"", status:"Action", _color:"",
   createdAt:"", updatedAt:""
 });
 // ── GHG saving calculation lines (based on Norwegian EPCIC calculation framework) ─
@@ -984,13 +1107,14 @@ const GHG_LINES = [
 ];
 
 const emptyOpp = () => ({
-  type:"", materiality:"Both",
+  type:"", materiality:"Both", phase:"",
   description:"", envBenefit:"", bizBenefit:"", techBenefit:"",
-  envValue:1, bizValue:1, feasibility:1,
+  envValue:0, bizValue:0, feasibility:0,   // 0 = not scored yet
   owner:"", _color:"",
   createdAt:"", updatedAt:"",
-  // Savings — two separate tracks with independent phases
-  qualPhases: [],   // [{id, label, date, note}]
+  // Savings estimate is quantitative only. qualPhases is kept so notes saved by earlier
+  // versions stay readable; nothing writes to it any more.
+  qualPhases: [],   // [{id, label, date, note}] — read-only legacy
   ghgPhases:  [],   // [{id, label, date, note, lines:[]}]
   // lines shape: {id, custom, scope, type, unit, reduction, baseline, cf, ref, savingType}
   // custom:false = standard GHG_LINES row; custom:true = user-added row
@@ -1184,7 +1308,156 @@ function ThemeToggle({ isDark, onToggle }) {
 // ── Shared aspect field-set — create (screening) and edit render the SAME fields (D2).
 // The fuller of the two forms: includes Receptor sensitivity / Scale / Duration.
 // Flow-specific bits (header, prefill, submit copy, drawer vs inline) stay in the callers.
-const AspectFormFields = ({ form, set }) => {
+// Multi-select phase chips, shared by the risk and opportunity forms.
+// The stored value is the selected phases joined with commas, e.g. "Engineering,Construction".
+function PhaseChips({ value, onChange }) {
+  const cur = (value||"").split(",").filter(Boolean);
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+      {PHASES.map(p => {
+        const active = cur.includes(p);
+        return (
+          <button key={p} type="button" aria-pressed={active}
+            onClick={() => onChange((active ? cur.filter(x=>x!==p) : [...cur, p]).join(","))}
+            style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
+              cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
+              background: active ? T.tealBg : "transparent",
+              color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
+              fontFamily:"var(--sans,system-ui)" }}>
+            {p}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Phases as short chips for the register tables (full name on hover), "—" when none is set.
+const PHASE_ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
+function PhaseAbbrChips({ value }) {
+  const phases = (value||"").split(",").map(p=>p.trim()).filter(Boolean);
+  if (!phases.length) return <span style={{ color:T.faint }}>—</span>;
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(2, auto)", gap:2, width:"fit-content" }}>
+      {phases.map(p => (
+        <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"1px 5px",
+          borderRadius:3, background:T.slateBg, color:T.slate, textAlign:"center" }}>
+          {PHASE_ABBR[p]||p.slice(0,3)}
+        </span>
+      ))}
+    </div>
+  );
+}
+// Shown wherever a significance or priority would be, while an item has no scores yet.
+const NotScored = () => (
+  <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, whiteSpace:"nowrap",
+                 background:T.surface2, color:T.muted, border:"1px dashed "+T.border }}>Not scored</span>
+);
+
+// A description is compulsory on both registers: nothing is saved without one.
+// The aspect text itself comes from the guide word and is not edited in the form.
+const aspectIncomplete = f => !(f.impact||"").trim();
+const RequiredHint = ({ show, children }) => show
+  ? <span style={{ fontSize:11, color:T.amber, alignSelf:"center" }}>{children}</span> : null;
+
+// Aspect as the form edits it. Only a record saved before the free-text box existed (it has no
+// legalRefExtra field at all) can hold hand-typed references in legalRef: the parts that are not one
+// of the guide word's citations, under its shipped or current name, move to the free-text box so they
+// are not lost. A record saved since keeps its own text in legalRefExtra, and its legalRef is just the
+// citation names at the time, refreshed on save, so a later rename is never mistaken for typing.
+function aspectForForm(aspect) {
+  const f = { ...emptyAspect(), ...aspect };
+  const item = riskItemById(f._screeningId);
+  if (item && f.legalRef && !(aspect && "legalRefExtra" in aspect)) {
+    const known = new Set(legalCitationsFor(item, readLegalOverrides()).flatMap(c => [c.name, c.baselineName]));
+    f.legalRefExtra = parseLegalRef(f.legalRef).filter(p => !known.has(p.cite))
+      .map(p => p.cite + (p.qualifier ? " ("+p.qualifier+")" : "")).join("; ");
+  }
+  return f;
+}
+// Aspect as it is stored: a guide-word aspect carries the current citation list as text.
+function aspectForSave(f) {
+  const item = riskItemById(f._screeningId);
+  return item ? { ...f, legalRef: legalRefText(legalCitationsFor(item, readLegalOverrides())) } : f;
+}
+
+// Legal references of a risk. A guide-word aspect shows the same citations, names, links and
+// project notes as Screening → Legal references (legal = { notes, setNote }); anything else
+// keeps the single free-text box.
+function LegalRefsField({ form, set, legal }) {
+  const [overrides] = useState(readLegalOverrides);
+  const [openKey, setOpenKey] = useState(null);
+  const item = riskItemById(form._screeningId);
+  if (!item) return (
+    <Fld label="Legal / regulatory reference" wide>
+      <input value={form.legalRef||""} onChange={e=>set("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7, OSPAR" style={iw}/>
+    </Fld>
+  );
+  const cits  = legalCitationsFor(item, overrides);
+  const notes = (legal && legal.notes) || {};
+  return (
+    <Fld label="Legal / regulatory references" wide>
+      <div style={{ border:"1px solid "+T.border, borderRadius:6, background:T.surface }}>
+        {cits.length === 0 && (
+          <p style={{ margin:0, padding:"8px 10px", fontSize:12, color:T.muted }}>No legal reference is listed for this guide word.</p>
+        )}
+        {cits.map((c, i) => (
+          <div key={c.key} style={{ padding:"7px 10px", borderTop: i ? "1px solid "+T.rowBd : "none",
+                                    display:"flex", flexDirection:"column", gap:4 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              {c.url ? (
+                <a href={c.url} target="_blank" rel="noopener noreferrer" title={c.url}
+                  style={{ fontFamily:T.mono, fontSize:11.5, color:T.teal, textDecoration:"none",
+                           borderBottom:"1px solid "+T.tealBd }}>
+                  {c.name}
+                </a>
+              ) : (
+                <span style={{ fontFamily:T.mono, fontSize:11.5, color:T.muted }}>{c.name}</span>
+              )}
+              {c.qualifier && (
+                <span style={{ fontSize:TYPE.data, fontWeight:700, padding:"1px 6px", borderRadius:3,
+                  background:c.tag==="m"?T.redBg:c.tag==="bp"?T.tealBg:T.slateBg,
+                  color:c.tag==="m"?T.red:c.tag==="bp"?T.teal:T.slate }}>
+                  {c.qualifier}
+                </span>
+              )}
+              {legalRefTitle(c.baselineName) && (
+                <span style={{ fontSize:11, color:T.muted }}>{legalRefTitle(c.baselineName)}</span>
+              )}
+              {legal && (
+                <button type="button" className="hit" onClick={()=>setOpenKey(k=>k===c.key?null:c.key)}
+                  aria-label={(notes[c.key]?"Edit note for ":"Add note for ")+c.name}
+                  style={{ padding:"2px 8px", fontSize:10, fontWeight:600, borderRadius:5, cursor:"pointer",
+                           fontFamily:T.sans, border:"1px solid "+(notes[c.key]?T.purpleBd:T.border),
+                           background:notes[c.key]?T.purpleBg:"transparent",
+                           color:notes[c.key]?T.purple:T.muted }}>
+                  {notes[c.key] ? "Note ✓" : "+ Note"}
+                </button>
+              )}
+            </div>
+            {legal && openKey === c.key && (
+              <textarea value={notes[c.key]||""} onChange={e=>legal.setNote(c.key, e.target.value)} rows={2}
+                placeholder="Note for this project only — e.g. why this does or doesn't apply here"
+                style={{ width:"100%", boxSizing:"border-box", fontSize:12, padding:"5px 8px",
+                         border:"1px solid "+T.purpleBd, borderRadius:5, background:T.surface, color:T.text,
+                         fontFamily:T.sans, resize:"vertical" }}/>
+            )}
+            {openKey !== c.key && notes[c.key] && (
+              <p style={{ margin:0, fontSize:11, color:T.purple, fontStyle:"italic", lineHeight:1.4 }}>{notes[c.key]}</p>
+            )}
+          </div>
+        ))}
+      </div>
+      <p style={{ margin:"5px 0 8px", fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>
+        Same references and notes as Screening → Legal references. Names and links are changed on the Legal references page.
+      </p>
+      <input value={form.legalRefExtra||""} onChange={e=>set("legalRefExtra",e.target.value)}
+        placeholder="Other reference or client requirement (optional)" style={iw}/>
+    </Fld>
+  );
+}
+
+const AspectFormFields = ({ form, set, legal }) => {
   const score = calcScore(form);
   const sig   = calcSig(form);
   return (
@@ -1192,31 +1465,13 @@ const AspectFormFields = ({ form, set }) => {
       <Card style={{ marginBottom:"1rem" }} accent={T.red}>
         <SectionLabel>Activity details</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-          <Fld label="Phase">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-              {PHASES.map(p => {
-                const active = (form.phase||"").split(",").filter(Boolean).includes(p);
-                return (
-                  <button key={p} type="button"
-                    onClick={() => {
-                      const cur = (form.phase||"").split(",").filter(Boolean);
-                      const next = active ? cur.filter(x=>x!==p) : [...cur, p];
-                      set("phase", next.join(","));
-                    }}
-                    style={{ padding:"4px 10px", borderRadius:12, fontSize:11,
-                      cursor:"pointer", border:"1px solid "+(active ? T.tealBd : T.border),
-                      background: active ? T.tealBg : "transparent",
-                      color: active ? T.teal : T.muted, fontWeight: active ? 600 : 400,
-                      fontFamily:"var(--sans,system-ui)" }}>
-                    {p}
-                  </button>
-                );
-              })}
-            </div>
-          </Fld>
+          <Fld label="Phase"><PhaseChips value={form.phase} onChange={v=>set("phase",v)}/></Fld>
           <Fld label="Activity area"><input value={form.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-          <Fld label="Environmental aspect" wide><input value={form.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
-          <Fld label="Potential environmental impact" wide><textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={2} style={{ ...iw, resize:"vertical" }}/></Fld>
+          <Fld label="Description — potential environmental impact (required)" wide>
+            <textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={3} aria-required="true"
+              placeholder="Describe the impact for this project: what could happen, where, and to what"
+              style={{ ...iw, resize:"vertical" }}/>
+          </Fld>
           <Fld label="Abnormal condition" wide>
             <label className="hit" style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
               <input type="checkbox" checked={!!form.isAbnormal}
@@ -1241,49 +1496,52 @@ const AspectFormFields = ({ form, set }) => {
       <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
         <SectionLabel>Significance scoring</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:10 }}>
-          <Fld label="Receptor sensitivity"><select value={form.recSensitivity} onChange={e=>set("recSensitivity",e.target.value)} style={iw}>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-          <Fld label="Scale"><select value={form.scale} onChange={e=>set("scale",e.target.value)} style={iw}>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-          <Fld label="Duration"><select value={form.duration} onChange={e=>set("duration",e.target.value)} style={iw}>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
+          {/* Every scoring choice starts at "—" (not set); nothing is pre-selected on the user's behalf */}
+          <Fld label="Receptor sensitivity"><select value={form.recSensitivity||""} onChange={e=>set("recSensitivity",e.target.value)} style={iw}><option value="">—</option>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Scale"><select value={form.scale||""} onChange={e=>set("scale",e.target.value)} style={iw}><option value="">—</option>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Duration"><select value={form.duration||""} onChange={e=>set("duration",e.target.value)} style={iw}><option value="">—</option>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
           <Fld label="Consequence (C1–C5)">
-            <select value={form.severity} onChange={e=>set("severity",+e.target.value)} style={iw}>
+            <select value={form.severity||0} onChange={e=>set("severity",+e.target.value)} style={iw}>
+              <option value={0}>—</option>
               {[{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Major"},{v:5,l:"5 — Catastrophic"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
           </Fld>
           <Fld label="Probability (P1–P5)">
-            <select value={form.probability} onChange={e=>set("probability",+e.target.value)} style={iw}>
+            <select value={form.probability||0} onChange={e=>set("probability",+e.target.value)} style={iw}>
+              <option value={0}>—</option>
               {[{v:1,l:"1 — Very unlikely (0–1%)"},{v:2,l:"2 — Unlikely (1–5%)"},{v:3,l:"3 — Possible (5–25%)"},{v:4,l:"4 — Likely (25–50%)"},{v:5,l:"5 — Very likely (50–100%)"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
           </Fld>
-          <Fld label="Legal threshold"><select value={form.legalThreshold} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
-          <Fld label="Stakeholder concern"><select value={form.stakeholderConcern} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option>N</option><option>Y</option></select></Fld>
+          <Fld label="Legal threshold"><select value={form.legalThreshold||""} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option value="">—</option><option>N</option><option>Y</option></select></Fld>
+          <Fld label="Stakeholder concern"><select value={form.stakeholderConcern||""} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option value="">—</option><option>N</option><option>Y</option></select></Fld>
         </div>
-        {score !== null && (
-          <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
-                        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-            <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
-              Risk score:{" "}
-              <strong style={{ fontSize:22, color: sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green }}>
-                {score}
-              </strong>
-            </span>
-            <span style={sigStyle(sig)}>{sig}</span>
-            {form.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
-            {form.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
-          </div>
-        )}
+        <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
+                      display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+          <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
+            Risk score:{" "}
+            <strong style={{ fontSize:22, color: score===null ? T.muted : sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green }}>
+              {score===null ? "N/A" : score}
+            </strong>
+          </span>
+          {sig
+            ? <span style={sigStyle(sig)}>{sig}</span>
+            : <span style={{ fontSize:11, color:T.muted }}>Not scored — choose a consequence and a probability</span>}
+          {form.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
+          {form.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
+        </div>
       </Card>
 
       <Card style={{ marginBottom:"1rem" }}>
         <SectionLabel>Controls &amp; management</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
           <Fld label="Key control measure" wide><textarea value={form.control} onChange={e=>set("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
-          <Fld label="Legal / regulatory reference" wide><input value={form.legalRef} onChange={e=>set("legalRef",e.target.value)} placeholder="e.g. Forurensningsloven s.7, OSPAR" style={iw}/></Fld>
+          <LegalRefsField form={form} set={set} legal={legal}/>
           <Fld label="Owner"><input value={form.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
           <Fld label="Status"><select value={form.status} onChange={e=>set("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
         </div>
@@ -1293,9 +1551,14 @@ const AspectFormFields = ({ form, set }) => {
 };
 
 // ── Aspect form — matches screening form UI ───────────────────────────────────
-function AspectForm({ aspect, onSave, onCancel }) {
-  const [f, setF] = useState({ ...emptyAspect(), ...aspect });
+// legalNotes = project.legalRefNotes. Note edits stay in the form until Save, then travel with the
+// aspect as onSave(aspect, noteEdits) so Cancel discards them like every other field.
+function AspectForm({ aspect, onSave, onCancel, legalNotes }) {
+  const [f, setF] = useState(() => aspectForForm(aspect));
+  const [noteEdits, setNoteEdits] = useState({});
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
+  const legal = { notes:{ ...(legalNotes||{}), ...noteEdits }, setNote:(k, v) => setNoteEdits(p => ({ ...p, [k]:v })) };
+  const incomplete = aspectIncomplete(f);
   return (
     <div style={{ padding:"1.25rem" }}>
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:"1rem" }}>
@@ -1306,10 +1569,11 @@ function AspectForm({ aspect, onSave, onCancel }) {
         {aspect.ref && <span style={{ fontFamily:T.mono, fontSize:11, color:T.teal, fontWeight:500 }}>{aspect.ref}</span>}
       </div>
 
-      <AspectFormFields form={f} set={set}/>
+      <AspectFormFields form={f} set={set} legal={legal}/>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+        <RequiredHint show={incomplete}>A description is required</RequiredHint>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
+        <Btn variant="primary" disabled={incomplete} onClick={()=>onSave(aspectForSave(f), noteEdits)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
       </div>
     </div>
   );
@@ -1519,101 +1783,34 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
   );
 }
 
-// ── Qualitative phases section (top-level so useState is valid) ───────────────
-function QualPhasesSection({ qualPhases, qualNote, showQuantitative, onSetPhases, onSetNote }) {
-  const qp = qualPhases||[];
-  const [activeQIdx, setActiveQIdx] = useState(()=>Math.max(0,qp.length-1));
-  const safeQIdx = Math.min(activeQIdx, Math.max(0,qp.length-1));
-  const isQLatest = (qi) => qi === qp.length-1;
-
-  const addQualPhase = () => {
-    const n = qp.length+1;
-    const next = [...qp, {id:"qp_"+Date.now(), label:"Phase "+n, date:new Date().toISOString(), note:""}];
-    onSetPhases(next);
-    setActiveQIdx(n-1);
-  };
-  // Allow deleting any phase — even Phase 1 (clears back to empty list)
-  const delQualPhase = () => {
-    const phase = qp[qp.length-1];
-    if (!window.confirm("Delete phase \"" + (phase?.label||"this phase") + "\"? This cannot be undone.")) return;
-    const next = qp.slice(0,-1);
-    onSetPhases(next);
-    setActiveQIdx(Math.max(0, next.length-1));
-  };
-  const setQualPhase = (qi,k,v) => onSetPhases(qp.map((p,i)=>i===qi?{...p,[k]:v}:p));
-  const activeQP = qp.length>0 ? (qp[safeQIdx]||null) : null;
-
+// Guide words of one or more template categories as a plain list: the hover popup in Screening
+// (plain, no box of its own) and the panel beside the description in the opportunity form.
+function OppGuideWords({ cats, maxHeight, plain }) {
+  if (!cats.length) return (
+    <p style={{ margin:0, fontSize:12, color:T.muted, lineHeight:1.5 }}>
+      No guide words are linked to this opportunity type. All of them are listed under Screening → Opportunities → Disciplines &amp; phases.
+    </p>
+  );
   return (
-    <div style={{marginBottom:showQuantitative?"1rem":0}}>
-      {/* Phase pill row — matches quantitative */}
-      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:"0.75rem",flexWrap:"wrap"}}>
-        {qp.map((qph,qi)=>{
-          const active=qi===safeQIdx;
-          const latest=isQLatest(qi);
-          return(
-            <div key={qph.id} style={{display:"flex",alignItems:"center",
-              borderRadius:20,border:"1px solid "+(active?T.slate:T.border),
-              overflow:"hidden",background:active?T.slate:"transparent"}}>
-              <button onClick={()=>setActiveQIdx(qi)}
-                style={{padding:"4px 10px",fontSize:11,fontWeight:500,cursor:"pointer",
-                       fontFamily:T.sans,background:"transparent",border:"none",
-                       color:active?"#fff":T.muted}}>
-                {qph.label}
-                {qph.note&&<span style={{marginLeft:4,fontSize:TYPE.data,opacity:0.6}}>●</span>}
-              </button>
-              {latest&&(
-                <button className="hit" onClick={delQualPhase} title="Delete this phase"
-                  style={{padding:"4px 7px 4px 3px",fontSize:11,cursor:"pointer",
-                         fontFamily:T.sans,background:"transparent",border:"none",
-                         color:active?"rgba(255,255,255,0.7)":T.faint,lineHeight:1}}
-                  onMouseEnter={e=>e.currentTarget.style.color=active?"#fff":T.red}
-                  onMouseLeave={e=>e.currentTarget.style.color=active?"rgba(255,255,255,0.7)":T.faint}>
-                  ×
-                </button>
-              )}
-            </div>
-          );
-        })}
-        <button onClick={addQualPhase}
-          style={{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",
-                 fontFamily:T.sans,background:"transparent",color:T.slate,
-                 border:"1px solid "+T.slateBd}}>
-          + Add phase
-        </button>
-      </div>
-
-      {/* Active phase — same layout as quantitative: header bar + note body */}
-      {activeQP ? (
-        <div style={{borderRadius:7,border:"1px solid "+(isQLatest(safeQIdx)?T.slateBd:T.border),overflow:"hidden"}}>
-          {/* Header bar: editable label (latest only) + date */}
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",
-            background:isQLatest(safeQIdx)?T.slateBg:T.surface2}}>
-            {isQLatest(safeQIdx)
-              ?<input value={activeQP.label} onChange={e=>setQualPhase(safeQIdx,"label",e.target.value)}
-                  style={{flex:1,padding:"3px 8px",fontSize:13,fontWeight:700,color:T.slate,
-                    border:"1px solid "+T.slateBd,borderRadius:5,background:"transparent"}}/>
-              :<span style={{fontSize:13,fontWeight:600,color:T.muted,flex:1}}>{activeQP.label}</span>}
-            <span style={{fontFamily:T.mono,fontSize:10,color:T.muted}}>
-              {new Date(activeQP.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
-            </span>
-            {!isQLatest(safeQIdx)&&<span style={{fontSize:10,color:T.muted,fontStyle:"italic"}}>read-only</span>}
-          </div>
-          {/* Note body */}
-          <div style={{padding:"10px 12px",background:T.surface}}>
-            {isQLatest(safeQIdx)
-              ?<textarea value={activeQP.note||""} onChange={e=>setQualPhase(safeQIdx,"note",e.target.value)} rows={3}
-                  placeholder="Describe expected savings for this phase — approach, methodology, estimated reduction range"
-                  style={{width:"100%",boxSizing:"border-box",resize:"vertical",fontSize:12}}/>
-              :<p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.7}}>
-                 {activeQP.note||<span style={{color:T.muted,fontStyle:"italic"}}>No note recorded</span>}
-               </p>}
-          </div>
+    <div style={plain ? undefined : { maxHeight, overflowY:maxHeight?"auto":undefined, border:"1px solid "+T.border,
+                  borderRadius:6, background:T.surface2, padding:"8px 10px" }}>
+      {cats.map(c => (
+        <div key={c.id} style={{ marginBottom:cats.length>1?8:0 }}>
+          {cats.length > 1 && <p style={{ margin:"0 0 3px", fontSize:11, fontWeight:600, color:T.text }}>{c.category}</p>}
+          <ul style={{ margin:0, paddingLeft:16 }}>
+            {c.words.map((wd, i) => (
+              <li key={i} style={{ fontSize:12, color:T.text, lineHeight:1.5, marginBottom:2 }}>
+                {wd.t}
+                {wd.eg && (
+                  <ul style={{ margin:"1px 0 0", paddingLeft:14 }}>
+                    {wd.eg.map((e, j) => <li key={j} style={{ fontSize:11, color:T.muted, lineHeight:1.45 }}>{e}</li>)}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
-      ) : (
-        <p style={{fontSize:11,color:T.muted,margin:0,fontStyle:"italic"}}>
-          No phases — click "+ Add phase" to start.
-        </p>
-      )}
+      ))}
     </div>
   );
 }
@@ -1665,17 +1862,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     setActiveSnapIdx(Math.max(0, snaps.length-2));
   };
 
-  // showQuantitative derived from ghgPhases.length > 0
   const hasQuantitative = snaps.length > 0;
-  const toggleQuantitative = () => {
-    if (hasQuantitative) {
-      // collapse = just switch view; data preserved
-      setF(p=>({...p,ghgPhases:p.ghgPhases})); // noop — toggle handled by UI
-    } else {
-      setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]}));
-      setActiveSnapIdx(0);
-    }
-  };
 
   const snapTotal = snapKg; // delegate to module-level snapKg
   const fmt = v => v>=1000?(v/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t CO₂e":v.toLocaleString("nb-NO",{maximumFractionDigits:1})+" kg CO₂e";
@@ -1758,10 +1945,14 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               <option>Both</option>
             </select>
           </Fld>
-          <Fld label="Opportunity description" wide>
-            <textarea value={f.description} onChange={e=>set("description",e.target.value)} rows={3}
+          <Fld label="Phase" wide><PhaseChips value={f.phase} onChange={v=>set("phase",v)}/></Fld>
+          {/* Description and the template's guide words side by side: the guide words prompt, the user writes */}
+          <Fld label="Opportunity description (required)">
+            <textarea value={f.description} onChange={e=>set("description",e.target.value)} rows={8} aria-required="true"
+              placeholder="Describe the opportunity for this project: what would change, and where"
               style={{...iw,resize:"vertical"}}/>
           </Fld>
+          <Fld label="Guide words"><OppGuideWords cats={oppGuideFor(f)} maxHeight={190}/></Fld>
         </div>
       </Card>
 
@@ -1801,7 +1992,8 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
           ].map(({k,l,bk,bl})=>(
             <div key={k}>
               <Fld label={l}>
-                <select value={f[k]} onChange={e=>set(k,+e.target.value)} style={iw}>
+                <select value={f[k]||0} onChange={e=>set(k,+e.target.value)} style={iw}>
+                  <option value={0}>—</option>
                   {({
                     envValue:   [{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Significant"},{v:5,l:"5 — Major"}],
                     bizValue:   [{v:1,l:"1 — No benefit"},{v:2,l:"2 — Low"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — High"},{v:5,l:"5 — Strategic"}],
@@ -1824,59 +2016,53 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                      display:"flex",alignItems:"center",gap:12}}>
           <span style={{fontFamily:T.mono,fontSize:11,color:T.muted}}>Score:</span>
           <span style={{fontFamily:T.mono,fontSize:20,fontWeight:500,padding:"2px 12px",
-                        borderRadius:5,background:sc.bg,color:sc.c}}>{score}</span>
+                        borderRadius:5,background:sc.bg,color:sc.c}}>{score > 0 ? score : "N/A"}</span>
           <span style={{fontSize:12,fontWeight:600,color:sc.c}}>{prioLabel}</span>
         </div>
       </Card>
 
-      {/* ── Savings estimate — two independent toggles ── */}
+      {/* ── Savings estimate — quantitative only ── */}
       <Card style={{marginBottom:"1rem"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem"}}>
           <SectionLabel style={{margin:0}}>Savings estimate</SectionLabel>
-          <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>{
-                const qp=f.qualPhases||[];
-                if(qp.length===0){
-                  setF(p=>({...p,qualPhases:[{id:"qp_"+Date.now(),label:"Phase 1",date:new Date().toISOString(),note:""}]}));
-                } else if (window.confirm("Remove all qualitative phases? Data will be lost.")) {
-                  setF(p=>({...p,qualPhases:[]}));
-                }
-              }}
+          {!hasQuantitative && (
+            <button onClick={()=>{ setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]})); setActiveSnapIdx(0); }}
               style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
-                     fontFamily:T.sans,borderRadius:6,
-                     background:(f.qualPhases||[]).length>0?T.slate:"transparent",
-                     color:(f.qualPhases||[]).length>0?"#fff":T.muted,
-                     border:"1px solid "+((f.qualPhases||[]).length>0?T.slate:T.border)}}>
-              Qualitative {(f.qualPhases||[]).length>0?"▾":"▸"}
+                     fontFamily:T.sans,borderRadius:6,background:"transparent",color:T.teal,
+                     border:"1px solid "+T.tealBd}}>
+              + Add saving estimate
             </button>
-            <button onClick={()=>{
-                if(hasQuantitative){
-                  if(window.confirm("Remove all quantitative phases? Data will be lost."))
-                    setF(p=>({...p,ghgPhases:[]}));
-                } else {
-                  setF(p=>({...p,ghgPhases:[emptyGhgPhase("Phase 1",null)]}));
-                  setActiveSnapIdx(0);
-                }
-              }}
-              style={{padding:"5px 14px",fontSize:11,fontWeight:500,cursor:"pointer",
-                     fontFamily:T.sans,borderRadius:6,
-                     background:hasQuantitative?T.teal:"transparent",
-                     color:hasQuantitative?"#fff":T.muted,
-                     border:"1px solid "+(hasQuantitative?T.teal:T.border)}}>
-              Quantitative {hasQuantitative?"▾":"▸"}
-            </button>
-          </div>
+          )}
         </div>
+        {!hasQuantitative && (
+          <p style={{fontSize:11,color:T.muted,margin:0}}>
+            No estimate yet. Savings are entered as quantities (kg, kWh) and converted to CO₂e.
+          </p>
+        )}
 
-        {/* Qualitative — own phase list, rendered via top-level component (hooks rule) */}
+        {/* Qualitative notes written before the estimate became quantitative-only: shown, never edited */}
         {(f.qualPhases||[]).length > 0 && (
-          <QualPhasesSection
-            qualPhases={f.qualPhases||[]}
-            qualNote={f.qualNote||""}
-            showQuantitative={hasQuantitative}
-            onSetPhases={v=>set("qualPhases",v)}
-            onSetNote={v=>set("qualNote",v)}
-          />
+          <div style={{marginTop:hasQuantitative?0:"0.75rem",marginBottom:hasQuantitative?"1rem":0,
+                       border:"1px solid "+T.border,borderRadius:7,overflow:"hidden"}}>
+            <div style={{padding:"6px 12px",background:T.surface2,fontSize:11,color:T.muted}}>
+              Qualitative notes saved earlier — kept for reference, no longer editable
+            </div>
+            {(f.qualPhases||[]).map(qp=>(
+              <div key={qp.id} style={{padding:"8px 12px",borderTop:"1px solid "+T.rowBd}}>
+                <div style={{display:"flex",gap:8,alignItems:"baseline",marginBottom:2}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{qp.label}</span>
+                  {qp.date && (
+                    <span style={{fontFamily:T.mono,fontSize:10,color:T.muted}}>
+                      {new Date(qp.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}
+                    </span>
+                  )}
+                </div>
+                <p style={{margin:0,fontSize:12,color:T.text,lineHeight:1.6}}>
+                  {qp.note||<span style={{color:T.muted,fontStyle:"italic"}}>No note recorded</span>}
+                </p>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Quantitative — phase tabs + table */}
@@ -1983,8 +2169,9 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
 
       {/* ── Actions ── */}
       <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <RequiredHint show={!(f.description||"").trim()}>A description is required</RequiredHint>
         <Btn onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" onClick={()=>onSave(f)} disabled={!f.description.trim()}>
+        <Btn variant="primary" onClick={()=>onSave(f)} disabled={!(f.description||"").trim()}>
           {saveLabel||"Save"}
         </Btn>
       </div>
@@ -2055,11 +2242,9 @@ const TH = ({ children }) => (
 // project supplied → the embedded, per-project view: read-only reference data, notes only.
 function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) {
   const editable = !project;
-  const OVERRIDE_KEY  = "env-legalref-overrides";
+  const OVERRIDE_KEY  = LEGALREF_OVERRIDE_KEY;
   const CHANGELOG_KEY = "env-legalref-changelog";
-  const [overrides, setOverrides] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(OVERRIDE_KEY) || "{}"); } catch { return {}; }
-  });
+  const [overrides, setOverrides] = useState(readLegalOverrides);
   const [changelog, setChangelog] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CHANGELOG_KEY) || "[]"); } catch { return []; }
   });
@@ -2082,13 +2267,7 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
   const setNote  = (key, text) => project && onChange({ ...project, legalRefNotes: { ...notes, [key]: text } });
 
   // Effective {cite, url, qualifier, tag} for citation idx of item, folding in any override.
-  const citationsFor = item => parseLegalRef(item.legalRef).map((p, idx) => {
-    const key = item.id + "#" + idx;
-    const ov  = overrides[key];
-    return { key, idx, qualifier:p.qualifier, tag:p.tag,
-             name: ov?.name ?? p.cite, url: ov?.url ?? legalRefLink(p.cite),
-             baselineName: p.cite, baselineUrl: legalRefLink(p.cite), override: ov };
-  });
+  const citationsFor = item => legalCitationsFor(item, overrides);
 
   const startEditClick = c => {
     if (armedEdit === c.key) {
@@ -2335,77 +2514,173 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
 }
 
 // ── Screening tab ─────────────────────────────────────────────────────────────
-function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
+// Where a popup anchored to `el` fits. The Screening list scrolls inside its own box, so the room
+// around the mark is the window cut down by every scrolling (clipping) ancestor, not the window alone.
+// Rectangles are in window pixels; the content pane can be zoomed, so offsets and sizes are turned
+// back into the popup's own CSS pixels with the zoom of the nearest scrolling box.
+// Returns { above, left (offset from the mark), width, maxHeight } in CSS pixels.
+function popupPlacement(el, want = { width:380, height:300 }) {
+  const r = el.getBoundingClientRect();
+  let top = 0, left = 0, bottom = window.innerHeight, right = window.innerWidth, z = 0;
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const s = getComputedStyle(p);
+    if (!/auto|scroll|hidden|clip/.test(s.overflowY + " " + s.overflowX)) continue;
+    const b = p.getBoundingClientRect();
+    if (!b.width || !b.height) continue;                       // not laid out
+    let bt = b.top, bl = b.left, bb = b.bottom, br = b.right;
+    if (!z) {
+      // the nearest scrolling box sets the zoom, and only its inside counts (no border, no scrollbar)
+      z = p.offsetWidth ? b.width / p.offsetWidth : 1;
+      if (!(z > 0.25 && z < 4)) z = 1;
+      bt += (p.clientTop || 0) * z;  bl += (p.clientLeft || 0) * z;
+      if (p.clientHeight) bb = Math.min(bb, bt + p.clientHeight * z);
+      if (p.clientWidth)  br = Math.min(br, bl + p.clientWidth * z);
+    }
+    top = Math.max(top, bt); left = Math.max(left, bl); bottom = Math.min(bottom, bb); right = Math.min(right, br);
+  }
+  z = z || 1;
+  const gap   = 8 * z;
+  const below = bottom - r.bottom, above = r.top - top;
+  const up    = below < want.height * z && above > below;
+  const width = Math.max(160, Math.min(want.width, (right - left - 2 * gap) / z));
+  const x     = Math.max(left + gap, Math.min(r.left - gap, right - gap - width * z));   // popup's left edge
+  return { above:up, left:(x - r.left) / z, width, maxHeight:Math.max(80, ((up ? above : below) - 2 * gap) / z) };
+}
+
+// Guide words for one Screening opportunity button: a small "i" mark beside the row's label that
+// shows the template's guide words while it is hovered or focused. Escape or a click elsewhere closes
+// it; clicking the mark keeps it open (for touch screens). It opens above the row when there is more
+// room there, and stays inside the visible part of the Screening list (scrolling if it is taller).
+function GuideWordsHint({ btn, color }) {
+  const [open, setOpen]     = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [place, setPlace]   = useState({ above:false, left:-8, width:380, maxHeight:420 });
+  const tipId   = "gw-" + React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const wrapRef = React.useRef(null);
+  const hovered = React.useRef(false);  // pointer over the mark or its popup
+  const show = () => {
+    if (wrapRef.current) setPlace(popupPlacement(wrapRef.current));
+    setOpen(true);
+  };
+  const hide = () => { setOpen(false); setPinned(false); };
+  useEffect(() => {
+    if (!open) return;
+    const onKey  = e => { if (e.key === "Escape") hide(); };
+    const onDown = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) hide(); };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onDown); };
+  }, [open]);
+  const label = btn.label.replace("\n"," ");
+  return (
+    <span ref={wrapRef} style={{ position:"relative", display:"inline-flex", flexShrink:0 }}
+      onMouseEnter={() => { hovered.current = true; show(); }}
+      onMouseLeave={() => { hovered.current = false; if (!pinned) setOpen(false); }}
+      onFocus={show}
+      // a click on the popup's own text moves focus away from the mark: keep it open while pointed at
+      onBlur={e => { if (!pinned && !hovered.current && !e.currentTarget.contains(e.relatedTarget)) hide(); }}>
+      <button type="button" className="hit" aria-label={"Guide words for "+label}
+        aria-describedby={open ? tipId : undefined} aria-expanded={open}
+        onClick={() => { if (pinned) hide(); else { show(); setPinned(true); } }}
+        style={{ width:15, height:15, borderRadius:"50%", padding:0, cursor:"help", flexShrink:0,
+                 border:"1px solid "+(open ? color.head : T.border), background:open ? color.bg : "transparent",
+                 color:open ? color.head : T.muted, fontFamily:T.sans, fontSize:TYPE.data, fontWeight:700,
+                 lineHeight:"13px", textAlign:"center" }}>
+        i
+      </button>
+      {open && (
+        <div id={tipId} role="tooltip"
+          style={{ position:"absolute", zIndex:40, left:place.left, width:place.width, boxSizing:"border-box",
+                   ...(place.above ? { bottom:"100%", paddingBottom:6 } : { top:"100%", paddingTop:6 }) }}>
+          <div style={{ background:T.surface, border:"1px solid "+T.border, borderTop:"3px solid "+color.head,
+                        borderRadius:8, boxShadow:"var(--shadow-menu)", padding:"10px 12px", cursor:"auto",
+                        maxHeight:place.maxHeight, overflowY:"auto", boxSizing:"border-box" }}>
+            <p style={{ margin:"0 0 6px", fontSize:11, fontWeight:600, color:color.head }}>Guide words · {label}</p>
+            <OppGuideWords cats={oppGuideFor({ _screeningId:btn.id })} plain/>
+            <p style={{ margin:"7px 0 0", fontSize:TYPE.data, color:T.muted }}>From the screening template.</p>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
+// Register entries keyed by the guide word (_screeningId) they were made from, in register order.
+const NO_ENTRIES = [];
+function entriesByGuideWord(list) {
+  const m = new Map();
+  for (const x of list) {
+    if (!x._screeningId) continue;
+    if (!m.has(x._screeningId)) m.set(x._screeningId, []);
+    m.get(x._screeningId).push(x);
+  }
+  return m;
+}
+
+function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump = () => {} }) {
   const [mode, setMode]               = useState("risks");
   const [expanded, setExpanded]       = useState({});
   const [view, setView]               = useState("guide");
   const [riskForm, setRiskForm]       = useState(emptyAspect());
+  const [riskNotes, setRiskNotes]     = useState({});   // legal-note edits made in the open risk form
   const [oppForm, setOppForm]         = useState(emptyOpp());
-  const [screenSearch, setScreenSearch] = useState("");
-  const [noxWarn, setNoxWarn]         = useState(false);
+  const [legalSearch, setLegalSearch] = useState("");   // Legal references is the only searchable list
+  const [oppView, setOppView]         = useState("checklist"); // Opportunities: "checklist" | "disciplines"
   // Skips are workshop decisions, not view state — persisted on the project record
   const skipped    = project.screeningSkips || {};
   const toggleSkip = id => onChange({ ...project,
     screeningSkips: { ...skipped, [id]: !skipped[id] } });
-  // Track which items have been added this session (by item id → aspect ref)
-  const addedItems = {};
-  (project.aspects||[]).forEach(a=>{ if(a._screeningId) addedItems[a._screeningId]=a.ref; });
+  // Register entries already made from a guide word, grouped once per change of the registers
+  // rather than filtered per row. One guide word can hold several.
+  const aspectsById = React.useMemo(() => entriesByGuideWord(project.aspects || []), [project.aspects]);
+  const oppsById    = React.useMemo(() => entriesByGuideWord(project.opportunities || project.opps || []),
+                                    [project.opportunities, project.opps]);
+  const aspectsOf   = id => aspectsById.get(id) || NO_ENTRIES;
+  const oppsOf      = id => oppsById.get(id) || NO_ENTRIES;
 
   const isRisks = mode === "risks";
   const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
   const setRF = (k, v) => setRiskForm(p => ({ ...p, [k]:v }));
-  const setOF = (k, v) => setOppForm(p => ({ ...p, [k]:v }));
   const showToast = msg => notify(msg);   // route through the shared shell toast
 
-  // prefillRisk now inlined in button onClick — kept for legacy compatibility
-  const prefillRisk = (code, item, sectionColor) => {
-    setRiskForm({ ...emptyAspect(), area:item.area||item.sub||"",
-                  aspect:item.aspect||"", activity:item.hint||"", _color:sectionColor||"" });
+  // A guide word opens the risk form with its aspect text; the description is the user's to write
+  const startRisk = (item, color) => {
+    setRiskForm({ ...emptyAspect(), aspect:item.aspect, area:item.sub, activity:item.hint||"",
+                  _color:color, _screeningId:item.id });
+    setRiskNotes({});
     setView("form");
   };
-
-  // Prefill for risk guide words (unchanged)
   const saveRisk  = () => {
-    if (!riskForm.aspect.trim()) return;
-    onAddAspect(riskForm); setRiskForm(emptyAspect()); setView("guide");
+    if (aspectIncomplete(riskForm)) return;
+    onAddAspect(aspectForSave(riskForm), riskNotes);
+    setRiskForm(emptyAspect()); setRiskNotes({}); setView("guide");
     showToast("Aspect saved to register");
   };
 
-  // New prefill for scope-based opp buttons
-  const prefillOppScope = (type, ghgIds, description, color, warn, btnId) => {
+  // A scope button opens the opportunity form; the description starts empty
+  const prefillOppScope = (type, ghgIds, color, btnId) => {
     const newOpp = {
       ...emptyOpp(),
-      type, description, _color:color||"",
+      type, _color:color||"",
       ghgPhases: ghgIds&&ghgIds.length>0 ? [emptyGhgPhase("Phase 1", null)] : [],
     };
     newOpp.prefillGhgIds = ghgIds||[];
     newOpp._screeningId = btnId||null;  // use the button id directly — no mismatch
     setOppForm(newOpp);
-    setNoxWarn(!!warn);
     setView("form");
   };
 
   const saveOpp = () => {
-    if (!oppForm.description.trim()) return;
-    onAddOpp(oppForm); setOppForm(emptyOpp()); setView("guide"); setNoxWarn(false);
+    if (!(oppForm.description||"").trim()) return;
+    onAddOpp(oppForm); setOppForm(emptyOpp()); setView("guide");
     showToast("Opportunity saved to register");
   };
 
-  // Risk guide data now uses RISK_CATEGORIES constant — filteredRiskGuide removed
-
-  // Scope button style
-  const ScopeBtn = ({ label, sub, color, onClick }) => (
-    <button onClick={onClick}
-      style={{ textAlign:"left", padding:"9px 12px", borderRadius:6,
-               border:"1.5px solid "+(color.border||T.border), background:color.bg,
-               cursor:"pointer", fontFamily:T.sans, display:"flex", flexDirection:"column", gap:3,
-               transition:"filter 0.1s", width:"100%" }}
-      onMouseEnter={e=>e.currentTarget.style.filter="brightness(0.95)"}
-      onMouseLeave={e=>e.currentTarget.style.filter="none"}>
-      <span style={{ fontSize:12, fontWeight:700, color:color.head, lineHeight:1.3 }}>{label}</span>
-      {sub && <span style={{ fontSize:11, color:T.muted, lineHeight:1.4 }}>{sub}</span>}
-    </button>
-  );
+  // Shared look of the two small controls on a registered row
+  const refChip = (bg, c, bd) => ({ fontFamily:T.mono, fontSize:10, padding:"1px 6px", borderRadius:3,
+    background:bg, color:c, border:"1px solid "+bd, flexShrink:0, cursor:"pointer" });
+  const addMore = { fontSize:12, lineHeight:1, padding:"2px 7px", borderRadius:12, border:"1px solid "+T.border,
+    background:"transparent", color:T.muted, cursor:"pointer", flexShrink:0, fontFamily:T.sans };
 
   return (
     <div style={{ flex:1, minHeight:0, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
@@ -2413,23 +2688,16 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
       <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <SubTabs tabs={[{id:"risks",label:"Risks"},{id:"opps",label:"Opportunities"},{id:"legal",label:"Legal references"}]}
-          active={mode} onChange={m=>{ setMode(m); setView("guide"); setScreenSearch(""); }}/>
-        {(view === "guide" || mode === "legal") && (
-          <input value={screenSearch} onChange={e=>setScreenSearch(e.target.value)}
-            placeholder={mode==="legal"?"Search references...":isRisks?"Search guide words...":"Search opportunity categories..."}
+          active={mode} onChange={m=>{ setMode(m); setView("guide"); setLegalSearch(""); }}/>
+        {/* Risks and Opportunities are added from their guide words only: no search, no blank form */}
+        {mode === "legal" && (
+          <input value={legalSearch} onChange={e=>setLegalSearch(e.target.value)}
+            placeholder="Search references..."
             style={{ width:200, padding:"5px 10px", fontSize:12, border:"1px solid "+T.border,
                      borderRadius:6, background:T.surface, color:T.text }}/>
         )}
-        {view === "guide" && mode !== "legal" && (
-          <button onClick={() => setView("form")}
-            style={{ marginLeft:"auto", padding:"6px 14px", fontSize:12, borderRadius:6, border:"none",
-                     background:isRisks?T.red:T.purple, color:"#fff", cursor:"pointer",
-                     fontFamily:T.sans, fontWeight:500, whiteSpace:"nowrap" }}>
-            + Blank form
-          </button>
-        )}
         {view === "form" && (
-          <button onClick={() => { setView("guide"); setNoxWarn(false); }}
+          <button onClick={() => setView("guide")}
             style={{ marginLeft:"auto", padding:"5px 12px", fontSize:12, borderRadius:6,
                      border:"1px solid "+T.border, background:"transparent", color:T.muted, cursor:"pointer" }}>
             ← Back to guide
@@ -2441,22 +2709,12 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
       <div style={{ flex:1, overflowY:"auto", padding:"0.9rem 1rem" }}>
 
         {/* ══ LEGAL REFERENCES — register of every guide-word item's citation ══ */}
-        {mode === "legal" && <LegalReferencesPanel search={screenSearch} notify={notify} project={project} onChange={onChange}/>}
+        {mode === "legal" && <LegalReferencesPanel search={legalSearch} notify={notify} project={project} onChange={onChange}/>}
 
         {/* ══ RISKS GUIDE — checklist layout ═══════════════════════════════════ */}
         {view === "guide" && isRisks && (() => {
-          const q = screenSearch.trim().toLowerCase();
-          const filtered = RISK_CATEGORIES.map(cat=>({
-            ...cat,
-            items: q ? cat.items.filter(it=>
-              it.sub.toLowerCase().includes(q)||
-              it.hint.toLowerCase().includes(q)||
-              it.aspect.toLowerCase().includes(q)
-            ) : cat.items
-          })).filter(cat=>cat.items.length>0);
-
           const totalAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.length,0);
-          const addedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>addedItems[it.id]).length,0);
+          const addedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>aspectsOf(it.id).length>0).length,0);
           const skippedAll = RISK_CATEGORIES.reduce((s,c)=>s+c.items.filter(it=>skipped[it.id]).length,0);
           const pct = totalAll>0?Math.round((addedAll+skippedAll)/totalAll*100):0;
 
@@ -2473,13 +2731,11 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                 </div>
               </div>
 
-              {filtered.length===0&&<div style={{ textAlign:"center", padding:"2rem", background:T.slateBg, borderRadius:8, color:T.muted, fontSize:12 }}>No risks match your search.</div>}
-
-              {filtered.map(cat=>{
+              {RISK_CATEGORIES.map(cat=>{
                 const col=COLOR_MAP[cat.color]||COLOR_MAP.gray;
                 const key="risk_cat_"+cat.cat;
-                const open=q?true:expanded[key]!==false;
-                const addedCt=cat.items.filter(it=>addedItems[it.id]).length;
+                const open=expanded[key]!==false;
+                const addedCt=cat.items.filter(it=>aspectsOf(it.id).length>0).length;
                 const skippedCt=cat.items.filter(it=>skipped[it.id]).length;
                 const addressed=addedCt+skippedCt;
                 return(
@@ -2506,13 +2762,12 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                     {open&&(
                       <div style={{ borderLeft:"3px solid "+col.border, marginLeft:6, paddingLeft:4 }}>
                         {cat.items.map((item,i)=>{
-                          const isAdded=!!addedItems[item.id];
+                          const entries=aspectsOf(item.id);
+                          const isAdded=entries.length>0;
                           const isSkipped=!!skipped[item.id];
                           return(
                             <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
                                                    padding:"6px 10px", borderRadius:5,
-                                                   background:isAdded||isSkipped?"transparent":undefined,
-                                                   opacity:isAdded?0.6:1,
                                                    borderBottom:"1px solid "+T.rowBd }}>
                               {/* Status / add: check-circle button (click to add); plain dot once resolved */}
                               {isAdded||isSkipped ? (
@@ -2520,31 +2775,33 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                                                background:isAdded?T.green:T.border,
                                                border:"1.5px solid "+(isAdded?T.greenBd:T.muted) }}/>
                               ) : (
-                                <button className="hit"
-                                  onClick={()=>{
-                                    setRiskForm({...emptyAspect(), aspect:item.aspect, area:item.sub,
-                                                 activity:item.hint||"", legalRef:item.legalRef||"",
-                                                 _color:cat.color, _screeningId:item.id});
-                                    setView("form");
-                                  }}
+                                <button className="hit" onClick={()=>startRisk(item, cat.color)}
                                   aria-label={"Add "+(item.aspect||item.sub)}
                                   style={{ width:12, height:12, borderRadius:"50%", flexShrink:0, padding:0,
                                            background:T.surface, border:"1.5px solid "+col.head, cursor:"pointer" }}/>
                               )}
-                              {/* Text */}
-                              <div style={{ flex:1, minWidth:0 }}>
+                              {/* Text — on a registered row it is a link to the (first) register entry */}
+                              <div {...(isAdded ? clickable(()=>onJump("risks", entries[0].id), "Open "+entries[0].ref+": "+item.sub) : {})}
+                                style={{ flex:1, minWidth:0, opacity:isAdded?0.6:1, cursor:isAdded?"pointer":undefined }}>
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
                                                marginRight:8 }}>{item.sub}</span>
                                 <span style={{ fontSize:11, color:T.muted }}>{item.hint}</span>
                               </div>
-                              {/* Reference badge or skip toggle */}
-                              {isAdded&&addedItems[item.id]&&(
-                                <span style={{ fontFamily:T.mono, fontSize:10, padding:"1px 6px",
-                                               borderRadius:3, background:T.tealBg, color:T.teal,
-                                               border:"1px solid "+T.tealBd, flexShrink:0 }}>
-                                  {addedItems[item.id]}
-                                </span>
+                              {/* One reference per entry (each jumps to the register), then "+" for another entry */}
+                              {entries.map(a=>(
+                                <button key={a.id} className="hit" onClick={()=>onJump("risks", a.id)}
+                                  aria-label={"Open "+a.ref+" in the Risks register"} title="Open in the Risks register"
+                                  style={refChip(T.tealBg, T.teal, T.tealBd)}>
+                                  {a.ref}
+                                </button>
+                              ))}
+                              {isAdded&&(
+                                <button className="hit" onClick={()=>startRisk(item, cat.color)}
+                                  aria-label={"Add another entry for "+item.sub} title="Add another entry for this guide word"
+                                  style={addMore}>
+                                  +
+                                </button>
                               )}
                               {!isAdded&&(
                                 <button onClick={()=>toggleSkip(item.id)}
@@ -2567,29 +2824,18 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
           );
         })()}
 
-                {/* ══ OPPORTUNITIES GUIDE — Scope-based with search ══════════════════════ */}
+        {/* ══ OPPORTUNITIES GUIDE — scope-based checklist ══════════════════════ */}
         {view === "guide" && mode === "opps" && (() => {
-          const q = screenSearch.trim().toLowerCase();
-          const matchBtn = b => !q ||
-            (b.label||"").toLowerCase().includes(q) ||
-            (b.sub||"").toLowerCase().includes(q) ||
-            (b.desc||"").toLowerCase().includes(q);
-
-          const ALL_OPP_BTNS = [
-            ...OPP_SCOPE1_BUTTONS.map(b=>({...b,scopeKey:"opp_scope1",scopeColor:"red"})),
-            ...OPP_SCOPE2_BUTTONS.map(b=>({...b,scopeKey:"opp_scope2",scopeColor:"blue"})),
-            ...OPP_SCOPE3_BUTTONS.map(b=>({...b,scopeKey:"opp_scope3",scopeColor:"teal"})),
-          ];
+          const ALL_OPP_BTNS = [...OPP_SCOPE1_BUTTONS, ...OPP_SCOPE2_BUTTONS, ...OPP_SCOPE3_BUTTONS];
           const totalOpp=ALL_OPP_BTNS.length;
-          const addedOpp=ALL_OPP_BTNS.filter(b=>(project.opportunities||project.opps||[]).some(o=>o._screeningId===b.id)).length;
+          const addedOpp=ALL_OPP_BTNS.filter(b=>oppsOf(b.id).length>0).length;
           const skippedOpp=ALL_OPP_BTNS.filter(b=>skipped["opp_"+b.id]).length;
           const pctOpp=totalOpp>0?Math.round((addedOpp+skippedOpp)/totalOpp*100):0;
 
           const renderScopeChecklist = (skey, col, title, scopeSub, btns, mkOnClick) => {
-            const filtered2=btns.filter(matchBtn);
-            if(q&&filtered2.length===0) return null;
-            const open=(q&&filtered2.length>0)?true:expanded[skey]!==false;
-            const addedCt=filtered2.filter(b=>(project.opportunities||project.opps||[]).some(o=>o._screeningId===b.id)).length;
+            const filtered2=btns;
+            const open=expanded[skey]!==false;
+            const addedCt=filtered2.filter(b=>oppsOf(b.id).length>0).length;
             const skippedCt=filtered2.filter(b=>skipped["opp_"+b.id]).length;
             const addr=addedCt+skippedCt;
             return(
@@ -2615,14 +2861,14 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                 </div>
                 {open&&(
                   <div style={{borderLeft:"3px solid "+col.border,marginLeft:6,paddingLeft:4}}>
-                    {filtered2.map((btn,i)=>{
-                      const isAdded=(project.opportunities||project.opps||[]).some(o=>o._screeningId===btn.id);
+                    {filtered2.map(btn=>{
+                      const label=btn.label.replace("\n"," ");
+                      const entries=oppsOf(btn.id);
+                      const isAdded=entries.length>0;
                       const isSkipped=!!skipped["opp_"+btn.id];
-                      const addedOpp2=(project.opportunities||project.opps||[]).find(o=>o._screeningId===btn.id);
                       return(
                         <div key={btn.id} style={{display:"flex",alignItems:"center",gap:8,
                           padding:"6px 10px",borderRadius:5,
-                          opacity:isAdded?0.6:1,
                           borderBottom:"1px solid "+T.rowBd}}>
                           {isAdded||isSkipped ? (
                             <div style={{width:12,height:12,borderRadius:"50%",flexShrink:0,
@@ -2630,23 +2876,37 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                               border:"1.5px solid "+(isAdded?T.greenBd:T.muted)}}/>
                           ) : (
                             <button className="hit" onClick={mkOnClick(btn)}
-                              aria-label={"Add "+btn.label.replace("\n"," ")}
+                              aria-label={"Add "+label}
                               style={{width:12,height:12,borderRadius:"50%",flexShrink:0,padding:0,
                                 background:T.surface,border:"1.5px solid "+col.head,cursor:"pointer"}}/>
                           )}
-                          <div style={{flex:1,minWidth:0}}>
-                            <span style={{fontSize:12,fontWeight:500,color:T.text,
-                              textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
-                              {btn.label.replace("\n"," ")}
-                            </span>
-                            <span style={{fontSize:11,color:T.muted}}>{btn.sub}</span>
+                          <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:7}}>
+                            {/* Text — on a registered row it is a link to the (first) register entry */}
+                            <div {...(isAdded ? clickable(()=>onJump("opportunities", entries[0].id), "Open "+entries[0].ref+": "+label) : {})}
+                              style={{minWidth:0,opacity:isAdded?0.6:1,cursor:isAdded?"pointer":undefined}}>
+                              <span style={{fontSize:12,fontWeight:500,color:T.text,
+                                textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
+                                {label}
+                              </span>
+                              <span style={{fontSize:11,color:T.muted}}>{btn.sub}</span>
+                            </div>
+                            {/* The template's guide words for this category, shown on hover / focus */}
+                            <GuideWordsHint btn={btn} color={col}/>
                           </div>
-                          {isAdded&&addedOpp2&&(
-                            <span style={{fontFamily:T.mono,fontSize:10,padding:"1px 6px",
-                              borderRadius:3,background:T.purpleBg,color:T.purple,
-                              border:"1px solid "+T.purpleBd,flexShrink:0}}>
-                              {addedOpp2.ref}
-                            </span>
+                          {/* One reference per entry (each jumps to the register), then "+" for another entry */}
+                          {entries.map(o=>(
+                            <button key={o.id} className="hit" onClick={()=>onJump("opportunities", o.id)}
+                              aria-label={"Open "+o.ref+" in the Opportunities register"} title="Open in the Opportunities register"
+                              style={refChip(T.purpleBg, T.purple, T.purpleBd)}>
+                              {o.ref}
+                            </button>
+                          ))}
+                          {isAdded&&(
+                            <button className="hit" onClick={mkOnClick(btn)}
+                              aria-label={"Add another entry for "+label} title="Add another entry for this category"
+                              style={addMore}>
+                              +
+                            </button>
                           )}
                           {!isAdded&&(
                             <button onClick={()=>toggleSkip("opp_"+btn.id)}
@@ -2666,11 +2926,27 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
             );
           };
 
-          if(q&&!OPP_SCOPE1_BUTTONS.some(matchBtn)&&!OPP_SCOPE2_BUTTONS.some(matchBtn)&&!OPP_SCOPE3_BUTTONS.some(matchBtn))
-            return <div style={{textAlign:"center",padding:"2rem",background:T.slateBg,borderRadius:8,color:T.muted,fontSize:12}}>No opportunities match your search.</div>;
+          // Two views of the same template sheet: the checklist used in the workshop, and the
+          // read-only disciplines / phase-of-savings table
+          const viewSwitch = (
+            <div role="group" aria-label="Opportunity screening view" style={{display:"flex",gap:4,marginBottom:"0.9rem"}}>
+              {[["checklist","Checklist"],["disciplines","Disciplines & phases"]].map(([k,l])=>(
+                <button key={k} type="button" aria-pressed={oppView===k} onClick={()=>setOppView(k)}
+                  style={{padding:"4px 12px",fontSize:11,borderRadius:12,cursor:"pointer",fontFamily:T.sans,
+                    fontWeight:oppView===k?600:400,
+                    border:"1px solid "+(oppView===k?T.purpleBd:T.border),
+                    background:oppView===k?T.purpleBg:"transparent",
+                    color:oppView===k?T.purple:T.muted}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          );
+          if (oppView === "disciplines") return (<div>{viewSwitch}<OppDisciplinesGuide/></div>);
 
           return(
             <div>
+              {viewSwitch}
               {/* Overall progress */}
               <div style={{marginBottom:"1rem"}}>
                 <div style={{height:4,background:T.border,borderRadius:2,overflow:"hidden",marginBottom:5}}>
@@ -2682,11 +2958,11 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
                 </div>
               </div>
               {renderScopeChecklist("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",OPP_SCOPE1_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"Reduction of "+btn.label+" direct emissions","red",btn.noxWarn,btn.id))}
+                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"red",btn.id))}
               {renderScopeChecklist("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",OPP_SCOPE2_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],btn.desc,"blue",false,btn.id))}
+                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],"blue",btn.id))}
               {renderScopeChecklist("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",OPP_SCOPE3_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],btn.desc,"teal",false,btn.id))}
+                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],"teal",btn.id))}
             </div>
           );
         })()}
@@ -2697,13 +2973,17 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
             <h3 style={{ margin:"0 0 1rem", fontSize:14, fontWeight:600, color:T.red }}>
               Risk screening
             </h3>
-            <AspectFormFields form={riskForm} set={setRF}/>
+            <AspectFormFields form={riskForm} set={setRF}
+              legal={{ notes:{ ...(project.legalRefNotes||{}), ...riskNotes },
+                       setNote:(k, v) => setRiskNotes(p => ({ ...p, [k]:v })) }}/>
             <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-              <Btn onClick={() => setRiskForm(emptyAspect())}>Clear</Btn>
-              <button onClick={saveRisk} disabled={!riskForm.aspect.trim()}
+              <RequiredHint show={aspectIncomplete(riskForm)}>A description is required</RequiredHint>
+              {/* Clear starts the same guide word again; the form is never detached from its guide word */}
+              <Btn onClick={() => { const it = riskItemById(riskForm._screeningId); if (it) startRisk(it, riskForm._color); }}>Clear</Btn>
+              <button onClick={saveRisk} disabled={aspectIncomplete(riskForm)}
                 style={{ padding:"7px 14px", borderRadius:6, border:"none", background:T.red, color:"#fff",
-                         cursor:riskForm.aspect.trim()?"pointer":"not-allowed", fontSize:12,
-                         fontFamily:T.sans, fontWeight:500, opacity:riskForm.aspect.trim()?1:0.45 }}>
+                         cursor:aspectIncomplete(riskForm)?"not-allowed":"pointer", fontSize:12,
+                         fontFamily:T.sans, fontWeight:500, opacity:aspectIncomplete(riskForm)?0.45:1 }}>
                 Save to risks register
               </button>
             </div>
@@ -2718,11 +2998,85 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify }) {
   
             </div>
             <OppFormBody f={oppForm} setF={setOppForm} onSave={saveOpp}
-              onCancel={()=>{setView("guide");setNoxWarn(false);}}
+              onCancel={()=>setView("guide")}
               saveLabel="Save to opportunities register"/>
           </div>
         )}
 
+      </div>
+    </div>
+  );
+}
+
+// ── Disciplines & phases — Screening → Opportunities, second view ──────────────
+// Read-only reference, laid out like the "Sustainability opportunities" sheet of the screening
+// template: one row per guide word, an x where the template marks a discipline or a phase.
+function OppDisciplinesGuide() {
+  const scopeCol = s => s.startsWith("Scope 1") ? COLOR_MAP.red : s.startsWith("Scope 2") ? COLOR_MAP.blue : COLOR_MAP.teal;
+  const th = { padding:"6px 5px", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data, color:T.muted,
+               borderBottom:"1px solid "+T.border, letterSpacing:"0.04em", textTransform:"uppercase",
+               background:T.surface2, verticalAlign:"bottom", lineHeight:1.3 };
+  const mark = (key, on, label, firstOfGroup) => (
+    <td key={key} data-on={on?"1":"0"} aria-label={label}
+      style={{ textAlign:"center", padding:"5px 4px", fontFamily:T.mono, fontSize:12, fontWeight:700,
+               color:T.teal, background:on?T.tealBg:undefined,
+               borderLeft:(firstOfGroup?"2px solid "+T.border:"1px solid "+T.rowBd) }}>
+      {on ? "x" : ""}
+    </td>
+  );
+  return (
+    <div>
+      <div style={{ marginBottom:"0.9rem" }}>
+        <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:700, color:T.text }}>Disciplines and phases guide</h3>
+        <p style={{ margin:0, fontSize:12, color:T.muted, maxWidth:780, lineHeight:1.55 }}>
+          For each opportunity guide word: which disciplines to involve, and the phase in which the saving falls.
+          An x is a mark on the Sustainability opportunities sheet of the screening template. Reference only; nothing here is saved with the project.
+        </p>
+      </div>
+      <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
+        <table style={{ borderCollapse:"collapse", fontSize:12, fontFamily:T.sans, width:"100%", minWidth:1320 }}>
+          <thead>
+            <tr>
+              <th rowSpan={2} style={{ ...th, textAlign:"left", padding:"6px 12px", minWidth:170 }}>Category</th>
+              <th rowSpan={2} style={{ ...th, textAlign:"left", padding:"6px 12px", minWidth:300 }}>Guide word</th>
+              <th colSpan={OPP_DISCIPLINES.length} style={{ ...th, textAlign:"center", borderLeft:"2px solid "+T.border }}>Disciplines involved</th>
+              <th colSpan={OPP_SAVING_PHASES.length} style={{ ...th, textAlign:"center", borderLeft:"2px solid "+T.border }}>Phase of savings</th>
+            </tr>
+            <tr>
+              {OPP_DISCIPLINES.map((d, k) => (
+                <th key={d} style={{ ...th, width:66, textAlign:"center", borderLeft:(k===0?"2px solid "+T.border:"1px solid "+T.rowBd) }}>{d}</th>
+              ))}
+              {OPP_SAVING_PHASES.map((p, k) => (
+                <th key={p} style={{ ...th, width:92, textAlign:"center", borderLeft:(k===0?"2px solid "+T.border:"1px solid "+T.rowBd) }}>{p}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {OPP_GUIDE.map(c => {
+              const col = scopeCol(c.scope);
+              return c.words.map((wd, i) => (
+                <tr key={c.id+"-"+i} style={{ borderTop:"1px solid "+(i===0?T.border:T.rowBd) }}>
+                  {i===0 && (
+                    <td rowSpan={c.words.length}
+                      style={{ padding:"8px 12px", verticalAlign:"top", background:col.bg, borderLeft:"3px solid "+col.head }}>
+                      <div style={{ fontFamily:T.mono, fontSize:TYPE.data, color:col.head, marginBottom:2 }}>{c.scope}</div>
+                      <div style={{ fontWeight:600, color:col.head, lineHeight:1.35 }}>{c.category}</div>
+                      {c.sub && <div style={{ fontSize:11, color:T.muted, marginTop:2, lineHeight:1.4 }}>{c.sub}</div>}
+                    </td>
+                  )}
+                  <td style={{ padding:"6px 12px", lineHeight:1.45, color:T.text }}>
+                    {wd.t}
+                    {wd.eg && wd.eg.map((e, j) => (
+                      <div key={j} style={{ fontSize:11, color:T.muted, paddingLeft:10 }}>{e}</div>
+                    ))}
+                  </td>
+                  {OPP_DISCIPLINES.map((d, k) => mark("d"+k, wd.d[k]==="1", d+": "+(wd.d[k]==="1"?"involved":"not marked"), k===0))}
+                  {OPP_SAVING_PHASES.map((p, k) => mark("p"+k, wd.p[k]==="1", p+": "+(wd.p[k]==="1"?"saving":"not marked"), k===0))}
+                </tr>
+              ));
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -4440,9 +4794,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   const [dashFilter, setDashFilter]       = useState("all");
   const [aspFilter, setAspFilter]         = useState("All");
   const [aspSort,   setAspSort]           = useState({ col:null, dir:"asc" });
-  const [aspSearch, setAspSearch]         = useState("");
   const [oppSort,   setOppSort]           = useState({ col:null, dir:"asc" });
-  const [oppSearch, setOppSearch]         = useState("");
   const [selectedAsp, setSelectedAsp]     = useState(new Set());
   const [selectedOpp, setSelectedOpp]     = useState(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -4493,7 +4845,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
       // risk matrix cells
       const mGrid={};
-      aspects.forEach(a=>{const sv=Math.min(5,Math.max(1,parseInt(a.severity)||0));const pb=Math.min(5,Math.max(1,parseInt(a.probability)||0));if(sv&&pb){const k=sv+","+pb;if(!mGrid[k])mGrid[k]=[];mGrid[k].push(a);}});
+      // unscored aspects (no consequence or probability yet) are not plotted
+      aspects.forEach(a=>{if(!isAspectScored(a))return;const sv=Math.min(5,Math.max(1,parseInt(a.severity)||0));const pb=Math.min(5,Math.max(1,parseInt(a.probability)||0));if(sv&&pb){const k=sv+","+pb;if(!mGrid[k])mGrid[k]=[];mGrid[k].push(a);}});
       const zCls=(sv,pb)=>{const z=matrixZone(sv,pb);return z==="SIGNIFICANT"?"z-s":z==="MEDIUM"?"z-m":"z-l";};
       const cLbl={5:"Catastrophic",4:"Major",3:"Moderate",2:"Minor",1:"Negligible"};
       const pLbl={1:"Very unlikely",2:"Unlikely",3:"Possible",4:"Likely",5:"Very likely"};
@@ -4504,10 +4857,13 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
       // opp matrix cells
       const oGrid={};
-      opps.forEach(o=>{const ev=Math.min(5,Math.max(1,parseInt(o.envValue)||1));const fe=Math.min(5,Math.max(1,parseInt(o.feasibility)||1));const k=ev+","+fe;if(!oGrid[k])oGrid[k]=[];oGrid[k].push(o);});
-      const oQcls=(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"q-g":(!hE&&hF)?"q-p":(hE&&!hF)?"q-b":"q-n";};
-      const oQc =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"var(--green)":(!hE&&hF)?"var(--purple)":(hE&&!hF)?"var(--blue)":"var(--slate)";};
-      const oQL =(ev,fe)=>{const hE=ev>=4,hF=fe>=4;return hE&&hF?"Quick win":(!hE&&hF)?"Pursue":(hE&&!hF)?"Plan":"Deprioritize";};
+      // unscored opportunities (no environmental value or feasibility yet) are not plotted
+      opps.forEach(o=>{if(!isOppScored(o))return;const ev=Math.min(5,Math.max(1,parseInt(o.envValue)||1));const fe=Math.min(5,Math.max(1,parseInt(o.feasibility)||1));const k=ev+","+fe;if(!oGrid[k])oGrid[k]=[];oGrid[k].push(o);});
+      // matrix cells take their quadrant from oppQuadrant, like the register rows below, so the two never differ
+      const oQ   =(ev,fe)=>oppQuadrant({envValue:ev,feasibility:fe});
+      const oQcls=(ev,fe)=>["q-n","q-b","q-p","q-g"][oQ(ev,fe).rank];
+      const oQc  =(ev,fe)=>oQ(ev,fe).c;
+      const oQL  =(ev,fe)=>oQ(ev,fe).label;
       const oCr =(ev,fe)=>(ev===5&&fe===5)||(ev===3&&fe===5)||(ev===5&&fe===3)||(ev===3&&fe===3);
       const eLbl={1:"Negligible",2:"Minor",3:"Moderate",4:"Significant",5:"Major"};
       const fLbl2={5:"Easy",4:"Achievable",3:"Moderate",2:"Difficult",1:"Very difficult"};
@@ -4516,17 +4872,20 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       let eHdr="";[1,2,3,4,5].forEach(ev=>{eHdr+='<td class="axb"><div class="axn">'+ev+'</div><div class="axl">'+eLbl[ev]+'</div></td>';});
 
       // table rows — exact column order as the web app (score omitted)
-      const PHASE_ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
+      const phaseChips = v => {
+        const phases = (v||"").split(",").map(p=>p.trim()).filter(Boolean);
+        return phases.length
+          ? phases.map(p=>'<span class="chip sl">'+esc(PHASE_ABBR[p]||p.slice(0,3))+'</span>').join("")
+          : '<span class="dash">&#8212;</span>';
+      };
+      const NOT_SCORED = '<span class="chip sl">Not scored</span>';
       let riskRows="";
       aspects.forEach(a=>{
         const s   = calcSig(a);
         const sc  = s==="SIGNIFICANT"?"s":s==="MEDIUM"?"m":"l";
         const cat = getCategoryLabel(a);
         const shortCat = cat ? (CAT_SHORT[cat] || cat.replace(/^[0-9]+\. */,"")) : "";
-        const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
-        const phaseHtml = phases.length
-          ? phases.map(p=>'<span class="chip sl">'+esc(PHASE_ABBR[p]||p.slice(0,3))+'</span>').join("")
-          : '<span class="dash">&#8212;</span>';
+        const phaseHtml = phaseChips(a.phase);
         const catHtml  = shortCat ? '<span class="chip sl">'+esc(shortCat)+'</span>' : '<span class="dash">&#8212;</span>';
         const isAbn    = a.condition==="Abnormal" || a.condition==="Emergency";
         const abnHtml  = isAbn ? '<span class="chip am">'+esc(a.condition)+'</span>' : '<span class="dash">&#8212;</span>';
@@ -4539,26 +4898,25 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
             +'<div style="font-weight:500">'+esc(a.aspect||"")+'</div>'
           +'</td>'
           +'<td style="text-align:center">'+abnHtml+'</td>'
-          +'<td style="text-align:center"><span class="sig '+sc+'">'+esc(s)+'</span></td>'
+          +'<td style="text-align:center">'+(s?'<span class="sig '+sc+'">'+esc(s)+'</span>':NOT_SCORED)+'</td>'
           +'<td style="text-align:center;color:var(--muted)">'+esc(a.status)+'</td>'
           +'</tr>';
       });
 
       let oppRows="";
       opps.forEach(o=>{
-        const hEp=(o.envValue||1)>=4,hFp=(o.feasibility||1)>=4;
-        const pr  = hEp&&hFp?"Quick win":(!hEp&&hFp)?"Pursue":(hEp&&!hFp)?"Plan":"Deprioritize";
-        const co  = hEp&&hFp?"var(--green)":(!hEp&&hFp)?"var(--purple)":(hEp&&!hFp)?"var(--blue)":"var(--slate)";
+        const q   = oppQuadrant(o);   // same priority vocabulary as the register, "Not scored" included
         const ghg = calcGhgTotal(o);
         const matC = o.materiality&&o.materiality.startsWith("Inside")?"var(--teal)":o.materiality&&o.materiality.startsWith("Outside")?"var(--blue)":"var(--purple)";
         oppRows += '<tr>'
           +'<td><span class="ref p">'+esc(o.ref)+'</span></td>'
+          +'<td style="white-space:nowrap">'+phaseChips(o.phase)+'</td>'
           +'<td style="white-space:nowrap">'+(o.type?'<span class="chip pu">'+esc(o.type)+'</span>':'<span class="dash">&#8212;</span>')+'</td>'
           +'<td>'
             +'<div style="font-weight:500">'+esc(o.description||"")+'</div>'
             +(o.envBenefit?'<div class="benefit">'+esc(o.envBenefit)+'</div>':'')
           +'</td>'
-          +'<td style="text-align:center"><span style="font-size:9px;font-weight:600;color:'+co+'">'+esc(pr)+'</span></td>'
+          +'<td style="text-align:center">'+(q.rank<0?NOT_SCORED:'<span style="font-size:9px;font-weight:600;color:'+q.c+'">'+esc(q.label)+'</span>')+'</td>'
           +'<td class="num" style="text-align:center;color:var(--teal)">'+(ghg?fmtT(ghg):'<span class="dash">&#8212;</span>')+'</td>'
           +'<td style="text-align:center">'+(o.materiality?'<span style="font-size:9px;color:'+matC+'">'+esc(o.materiality)+'</span>':'<span class="dash">&#8212;</span>')+'</td>'
           +'</tr>';
@@ -4723,6 +5081,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         +'<div class="rblock">'+SEC("Opportunity Register ("+opps.length+" opportunities)")
         +'<table class="reg"><thead><tr>'
         +'<th style="width:60px">Ref</th>'
+        +'<th style="width:78px">Phase</th>'
         +'<th style="width:150px">Type</th>'
         +'<th>Description</th>'
         +'<th style="width:86px;text-align:center">Priority</th>'
@@ -4841,7 +5200,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     return [...(project.changelog||[]), entry];
   };
 
-  const saveAspect = a => {
+  // noteEdits = legal-reference notes changed in the form ({ "<itemId>#<citationIdx>": text }).
+  // They live on the project (shared with Screening → Legal references), so they are saved here in
+  // the same update as the aspect.
+  const saveAspect = (a, noteEdits) => {
     const isEdit = !!a.id;
     const now = new Date().toISOString();
     const withTs = isEdit ? {...a, updatedAt:now}
@@ -4849,6 +5211,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     const updated = isEdit ? aspects.map(x=>x.id===a.id?withTs:x)
                            : [...aspects,{...withTs,id:Date.now().toString(),ref:nextRef(aspects,"ASP")}];
     const ref = isEdit ? a.ref : nextRef(aspects,"ASP");
+    const cp = x => (x.severity && x.probability) ? `C${x.severity}×P${x.probability}` : "not scored";
+    const oldNotes = project.legalRefNotes || {};
+    const changedNotes = Object.entries(noteEdits||{}).filter(([k,v]) => (oldNotes[k]||"") !== (v||""));
     const aspFields = isEdit ? (() => {
       const prev = aspects.find(x=>x.id===a.id)||{};
       const f = [];
@@ -4860,20 +5225,23 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       d("Impact",    prev.impact,    withTs.impact,    v=>v&&v.slice(0,60));
       d("Condition", prev.condition, withTs.condition);
       if(prev.severity!==withTs.severity||prev.probability!==withTs.probability)
-        f.push({k:"Risk score",from:`C${prev.severity||"?"}×P${prev.probability||"?"}`,to:`C${withTs.severity}×P${withTs.probability}`});
+        f.push({k:"Risk score",from:cp(prev),to:cp(withTs)});
       d("Status",          prev.status,         withTs.status);
       d("Legal threshold", prev.legalThreshold, withTs.legalThreshold);
       d("Control",  prev.control,  withTs.control,  v=>v&&v.slice(0,50));
       d("Owner",    prev.owner,    withTs.owner);
+      changedNotes.forEach(([k,v]) => f.push({k:"Legal note",from:(oldNotes[k]||"").slice(0,50)||"—",to:(v||"").slice(0,50)||"—"}));
       return f;
     })() : [
       {k:"Aspect",    v:(withTs.aspect||"").slice(0,80)},
       {k:"Phase",     v:withTs.phase},
       {k:"Area",      v:withTs.area},
       {k:"Condition", v:withTs.condition},
-      {k:"Risk score", v:`C${withTs.severity}×P${withTs.probability}`},
+      {k:"Risk score", v:cp(withTs)},
+      ...changedNotes.map(([,v]) => ({k:"Legal note", v:(v||"").slice(0,50)})),
     ];
     onChange({ ...project, aspects:updated,
+               ...(changedNotes.length ? { legalRefNotes:{ ...oldNotes, ...Object.fromEntries(changedNotes) } } : {}),
                changelog:logChange(isEdit?"Edited aspect":"Added aspect",
                  `${ref} — ${(withTs.aspect||"").slice(0,60)}`, aspFields) });
     setEditAspect(null);
@@ -4893,8 +5261,9 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       d("Type",        prev.type,        withTs.type,        v=>v&&v.slice(0,50));
       d("Description", prev.description, withTs.description, v=>v&&v.slice(0,60));
       d("Materiality", prev.materiality, withTs.materiality);
+      d("Phase",       prev.phase||"",   withTs.phase||"");
       if(prev.envValue!==withTs.envValue||prev.bizValue!==withTs.bizValue||prev.feasibility!==withTs.feasibility)
-        f.push({k:"Score",from:`${calcOppScore(prev)}`,to:`${calcOppScore(withTs)}`});
+        f.push({k:"Score",from:`${calcOppScore(prev)||"not scored"}`,to:`${calcOppScore(withTs)||"not scored"}`});
       d("Status", prev.status, withTs.status);
       d("Owner",  prev.owner,  withTs.owner);
       const pGhg=(prev.ghgPhases||[]).length, nGhg=(withTs.ghgPhases||[]).length;
@@ -4910,7 +5279,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
     })() : [
       {k:"Type",        v:(withTs.type||"").slice(0,60)},
       {k:"Description", v:(withTs.description||"").slice(0,80)},
-      {k:"Score",       v:`Env${withTs.envValue}×Biz${withTs.bizValue}×Feas${withTs.feasibility}=${calcOppScore(withTs)}`},
+      {k:"Phase",       v:withTs.phase||""},
+      {k:"Score",       v:calcOppScore(withTs) ? `Env${withTs.envValue}×Biz${withTs.bizValue}×Feas${withTs.feasibility}=${calcOppScore(withTs)}` : "not scored"},
     ];
     onChange({ ...project, opportunities:updated,
                changelog:logChange(isEdit?"Edited opportunity":"Added opportunity",
@@ -4987,8 +5357,11 @@ This cannot be undone.`)) return;
                     : aspects;
 
   const filteredAspects = (() => {
-    let r = aspFilter==="All" ? aspects : aspects.filter(a=>calcSig(a)===aspFilter);
-    if (aspSearch) { const q=aspSearch.toLowerCase(); r=r.filter(a=>(a.aspect||"").toLowerCase().includes(q)||(a.area||"").toLowerCase().includes(q)||(a.phase||"").toLowerCase().includes(q)); }
+    // "Not scored" lists every aspect still missing a consequence or probability, including one that a
+    // legal threshold or stakeholder concern already makes SIGNIFICANT (it shows under both filters)
+    let r = aspFilter==="All"        ? aspects
+          : aspFilter==="Not scored" ? aspects.filter(a=>!isAspectScored(a))
+          :                            aspects.filter(a=>calcSig(a)===aspFilter);
     if (aspSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(aspSort.col==="score"){va=calcScore(a)||0;vb=calcScore(b)||0;}
       else if(aspSort.col==="sig"){const o={"SIGNIFICANT":0,"MEDIUM":1,"Low":2};va=o[calcSig(a)]??3;vb=o[calcSig(b)]??3;}
@@ -5009,7 +5382,6 @@ This cannot be undone.`)) return;
 
   const filteredOpps = (() => {
     let r = opps;
-    if (oppSearch) { const q=oppSearch.toLowerCase(); r=r.filter(o=>(o.description||"").toLowerCase().includes(q)||(o.type||"").toLowerCase().includes(q)); }
     if (oppSort.col) r=[...r].sort((a,b)=>{ let va,vb;
       if(oppSort.col==="score"){va=calcOppScore(a);vb=calcOppScore(b);}
       else if(oppSort.col==="priority"){va=oppQuadrant(a).rank;vb=oppQuadrant(b).rank;}
@@ -5021,7 +5393,7 @@ This cannot be undone.`)) return;
 
   if (editAspect !== null) return (
     <div style={{ background:T.bg, minHeight:"100%" }}>
-      <AspectForm aspect={editAspect} onSave={saveAspect} onCancel={()=>setEditAspect(null)}/>
+      <AspectForm aspect={editAspect} legalNotes={project.legalRefNotes} onSave={saveAspect} onCancel={()=>setEditAspect(null)}/>
     </div>
   );
   if (editOpp !== null) return (
@@ -5162,23 +5534,7 @@ This cannot be undone.`)) return;
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.teal }}>{a.ref}</span>
                 </td>
-                <td style={{ padding:"9px 12px", minWidth:60 }}>
-                  {(() => {
-                    const ABBR = {"Engineering":"Eng","Procurement":"Pro","Construction":"Con","Installation":"Ins","Commissioning":"Com","Operations & Maintenance":"O&M","Decommissioning":"Dec"};
-                    const phases = (a.phase||"").split(",").map(p=>p.trim()).filter(Boolean);
-                    if (!phases.length) return <span style={{ color:T.faint }}>—</span>;
-                    return (
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, auto)", gap:2, width:"fit-content" }}>
-                        {phases.map(p => (
-                          <span key={p} title={p} style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"1px 5px",
-                            borderRadius:3, background:T.slateBg, color:T.slate, textAlign:"center" }}>
-                            {ABBR[p]||p.slice(0,3)}
-                          </span>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </td>
+                <td style={{ padding:"9px 12px", minWidth:60 }}><PhaseAbbrChips value={a.phase}/></td>
                 <td style={{ padding:"9px 12px", minWidth:80, maxWidth:150 }}>
                   {(() => {
                     const cat = getCategoryLabel(a);
@@ -5216,7 +5572,7 @@ This cannot be undone.`)) return;
                         color: sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green }}>{score}</span>
                     : <span style={{ color:T.faint }}>—</span>}
                 </td>
-                <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                <td style={{ padding:"9px 12px" }}>{sig?<span style={sigStyle(sig)}>{sig}</span>:<NotScored/>}</td>
                 <td style={{ padding:"9px 12px" }}>
                   <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 6px", borderRadius:3, background:T.slateBg, color:T.slate }}>{a.status}</span>
                 </td>
@@ -5267,6 +5623,7 @@ This cannot be undone.`)) return;
             </label>
           </th>
           <th style={{ padding:"8px 12px", textAlign:"left", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data, color:T.muted, borderBottom:"1px solid "+T.border, whiteSpace:"nowrap", letterSpacing:"0.07em", textTransform:"uppercase" }}>Ref</th>
+          <OSTH col="phase" label="Phase"/>
           <OSTH col="type" label="Type"/>
           <OSTH col="description" label="Description"/>
           <OSTH col="score" label="Score"/>
@@ -5295,6 +5652,7 @@ This cannot be undone.`)) return;
                   </label>
                 </td>
                 <td style={{ padding:"9px 12px" }}><span style={{ fontFamily:T.mono, fontSize:10, fontWeight:500, color:T.purple }}>{o.ref}</span></td>
+                <td style={{ padding:"9px 12px", minWidth:60 }}><PhaseAbbrChips value={o.phase}/></td>
                 <td style={{ padding:"9px 12px", minWidth:80, maxWidth:140 }}>
                   {o.type
                     ? <span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3,
@@ -5313,7 +5671,8 @@ This cannot be undone.`)) return;
                 </td>
 
                 <td style={{ padding:"9px 12px", textAlign:"center" }}><span style={{ fontFamily:T.mono, fontWeight:500, fontSize:13, color:T.text }}>{score>0?score:"—"}</span></td>
-                <td style={{ padding:"9px 12px" }}>{score>0?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<span style={{ color:T.faint }}>—</span>}</td>
+                {/* Priority needs only the matrix axes, so a missing business value does not hide it */}
+                <td style={{ padding:"9px 12px" }}>{sc.rank>=0?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 7px", borderRadius:3, background:sc.bg, color:sc.c, border:"1px solid "+sc.bd }}>{sc.label}</span>:<NotScored/>}</td>
                 <td style={{ padding:"9px 12px" }}>{(() => { const g=calcGhgTotal(o); return g ? <span style={{ fontFamily:T.mono, fontSize:10, fontWeight:600, color:T.teal }}>{g>=1000?(g/1000).toLocaleString("nb-NO",{maximumFractionDigits:2})+" t":g.toLocaleString("nb-NO",{maximumFractionDigits:0})+" kg"} CO₂e</span> : <span style={{ color:T.faint }}>—</span>; })()}</td>
                 <td style={{ padding:"9px 12px" }}>{o.materiality?<span style={{ fontFamily:T.mono, fontSize:TYPE.data, padding:"2px 6px", borderRadius:3, background:matC.bg, color:matC.c }}>{o.materiality.split(" (")[0]}</span>:<span style={{ color:T.faint }}>—</span>}</td>
 
@@ -5469,7 +5828,8 @@ This cannot be undone.`)) return;
                     </p>
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", gap:3, alignItems:"flex-end" }}>
-                    {[{l:"Sig",bg:T.redBg,c:T.red,bd:T.redBd},{l:"Medium",bg:T.amberBg,c:T.amber,bd:T.amberBd},{l:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd}].map(({l,bg,c,bd})=>(
+                    {[{l:"Sig",bg:T.redBg,c:T.red,bd:T.redBd},{l:"Medium",bg:T.amberBg,c:T.amber,bd:T.amberBd},{l:"Low",bg:T.greenBg,c:T.green,bd:T.greenBd},
+                      ...(aspects.some(a=>!calcSig(a)) ? [{l:"Not scored",bg:T.surface2,c:T.muted,bd:T.border}] : [])].map(({l,bg,c,bd})=>(
                       <span key={l} style={{ fontSize:TYPE.data, padding:"1px 7px", borderRadius:3,
                         background:bg, color:c, border:"1px solid "+bd, whiteSpace:"nowrap" }}>{l}</span>
                     ))}
@@ -5643,17 +6003,21 @@ This cannot be undone.`)) return;
       )}
 
       {tab === "screening" && (
-        <ScreeningTab project={project} onChange={onChange} onAddAspect={saveAspect} onAddOpp={saveOpp} notify={notify}/>
+        <ScreeningTab project={project} onChange={onChange} onAddAspect={saveAspect} onAddOpp={saveOpp} notify={notify}
+          onJump={(kind, id) => {
+            // A registered guide word opens its register entry; closing the form lands on that register
+            if (kind === "risks") { const a = aspects.find(x=>x.id===id); if (a) { setTab("risks"); setEditAspect(a); } }
+            else { const o = opps.find(x=>x.id===id); if (o) { setTab("opportunities"); setEditOpp(o); } }
+          }}/>
       )}
 
       {tab === "risks" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
-            <Btn variant="primary" onClick={()=>setEditAspect(emptyAspect())}>+ Add aspect</Btn>
-              <input value={aspSearch} onChange={e=>setAspSearch(e.target.value)}
-              placeholder="Search aspects..." style={{ width:180, padding:"5px 10px", fontSize:12 }}/>
+            {/* Aspects are added from the Screening tab's guide words; this register filters and edits them */}
+            <span style={{ fontSize:12, color:T.muted }}>New aspects are added from the Screening tab.</span>
             <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
-              {["All","SIGNIFICANT","MEDIUM","Low"].map(f => (
+              {["All","SIGNIFICANT","MEDIUM","Low","Not scored"].map(f => (
                 <button key={f} onClick={()=>setAspFilter(f)}
                   style={{ fontFamily:T.mono, padding:"4px 9px", fontSize:10, borderRadius:4, cursor:"pointer",
                            fontWeight:aspFilter===f?500:400, letterSpacing:"0.03em",
@@ -5667,7 +6031,7 @@ This cannot be undone.`)) return;
           </div>
           {filteredAspects.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
-              {aspects.length===0?"No aspects yet. Use the Screening tab or add one manually.":"No aspects match filter: "+aspFilter+"."}
+              {aspects.length===0?"No aspects yet. Add them from the Screening tab.":"No aspects match filter: "+aspFilter+"."}
             </div>
           ) : (
             <div>
@@ -5704,14 +6068,14 @@ This cannot be undone.`)) return;
 
             const rGrid = {};
             aspects.forEach(a => {
-              if (!a.severity || !a.probability) return;
+              if (!isAspectScored(a)) return;
               const sv = Math.min(5,Math.max(1,parseInt(a.severity)));
               const pb = Math.min(5,Math.max(1,parseInt(a.probability)));
               const k  = sv+","+pb;
               if (!rGrid[k]) rGrid[k] = [];
               rGrid[k].push(a);
             });
-            const unplotted = aspects.filter(a => !a.severity || !a.probability);
+            const unplotted = aspects.filter(a => !isAspectScored(a));
 
             const CON_ROWS = [
               {v:5,lbl:"Catastrophic"},
@@ -5904,9 +6268,8 @@ This cannot be undone.`)) return;
       {tab === "opportunities" && (
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
-            <Btn variant="primary" onClick={()=>setEditOpp(emptyOpp())}>+ Add opportunity</Btn>
-            <input value={oppSearch} onChange={e=>setOppSearch(e.target.value)}
-              placeholder="Search opportunities..." style={{ width:200, padding:"5px 10px", fontSize:12 }}/>
+            {/* Opportunities are added from the Screening tab's categories; this register edits them */}
+            <span style={{ fontSize:12, color:T.muted }}>New opportunities are added from the Screening tab.</span>
             <span style={{ marginLeft:"auto", fontSize:12, color:T.muted }}>
               {opps.length} opportunit{opps.length!==1?"ies":"y"}
             </span>
@@ -5914,7 +6277,7 @@ This cannot be undone.`)) return;
 
           {filteredOpps.length === 0 ? (
             <div style={{ textAlign:"center", padding:"3rem", background:T.surface, borderRadius:8, border:"1px solid "+T.border, color:T.muted, fontSize:12 }}>
-              {opps.length===0?"No opportunities yet. Use the Screening tab or add one manually.":"No opportunities match your search."}
+              No opportunities yet. Add them from the Screening tab.
             </div>
           ) : (
             <div>
@@ -5947,7 +6310,10 @@ This cannot be undone.`)) return;
               const isQCorner = (ev, feas) =>
                 (ev===1&&feas===5)||(ev===5&&feas===5)||(ev===1&&feas===1)||(ev===5&&feas===1);
               const oGrid = {};
+              // Not scored yet (no environmental value or feasibility) = not plotted; counted under the matrix
+              const unplottedOpps = opps.filter(o => !isOppScored(o));
               opps.forEach(o => {
+                if (!isOppScored(o)) return;
                 const ev   = Math.min(5,Math.max(1,parseInt(o.envValue)||1));
                 const feas = Math.min(5,Math.max(1,parseInt(o.feasibility)||1));
                 const k = ev+","+feas;
@@ -6097,6 +6463,11 @@ This cannot be undone.`)) return;
                       ))}
                     </div>
                   </div>
+                  {unplottedOpps.length > 0 && (
+                    <p style={{ fontSize:11, color:T.muted, margin:"0.75rem 0 0" }}>
+                      {unplottedOpps.length} opportunit{unplottedOpps.length!==1?"ies":"y"} not plotted — environmental value or feasibility not yet set.
+                    </p>
+                  )}
                 </div>
               );
             })()}
@@ -6499,6 +6870,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const closed=asp.filter(a=>a.status==="Info").length;
     const hi=opp.filter(o=>oppQuadrant(o).label==="Quick win").length;
     const tot=asp.length;
+    const unsc=tot-sig-watch-low;   // no significance yet: not scored and no legal / stakeholder flag
     return (
       <div {...clickable(()=>{onSelect(p.id);onClose();}, "Open project "+(p.name||"Unnamed"))}
         style={{ background:"var(--surface)",border:"1px solid var(--border)",borderRadius:10,
@@ -6525,11 +6897,13 @@ function PortfolioView({ projects, onClose, onSelect }) {
               {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }} title={"Significant: "+sig}/>}
               {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }} title={"Watch: "+watch}/>}
               {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }} title={"Low: "+low}/>}
+              {unsc>0&&<div style={{ flex:unsc,background:"var(--border)",minWidth:4 }} title={"Not scored: "+unsc}/>}
             </div>:<div style={{ height:7,borderRadius:4,background:"var(--border)" }}/>}
-            <div style={{ display:"flex",gap:8,marginTop:5 }}>
+            <div style={{ display:"flex",gap:8,marginTop:5,flexWrap:"wrap" }}>
               {[{l:"Sig",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
                 {l:"Medium",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
-                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].map(({l,v,bg,c,bd})=>(
+                {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"},
+                ...(unsc>0?[{l:"Not scored",v:unsc,bg:"var(--surface2)",c:"var(--muted)",bd:"var(--border)"}]:[])].map(({l,v,bg,c,bd})=>(
                 <span key={l} style={{ fontSize:10,display:"inline-flex",alignItems:"center",gap:3,
                                        padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                   {l} <strong style={{ fontWeight:700 }}>{v}</strong>
@@ -6608,6 +6982,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
     const sig=asp.filter(a=>calcSig(a)==="SIGNIFICANT").length;
     const watch=asp.filter(a=>calcSig(a)==="MEDIUM").length;
     const low=asp.filter(a=>calcSig(a)==="Low").length;
+    const unsc=asp.length-sig-watch-low;   // no significance yet
     const openN=asp.filter(a=>a.status==="Action").length;
     const inP=0;
     const cls=asp.filter(a=>a.status==="Info").length;
@@ -6616,6 +6991,7 @@ function PortfolioView({ projects, onClose, onSelect }) {
       {key:"Pursue",       l:"Pursue",       bg:"var(--purple-bg)",c:"var(--purple)", bd:"var(--purple-bd)"},
       {key:"Plan",         l:"Plan",         bg:"var(--blue-bg)",  c:"var(--blue)",   bd:"var(--blue-bd)"},
       {key:"Deprioritize", l:"Deprioritize", bg:"var(--slate-bg)", c:"var(--slate)",  bd:"var(--slate-bd)"},
+      {key:"Not scored",   l:"Not scored",   bg:"var(--surface2)", c:"var(--muted)",  bd:"var(--border)"},
     ];
     const oppQuadCounts = opp.reduce((m,o)=>{ const l=oppQuadrant(o).label; m[l]=(m[l]||0)+1; return m; }, {});
     const oppQuad = oppQuadDefs.map(d=>({...d, v:oppQuadCounts[d.key]||0}));
@@ -6653,12 +7029,13 @@ function PortfolioView({ projects, onClose, onSelect }) {
                 {sig>0&&<div style={{ flex:sig,background:"var(--red-bd)",minWidth:4 }}/>}
                 {watch>0&&<div style={{ flex:watch,background:"var(--amber-bd)",minWidth:4 }}/>}
                 {low>0&&<div style={{ flex:low,background:"var(--green-bd)",minWidth:4 }}/>}
-                {asp.length-sig-watch-low>0&&<div style={{ flex:asp.length-sig-watch-low,background:"var(--border)",minWidth:2 }}/>}
+                {unsc>0&&<div style={{ flex:unsc,background:"var(--border)",minWidth:2 }}/>}
               </div>
               <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:6 }}>
                 {[{l:"Significant",v:sig,bg:"var(--red-bg)",c:"var(--red)",bd:"var(--red-bd)"},
                   {l:"Medium",v:watch,bg:"var(--amber-bg)",c:"var(--amber)",bd:"var(--amber-bd)"},
-                  {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
+                  {l:"Low",v:low,bg:"var(--green-bg)",c:"var(--green)",bd:"var(--green-bd)"},
+                  {l:"Not scored",v:unsc,bg:"var(--surface2)",c:"var(--muted)",bd:"var(--border)"}].filter(x=>x.v>0).map(({l,v,bg,c,bd})=>(
                   <span key={l} style={{ fontSize:10,padding:"1px 6px",borderRadius:3,background:bg,color:c,border:"1px solid "+bd }}>
                     {l} <strong>{v}</strong>
                   </span>

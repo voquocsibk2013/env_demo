@@ -60,23 +60,33 @@ Structured guide-word screening to systematically identify risks and opportuniti
   7. Abnormal Condition and Emergency Response
 - Each item has a sub-category label, a descriptive **hint** (e.g. "Integrated combustion plant, gas turbines, boilers, heaters"), and a pre-filled aspect text
 - **Hint text always stays visible** even after the risk has been registered — the green dot + ref badge appears alongside it; nothing is hidden
-- Category expand/collapse, text search, skip / undo-skip per item
+- Category expand/collapse, skip / undo-skip per item. There is no search box and no blank form: every risk is added from a guide word
 - Progress bar: added / skipped / remaining per category and overall
-- Clicking **+ Add** opens a pre-filled risk form; hint text maps to the *Activity* field
+- Clicking the circle on a row opens the risk form with the guide word's aspect text; the hint maps to the *Activity* field. The **description** (potential environmental impact) starts empty and is required, and all scoring starts unset
+- A registered row shows one reference chip per entry; clicking the row or a chip opens that entry in the Risks register. **+** adds another entry under the same guide word
 
 ### Opportunity screening
 - Scope-based prompts: Scope 1 (direct), Scope 2 (energy / system), Scope 3 (materials, transport, lifecycle, re-use)
-- Each prompt pre-fills the opportunity form with type, description, and relevant GHG saving lines
+- Each prompt opens the opportunity form with its type and the relevant GHG saving lines; the **description** starts empty and is required, and all scoring starts unset
+- **Guide words** — a small **i** after each row's label; hovering or focusing it shows that category's guide words from the "Sustainability opportunities" sheet of the screening template (S-TPL-022). Escape or a click elsewhere closes it; a click on the **i** keeps it open (touch screens). It opens above the row when there is more room there and stays inside the visible part of the list, scrolling if the list is short
 - **Opportunity sub-descriptions always stay visible** after registration (same treatment as risk hints)
 - NOₓ tax warning for NOₓ-related opportunities
-- Skip / undo-skip, text search
+- Skip / undo-skip. No search box and no blank form; a registered row links to its entries in the Opportunities register, and **+** adds another entry under the same category
 - **AI suggestion panel** — sends a query to Claude Sonnet via the Anthropic API to generate aspect suggestions for a given scenario
+
+#### Disciplines & phases view
+A second view of the Opportunities list (**Checklist** / **Disciplines & phases** switch at its top): a read-only table of the same template sheet. For each of the 42 opportunity guide words in 12 categories it shows:
+
+- **Disciplines involved** — Process · Mechanical · Piping layout · Structural · Electrical · Instrument controls · HVAC · Tech safety · PRE PRB
+- **Phase of savings** — Project phase study / execution · Installation & commissioning · Operation & maintenance · End of life / decommissioning
+
+An **x** is a mark in the template. Nothing in this view is stored with the project. The data lives in `OPP_GUIDE` in `src/App.jsx`; the template's spelling slips are corrected, its wording is otherwise unchanged.
 
 ---
 
 ## Risks
 
-Full risk register.
+Full risk register. Aspects are added from the Screening tab; this tab edits, filters and deletes them.
 
 ### Risk form fields
 | Field | Notes |
@@ -84,9 +94,9 @@ Full risk register.
 | Phase | EPCIC phase dropdown |
 | Area / sub-category | Free text |
 | Activity (guide words) | Pre-filled from screening hint |
-| Environmental aspect | Main aspect description |
+| Environmental aspect | Set from the guide word when the risk is registered; shown in the register, dashboard and PDF. Not edited in the form |
 | Condition | Normal / Abnormal / Emergency |
-| Impact | Description of potential impact |
+| Description — potential environmental impact | **Required**; starts empty with a hint |
 | Receptors | Affected receptors |
 | Receptor sensitivity | High / Medium / Low |
 | Scale | Local / Regional / National / International |
@@ -96,18 +106,22 @@ Full risk register.
 | Legal threshold exceeded? | Y/N |
 | Stakeholder concern? | Y/N |
 | Control measures | Free text |
-| Legal reference | Free text |
+| Legal references | A guide-word aspect shows the same citations, links and per-project notes as Screening → Legal references (notes can be edited here and are saved with the aspect), plus a free-text box for any other reference. An aspect without a guide word keeps a single free-text box |
 | Owner | Free text |
 | Status | **Action** / **Info** |
+
+Every scoring field (receptor sensitivity, scale, duration, C, P, legal threshold, stakeholder concern) starts at **—**. The score reads **N/A** until both C and P are chosen.
 
 ### Significance calculation
 - **Significant** — C = 5; or C = 4 & P ≥ 4; or C = 3 & P = 5; or legal threshold / stakeholder concern = Y
 - **Medium** — remaining combinations above Low
 - **Low** — C = 1; C = 2 & P ≤ 2; C = 3 & P = 1
+- **Not scored** — C or P not set yet, and no legal threshold / stakeholder concern. Never counted as Low, and not plotted on the matrix
 
 ### Risk table
 - Columns: Ref · Phase · Area · Activity · Aspect · C · P · Score · Significance · Status · Condition · Scale · Created · Modified
-- Sortable by any column; text search; filter by significance: All / Significant / Medium / Low
+- Sortable by any column; filter by significance: All / Significant / Medium / Low / Not scored. No search box and no add button
+- The **Not scored** filter lists every aspect still missing C or P, including one that a legal threshold or stakeholder concern already makes Significant (it shows under both filters)
 - Row left-border coloured by environmental category
 - Bulk select → bulk delete or bulk status change
 
@@ -132,9 +146,11 @@ Full risk register.
 - **Environmental Value (1–5):** dropdown — 1 Negligible · 2 Minor · 3 Moderate · **4 Significant** · **5 Major**
 - **Business Value (1–5):** dropdown — 1 No benefit · 2 Low · 3 Moderate · **4 High** · **5 Strategic**
 - **Feasibility (1–5):** dropdown — 1 Very difficult · 2 Difficult · 3 Moderate · **4 Achievable** · **5 Easy**
-- All three scores default to **1** on new opportunities — forces deliberate evaluation
+- All three scores start unset (**—**). The score reads **N/A** until all three are chosen; the priority reads **Not scored** until Environmental Value and Feasibility are chosen (Business Value only feeds the score and the dot size), the same rule the matrix and the PDF use
+- **Phase** — the same EPCIC phase chips as the risk form
+- **Guide words** — the template's guide words for the opportunity's category, shown beside the description. The description is required and starts empty
 - Owner
-- **Qualitative phases** — named milestones with date and note
+- The saving estimate is **quantitative only**. Qualitative phases can no longer be added or edited; notes saved by earlier versions stay visible, read-only
 - **GHG saving phases** — quantitative saving phases, each with a full table of saving lines:
   - Scope 1: CO₂ · NOₓ · CH₄ · nmVOC · Other chemicals · Refrigerants/GWP gases · Other
   - Scope 2: Reduction in energy consumption (kWh, EF 0.57 kgCO₂e/kWh)
@@ -153,9 +169,10 @@ Full risk register.
 - Quadrant label shown in: opportunity form · opportunity table · dashboard top-3 · PDF report
 
 ### Opportunity table
-- Columns: Ref · Type · Description · Score · Priority (quadrant label) · GHG saving · Materiality · Created · Modified
+- Columns: Ref · Phase · Type · Description · Score · Priority (quadrant label, or Not scored) · GHG saving · Materiality · Created · Modified
 - No status column (status removed from opportunities)
-- Sortable, bulk delete
+- Sortable, bulk delete. No search box and no add button — opportunities are added from the Screening tab
+- Opportunities without an environmental value or feasibility are not plotted on the matrix; a line under it says how many
 
 ### Opportunity Priority Matrix (embedded in Opportunities tab)
 - 5×5 grid: Environmental Value (x-axis, 1–5) × Feasibility (y-axis, 1–5)
@@ -279,8 +296,10 @@ A4 landscape, full-colour (`print-color-adjust: exact`), opened via Blob URL.
    - Environmental Risk Matrix (5×5, plain number axes, coloured dots)
    - Opportunity Priority Matrix (5×5, Environmental Value × Feasibility, dot size = Business Value)
 4. **Environmental Budget** — MTO / MEL / Manual / Combined cards (shown only if the dashboard has budget entries)
-5. **Risk Register table** — Ref · Aspect · Area · Phase · Significance · Status (no score columns)
-6. **Opportunity Register table** — Ref · Description · Type · Priority (quadrant) · GHG saving (no score column)
+5. **Risk Register table** — Ref · Aspect · Area · Phase · Significance (or Not scored) · Status (no score columns)
+6. **Opportunity Register table** — Ref · Phase · Type · Description · Priority (quadrant, or Not scored) · GHG saving · Materiality (no score column)
+
+Unscored aspects and opportunities are listed in the tables but not plotted on the matrices.
 7. **Footer** — toolkit name, project name, date
 8. **Appendix — Matrix Legends:**
    - *Risk Matrix:* Zone key · Consequence levels (1–5 with descriptions) · Probability levels (1–5 with ranges)
@@ -296,8 +315,8 @@ Click **🖨 Print / Save as PDF** in the top-right of the report window, then c
 Cross-project view from the sidebar.
 
 - Projects grouped by contract, then individually listed
-- Per-project: total aspects, Significant / Medium / Low bar, total opportunities, GHG savings, Environmental Budget total with its MTO / MEL split (if the project has budget entries)
-- Contract-level and portfolio totals
+- Per-project: total aspects, Significant / Medium / Low / Not scored bar (Not scored only when there are some), total opportunities, GHG savings, Environmental Budget total with its MTO / MEL split (if the project has budget entries)
+- Contract-level and portfolio totals; the contract summary also counts aspects and opportunities that are not scored yet
 
 ---
 
@@ -306,7 +325,7 @@ Cross-project view from the sidebar.
 - **Light / dark mode** toggle; persists to `localStorage`
 - **Zoom** — 5 levels (80–120%); persists across sessions
 - **CSS variable token system** — all colours derive from a single theme object (`T`); dark mode swaps the same tokens
-- Tabs: Dashboard · Screening · Risks · Opportunities · Environmental Budget · Waste Handling · Attendees · Changes · Settings
+- Tabs: Dashboard · Screening · Risks · Opportunities · Environmental Budget · Waste Handling · BAT · Attendees · Changes · Settings
 
 ---
 
@@ -345,9 +364,11 @@ project {
 }
 ```
 
-**Aspect fields:** ref · phase · area · activity · aspect · condition · impact · receptors · recSensitivity · scale · severity (C 1–5) · probability (P 1–5) · legalThreshold · stakeholderConcern · control · legalRef · owner · status (Action / Info) · `_color` · `_screeningId`
+**Aspect fields:** ref · phase · area · activity · aspect · condition · impact · receptors · recSensitivity · scale · severity (C 1–5, 0 = not scored) · probability (P 1–5, 0 = not scored) · legalThreshold · stakeholderConcern · control · legalRef (for a guide-word aspect: the citation list as text, refreshed on save) · legalRefExtra (free-text other reference; an aspect saved before this field existed has any hand-typed references that are not the guide word's citations moved here when it is next opened) · owner · status (Action / Info) · `_color` · `_screeningId`
 
-**Opportunity fields:** ref · type · description · scope · envValue · bizValue · feasibility · owner · materiality · qualPhases[] · ghgPhases[] (full GHG saving line tables per snapshot)
+**Opportunity fields:** ref · type · phase · description · scope · envValue · bizValue · feasibility (each 1–5, 0 = not scored) · owner · materiality · qualPhases[] (read-only, from earlier versions) · ghgPhases[] (full GHG saving line tables per snapshot)
+
+Several aspects or opportunities can share one `_screeningId` (one guide word can hold more than one entry). Per-project legal notes are in `project.legalRefNotes`, keyed `<guide-word id>#<citation index>`.
 
 ---
 
