@@ -68,22 +68,19 @@ Structured guide-word screening to systematically identify risks and opportuniti
 ### Opportunity screening
 - Scope-based prompts: Scope 1 (direct), Scope 2 (energy / system), Scope 3 (materials, transport, lifecycle, re-use)
 - Each prompt opens the opportunity form with its type and the relevant GHG saving lines; the **description** starts empty and is required, and all scoring starts unset
-- **Guide words** button on every row: a popup with that category's guide words, taken from the "Sustainability opportunities" sheet of the screening template (S-TPL-022)
+- **Guide words** — a small **i** after each row's label; hovering or focusing it shows that category's guide words from the "Sustainability opportunities" sheet of the screening template (S-TPL-022). Escape or a click elsewhere closes it; a click on the **i** keeps it open (touch screens)
 - **Opportunity sub-descriptions always stay visible** after registration (same treatment as risk hints)
 - NOₓ tax warning for NOₓ-related opportunities
 - Skip / undo-skip. No search box and no blank form; a registered row links to its entries in the Opportunities register, and **+** adds another entry under the same category
 - **AI suggestion panel** — sends a query to Claude Sonnet via the Anthropic API to generate aspect suggestions for a given scenario
 
----
-
-## Guide
-
-Read-only reference taken from the "Sustainability opportunities" sheet of the screening template (S-TPL-022). For each of the 42 opportunity guide words in 12 categories it shows:
+#### Disciplines & phases view
+A second view of the Opportunities list (**Checklist** / **Disciplines & phases** switch at its top): a read-only table of the same template sheet. For each of the 42 opportunity guide words in 12 categories it shows:
 
 - **Disciplines involved** — Process · Mechanical · Piping layout · Structural · Electrical · Instrument controls · HVAC · Tech safety · PRE PRB
 - **Phase of savings** — Project phase study / execution · Installation & commissioning · Operation & maintenance · End of life / decommissioning
 
-An **x** is a mark in the template. Nothing on this tab is stored with the project. The data lives in `OPP_GUIDE` in `src/App.jsx`; the template's spelling slips are corrected, its wording is otherwise unchanged.
+An **x** is a mark in the template. Nothing in this view is stored with the project. The data lives in `OPP_GUIDE` in `src/App.jsx`; the template's spelling slips are corrected, its wording is otherwise unchanged.
 
 ---
 
@@ -97,7 +94,7 @@ Full risk register. Aspects are added from the Screening tab; this tab edits, fi
 | Phase | EPCIC phase dropdown |
 | Area / sub-category | Free text |
 | Activity (guide words) | Pre-filled from screening hint |
-| Environmental aspect | Main aspect description |
+| Environmental aspect | Set from the guide word when the risk is registered; shown in the register, dashboard and PDF. Not edited in the form |
 | Condition | Normal / Abnormal / Emergency |
 | Description — potential environmental impact | **Required**; starts empty with a hint |
 | Receptors | Affected receptors |
@@ -327,7 +324,7 @@ Cross-project view from the sidebar.
 - **Light / dark mode** toggle; persists to `localStorage`
 - **Zoom** — 5 levels (80–120%); persists across sessions
 - **CSS variable token system** — all colours derive from a single theme object (`T`); dark mode swaps the same tokens
-- Tabs: Dashboard · Screening · Guide · Risks · Opportunities · Environmental Budget · Waste Handling · BAT · Attendees · Changes · Settings
+- Tabs: Dashboard · Screening · Risks · Opportunities · Environmental Budget · Waste Handling · BAT · Attendees · Changes · Settings
 
 ---
 

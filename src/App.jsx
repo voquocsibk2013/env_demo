@@ -1350,7 +1350,8 @@ const NotScored = () => (
 );
 
 // A description is compulsory on both registers: nothing is saved without one.
-const aspectIncomplete = f => !(f.aspect||"").trim() || !(f.impact||"").trim();
+// The aspect text itself comes from the guide word and is not edited in the form.
+const aspectIncomplete = f => !(f.impact||"").trim();
 const RequiredHint = ({ show, children }) => show
   ? <span style={{ fontSize:11, color:T.amber, alignSelf:"center" }}>{children}</span> : null;
 
@@ -1457,7 +1458,6 @@ const AspectFormFields = ({ form, set, legal }) => {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
           <Fld label="Phase"><PhaseChips value={form.phase} onChange={v=>set("phase",v)}/></Fld>
           <Fld label="Activity area"><input value={form.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-          <Fld label="Environmental aspect" wide><input value={form.aspect} onChange={e=>set("aspect",e.target.value)} placeholder="e.g. Fugitive dust from excavation" style={iw}/></Fld>
           <Fld label="Description — potential environmental impact (required)" wide>
             <textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={3} aria-required="true"
               placeholder="Describe the impact for this project: what could happen, where, and to what"
@@ -1562,7 +1562,7 @@ function AspectForm({ aspect, onSave, onCancel, legalNotes }) {
 
       <AspectFormFields form={f} set={set} legal={legal}/>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-        <RequiredHint show={incomplete}>An aspect and a description are required</RequiredHint>
+        <RequiredHint show={incomplete}>A description is required</RequiredHint>
         <Btn onClick={onCancel}>Cancel</Btn>
         <Btn variant="primary" disabled={incomplete} onClick={()=>onSave(aspectForSave(f), noteEdits)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
       </div>
@@ -1774,16 +1774,16 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
   );
 }
 
-// Guide words of one or more template categories as a plain list:
-// the popup in Screening and the panel beside the description in the opportunity form.
-function OppGuideWords({ cats, maxHeight }) {
+// Guide words of one or more template categories as a plain list: the hover popup in Screening
+// (plain, no box of its own) and the panel beside the description in the opportunity form.
+function OppGuideWords({ cats, maxHeight, plain }) {
   if (!cats.length) return (
     <p style={{ margin:0, fontSize:12, color:T.muted, lineHeight:1.5 }}>
-      No guide words are linked to this opportunity type. The Guide tab lists them all.
+      No guide words are linked to this opportunity type. All of them are listed under Screening → Opportunities → Disciplines &amp; phases.
     </p>
   );
   return (
-    <div style={{ maxHeight, overflowY:maxHeight?"auto":undefined, border:"1px solid "+T.border,
+    <div style={plain ? undefined : { maxHeight, overflowY:maxHeight?"auto":undefined, border:"1px solid "+T.border,
                   borderRadius:6, background:T.surface2, padding:"8px 10px" }}>
       {cats.map(c => (
         <div key={c.id} style={{ marginBottom:cats.length>1?8:0 }}>
@@ -2505,57 +2505,63 @@ function LegalReferencesPanel({ search, notify = () => {}, project, onChange }) 
 }
 
 // ── Screening tab ─────────────────────────────────────────────────────────────
-// Guide words for one Screening opportunity button, as a modal popup. Same modal behaviour as the
-// Waste record drawer: focus moves in, Tab stays inside, Escape or the backdrop closes, focus returns.
-function GuideWordsDialog({ btn, onClose }) {
-  const panelRef = React.useRef(null);
-  const closeRef = React.useRef(onClose);
-  closeRef.current = onClose;
+// Guide words for one Screening opportunity button: a small "i" mark beside the row's label that
+// shows the template's guide words while it is hovered or focused. Escape or a click elsewhere closes
+// it; clicking the mark keeps it open (for touch screens). It opens above or to the left when the
+// row is close to the bottom or right edge of the window.
+function GuideWordsHint({ btn, color }) {
+  const [open, setOpen]     = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [place, setPlace]   = useState({ above:false, right:false });
+  const tipId   = "gw-" + React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const wrapRef = React.useRef(null);
+  const hovered = React.useRef(false);  // pointer over the mark or its popup
+  const show = () => {
+    const r = wrapRef.current && wrapRef.current.getBoundingClientRect();
+    if (r) setPlace({ above: window.innerHeight - r.bottom < 300 && r.top > window.innerHeight - r.bottom,
+                      right: r.left + 400 > window.innerWidth });
+    setOpen(true);
+  };
+  const hide = () => { setOpen(false); setPinned(false); };
   useEffect(() => {
-    const prevFocus = document.activeElement;
-    const panel = panelRef.current;
-    const focusables = () => panel ? Array.from(panel.querySelectorAll("button, [href]")).filter(el => !el.disabled) : [];
-    const first = focusables()[0];
-    if (first) first.focus(); else if (panel) panel.focus();
-    const onKey = e => {
-      if (e.key === "Escape") { closeRef.current(); return; }
-      if (e.key === "Tab" && panel) {
-        const f = focusables();
-        if (f.length === 0) { e.preventDefault(); return; }
-        const firstEl = f[0], lastEl = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
-        else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
-      }
-    };
+    if (!open) return;
+    const onKey  = e => { if (e.key === "Escape") hide(); };
+    const onDown = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) hide(); };
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      if (prevFocus && prevFocus.focus) prevFocus.focus();
-    };
-  }, []);
+    document.addEventListener("mousedown", onDown);
+    return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onDown); };
+  }, [open]);
   const label = btn.label.replace("\n"," ");
   return (
-    <div onClick={onClose}
-      style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:1000,
-               display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"8vh 16px", overflowY:"auto" }}>
-      <div onClick={e => e.stopPropagation()} ref={panelRef} tabIndex={-1}
-        role="dialog" aria-modal="true" aria-label={"Guide words: "+label}
-        style={{ background:T.surface, borderRadius:12, width:"100%", maxWidth:560,
-                 boxShadow:"var(--shadow-menu)", overflow:"hidden", outline:"none" }}>
-        <div style={{ padding:"14px 18px", borderBottom:"1px solid "+T.border, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:T.text }}>Guide words · {label}</h3>
-          <button className="hit" onClick={onClose} aria-label="Close"
-            style={{ fontSize:18, lineHeight:1, padding:"2px 8px", borderRadius:6, border:"none", background:"transparent", color:T.muted, cursor:"pointer" }}>×</button>
+    <span ref={wrapRef} style={{ position:"relative", display:"inline-flex", flexShrink:0 }}
+      onMouseEnter={() => { hovered.current = true; show(); }}
+      onMouseLeave={() => { hovered.current = false; if (!pinned) setOpen(false); }}
+      onFocus={show}
+      // a click on the popup's own text moves focus away from the mark: keep it open while pointed at
+      onBlur={e => { if (!pinned && !hovered.current && !e.currentTarget.contains(e.relatedTarget)) hide(); }}>
+      <button type="button" className="hit" aria-label={"Guide words for "+label}
+        aria-describedby={open ? tipId : undefined} aria-expanded={open}
+        onClick={() => { if (pinned) hide(); else { show(); setPinned(true); } }}
+        style={{ width:15, height:15, borderRadius:"50%", padding:0, cursor:"help", flexShrink:0,
+                 border:"1px solid "+(open ? color.head : T.border), background:open ? color.bg : "transparent",
+                 color:open ? color.head : T.muted, fontFamily:T.sans, fontSize:TYPE.data, fontWeight:700,
+                 lineHeight:"13px", textAlign:"center" }}>
+        i
+      </button>
+      {open && (
+        <div id={tipId} role="tooltip"
+          style={{ position:"absolute", zIndex:40, width:380, maxWidth:"80vw",
+                   ...(place.right ? { right:-8 } : { left:-8 }),
+                   ...(place.above ? { bottom:"100%", paddingBottom:6 } : { top:"100%", paddingTop:6 }) }}>
+          <div style={{ background:T.surface, border:"1px solid "+T.border, borderTop:"3px solid "+color.head,
+                        borderRadius:8, boxShadow:"var(--shadow-menu)", padding:"10px 12px", cursor:"auto" }}>
+            <p style={{ margin:"0 0 6px", fontSize:11, fontWeight:600, color:color.head }}>Guide words · {label}</p>
+            <OppGuideWords cats={oppGuideFor({ _screeningId:btn.id })} plain/>
+            <p style={{ margin:"7px 0 0", fontSize:TYPE.data, color:T.muted }}>From the screening template.</p>
+          </div>
         </div>
-        <div style={{ padding:"14px 18px 16px", maxHeight:"70vh", overflowY:"auto" }}>
-          {btn.desc && <p style={{ margin:"0 0 10px", fontSize:12, color:T.muted, lineHeight:1.55 }}>{btn.desc}</p>}
-          <OppGuideWords cats={oppGuideFor({ _screeningId:btn.id })}/>
-          <p style={{ margin:"10px 0 0", fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>
-            From the Sustainability opportunities sheet of the screening template. The Guide tab shows which disciplines and phases each one involves.
-          </p>
-        </div>
-      </div>
-    </div>
+      )}
+    </span>
   );
 }
 
@@ -2567,7 +2573,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
   const [riskNotes, setRiskNotes]     = useState({});   // legal-note edits made in the open risk form
   const [oppForm, setOppForm]         = useState(emptyOpp());
   const [legalSearch, setLegalSearch] = useState("");   // Legal references is the only searchable list
-  const [guideFor, setGuideFor]       = useState(null); // opportunity button whose guide-word popup is open
+  const [oppView, setOppView]         = useState("checklist"); // Opportunities: "checklist" | "disciplines"
   // Skips are workshop decisions, not view state — persisted on the project record
   const skipped    = project.screeningSkips || {};
   const toggleSkip = id => onChange({ ...project,
@@ -2627,7 +2633,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
       <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <SubTabs tabs={[{id:"risks",label:"Risks"},{id:"opps",label:"Opportunities"},{id:"legal",label:"Legal references"}]}
-          active={mode} onChange={m=>{ setMode(m); setView("guide"); setLegalSearch(""); setGuideFor(null); }}/>
+          active={mode} onChange={m=>{ setMode(m); setView("guide"); setLegalSearch(""); }}/>
         {/* Risks and Opportunities are added from their guide words only: no search, no blank form */}
         {mode === "legal" && (
           <input value={legalSearch} onChange={e=>setLegalSearch(e.target.value)}
@@ -2819,23 +2825,19 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                               style={{width:12,height:12,borderRadius:"50%",flexShrink:0,padding:0,
                                 background:T.surface,border:"1.5px solid "+col.head,cursor:"pointer"}}/>
                           )}
-                          {/* Text — on a registered row it is a link to the (first) register entry */}
-                          <div {...(isAdded ? clickable(()=>onJump("opportunities", entries[0].id), "Open "+entries[0].ref+": "+label) : {})}
-                            style={{flex:1,minWidth:0,opacity:isAdded?0.6:1,cursor:isAdded?"pointer":undefined}}>
-                            <span style={{fontSize:12,fontWeight:500,color:T.text,
-                              textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
-                              {label}
-                            </span>
-                            <span style={{fontSize:11,color:T.muted}}>{btn.sub}</span>
+                          <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:7}}>
+                            {/* Text — on a registered row it is a link to the (first) register entry */}
+                            <div {...(isAdded ? clickable(()=>onJump("opportunities", entries[0].id), "Open "+entries[0].ref+": "+label) : {})}
+                              style={{minWidth:0,opacity:isAdded?0.6:1,cursor:isAdded?"pointer":undefined}}>
+                              <span style={{fontSize:12,fontWeight:500,color:T.text,
+                                textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
+                                {label}
+                              </span>
+                              <span style={{fontSize:11,color:T.muted}}>{btn.sub}</span>
+                            </div>
+                            {/* The template's guide words for this category, shown on hover / focus */}
+                            <GuideWordsHint btn={btn} color={col}/>
                           </div>
-                          {/* The template's guide words for this category, in a popup */}
-                          <button className="hit" onClick={()=>setGuideFor(btn)}
-                            aria-label={"Guide words for "+label} aria-haspopup="dialog"
-                            style={{fontSize:11,padding:"2px 8px",borderRadius:12,
-                              border:"1px solid "+col.border,background:"transparent",
-                              color:col.head,cursor:"pointer",flexShrink:0,fontFamily:T.sans}}>
-                            Guide words
-                          </button>
                           {/* One reference per entry (each jumps to the register), then "+" for another entry */}
                           {entries.map(o=>(
                             <button key={o.id} className="hit" onClick={()=>onJump("opportunities", o.id)}
@@ -2869,8 +2871,27 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
             );
           };
 
+          // Two views of the same template sheet: the checklist used in the workshop, and the
+          // read-only disciplines / phase-of-savings table
+          const viewSwitch = (
+            <div role="group" aria-label="Opportunity screening view" style={{display:"flex",gap:4,marginBottom:"0.9rem"}}>
+              {[["checklist","Checklist"],["disciplines","Disciplines & phases"]].map(([k,l])=>(
+                <button key={k} type="button" aria-pressed={oppView===k} onClick={()=>setOppView(k)}
+                  style={{padding:"4px 12px",fontSize:11,borderRadius:12,cursor:"pointer",fontFamily:T.sans,
+                    fontWeight:oppView===k?600:400,
+                    border:"1px solid "+(oppView===k?T.purpleBd:T.border),
+                    background:oppView===k?T.purpleBg:"transparent",
+                    color:oppView===k?T.purple:T.muted}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          );
+          if (oppView === "disciplines") return (<div>{viewSwitch}<OppDisciplinesGuide/></div>);
+
           return(
             <div>
+              {viewSwitch}
               {/* Overall progress */}
               <div style={{marginBottom:"1rem"}}>
                 <div style={{height:4,background:T.border,borderRadius:2,overflow:"hidden",marginBottom:5}}>
@@ -2887,7 +2908,6 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                 btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],"blue",btn.id))}
               {renderScopeChecklist("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",OPP_SCOPE3_BUTTONS,
                 btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],"teal",btn.id))}
-              {guideFor && <GuideWordsDialog btn={guideFor} onClose={()=>setGuideFor(null)}/>}
             </div>
           );
         })()}
@@ -2902,7 +2922,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
               legal={{ notes:{ ...(project.legalRefNotes||{}), ...riskNotes },
                        setNote:(k, v) => setRiskNotes(p => ({ ...p, [k]:v })) }}/>
             <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-              <RequiredHint show={aspectIncomplete(riskForm)}>An aspect and a description are required</RequiredHint>
+              <RequiredHint show={aspectIncomplete(riskForm)}>A description is required</RequiredHint>
               {/* Clear starts the same guide word again; the form is never detached from its guide word */}
               <Btn onClick={() => { const it = riskItemById(riskForm._screeningId); if (it) startRisk(it, riskForm._color); }}>Clear</Btn>
               <button onClick={saveRisk} disabled={aspectIncomplete(riskForm)}
@@ -2933,10 +2953,10 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
   );
 }
 
-// ── Guide tab — involved disciplines and phase of savings per guide word ──────
+// ── Disciplines & phases — Screening → Opportunities, second view ──────────────
 // Read-only reference, laid out like the "Sustainability opportunities" sheet of the screening
 // template: one row per guide word, an x where the template marks a discipline or a phase.
-function GuideTab() {
+function OppDisciplinesGuide() {
   const scopeCol = s => s.startsWith("Scope 1") ? COLOR_MAP.red : s.startsWith("Scope 2") ? COLOR_MAP.blue : COLOR_MAP.teal;
   const th = { padding:"6px 5px", fontFamily:T.mono, fontWeight:500, fontSize:TYPE.data, color:T.muted,
                borderBottom:"1px solid "+T.border, letterSpacing:"0.04em", textTransform:"uppercase",
@@ -2955,7 +2975,7 @@ function GuideTab() {
         <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:700, color:T.text }}>Disciplines and phases guide</h3>
         <p style={{ margin:0, fontSize:12, color:T.muted, maxWidth:780, lineHeight:1.55 }}>
           For each opportunity guide word: which disciplines to involve, and the phase in which the saving falls.
-          An x is a mark on the Sustainability opportunities sheet of the screening template. Reference only — nothing on this tab is saved with the project.
+          An x is a mark on the Sustainability opportunities sheet of the screening template. Reference only; nothing here is saved with the project.
         </p>
       </div>
       <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
@@ -5613,7 +5633,7 @@ This cannot be undone.`)) return;
     </div>
   );
 
-  const TABS = ["dashboard","screening","guide","risks","opportunities","footprint","waste","bat","attendees","changes","settings"];
+  const TABS = ["dashboard","screening","risks","opportunities","footprint","waste","bat","attendees","changes","settings"];
   const tabBtnStyle = active => ({ padding:"8px 14px", fontSize:12, cursor:"pointer", fontFamily:T.sans,
     fontWeight:500, background:"transparent", border:"none", whiteSpace:"nowrap",
     borderBottom: active ? "2px solid "+T.teal : "2px solid transparent",
@@ -5627,7 +5647,6 @@ This cannot be undone.`)) return;
   const TAB_LABELS = {
     dashboard:     "Dashboard",
     screening:     "Screening",
-    guide:         "Guide",
     risks:         "Risks",
     opportunities: "Opportunities",
     footprint:     "Environmental Budget",
@@ -5930,8 +5949,6 @@ This cannot be undone.`)) return;
             else { const o = opps.find(x=>x.id===id); if (o) { setTab("opportunities"); setEditOpp(o); } }
           }}/>
       )}
-
-      {tab === "guide" && <GuideTab/>}
 
       {tab === "risks" && (
         <div>
