@@ -1210,6 +1210,21 @@ const newProject = () => {
   };
 };
 
+// Bulk actions used to store the change log as an item of itself: an array holding a copy of every
+// earlier entry, with the bulk entry last. The Changes tab cannot show such an item, so the bulk
+// change was hidden. This puts back the entry each one was meant to add (the copies before it are
+// entries the log already has) and keeps anything else as it is. Used on load and on import.
+const repairNestedChangelog = (log) => {
+  if (!Array.isArray(log)) return { log, recovered:0 };
+  let recovered = 0;
+  const fixed = log.map(e => {
+    const last = Array.isArray(e) ? e[e.length-1] : null;
+    if (last && typeof last === "object" && !Array.isArray(last)) { recovered++; return last; }
+    return e;
+  });
+  return { log: recovered ? fixed : log, recovered };
+};
+
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const iw = { width:"100%", boxSizing:"border-box" };
 
@@ -5138,6 +5153,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
 
         // ── Sanitise every field we'll consume ────────────────────────────
         const ensureArr = (v) => Array.isArray(v) ? v.filter(x => x && typeof x === "object") : [];
+        // Bulk changes stored as nested change-log items are put back (see repairNestedChangelog).
+        const repairedLog = repairNestedChangelog(ensureArr(src.changelog));
 
         const imported = {
           // Safe spread of primitive / object fields
@@ -5148,7 +5165,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
           // Arrays — coerce to [] if missing or wrong type
           aspects:           ensureArr(src.aspects),
           opportunities:     ensureArr(src.opportunities),
-          changelog:         ensureArr(src.changelog),
+          changelog:         repairedLog.log,
           wasteRows:         Array.isArray(src.wasteRows)         ? src.wasteRows         : undefined,
           attendeeSessions:  ensureArr(src.attendeeSessions),
           // Objects — coerce to {} if missing or wrong type
@@ -5180,7 +5197,8 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
         onChange(imported);
         notify(
           `Project "${imported.name || "Untitled"}" imported — ` +
-          `${imported.aspects.length} risks · ${imported.opportunities.length} opportunities`
+          `${imported.aspects.length} risks · ${imported.opportunities.length} opportunities` +
+          (repairedLog.recovered ? ` · change log repaired (${repairedLog.recovered} hidden bulk change${repairedLog.recovered!==1?"s":""} restored)` : "")
         );
       } catch (err) {
         alert("Could not read file:\n" + err.message + "\n\nMake sure it is a valid .envproject JSON file.");
@@ -5307,8 +5325,8 @@ This cannot be undone.`)) return;
 
 This cannot be undone.`)) return;
     const kept = aspects.filter(a=>!selectedAsp.has(a.id));
-    const log  = logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed",[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
-    onChange({ ...project, aspects:kept, changelog:[...(project.changelog||[]), log] });
+    onChange({ ...project, aspects:kept,
+               changelog:logChange("Bulk deleted aspects", selectedAsp.size+" aspect(s) removed",[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]) });
     setSelectedAsp(new Set());
   };
   const bulkSetAspStatus = (status) => {
@@ -5322,8 +5340,8 @@ This cannot be undone.`)) return;
 
 This cannot be undone.`)) return;
     const kept = opps.filter(o=>!selectedOpp.has(o.id));
-    const log  = logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed",[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]);
-    onChange({ ...project, opportunities:kept, changelog:[...(project.changelog||[]), log] });
+    onChange({ ...project, opportunities:kept,
+               changelog:logChange("Bulk deleted opportunities", selectedOpp.size+" opportunity(s) removed",[{k:"Refs",v:opps.filter(o=>selectedOpp.has(o.id)).map(o=>o.ref).join(", ")}]) });
     setSelectedOpp(new Set());
   };
   const bulkSetOppStatus = (status) => {
@@ -9717,6 +9735,7 @@ export default function App() {
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showLegalRefs, setShowLegalRefs] = useState(false);  // global, editable — Portfolio-level, not tied to a project
   const [saveError, setSaveError] = useState(null);
+  const [logRepairNote, setLogRepairNote] = useState(null);   // projects whose change log was repaired on load
 
   useEffect(() => {
     let cancelled = false;
@@ -9736,7 +9755,20 @@ export default function App() {
         }
         if (!cancelled && d) {
           if (d.projects && d.projects.length) {
-            setProjects(d.projects);
+            let list = d.projects;
+            if (Array.isArray(list)) {
+              // Put back bulk changes stored as nested change-log items (see repairNestedChangelog).
+              // The save effect below writes them back, so the notice names each project changed.
+              const named = [];
+              list = list.map(p => {
+                const r = repairNestedChangelog(p && p.changelog);
+                if (!r.recovered) return p;
+                named.push(`${p.name || "Unnamed project"} (${r.recovered})`);
+                return { ...p, changelog:r.log };
+              });
+              if (named.length) setLogRepairNote(named.join(", "));
+            }
+            setProjects(list);
             setActiveId(d.activeId || d.projects[0].id);
           }
           if (d.theme === "dark") { setIsDark(true); applyTheme("dark"); }
@@ -9844,6 +9876,18 @@ export default function App() {
                onPortfolio={()=>{ setShowPortfolio(v=>!v); setShowLegalRefs(false); }} portfolioActive={showPortfolio}
                onLegalRefs={()=>{ setShowLegalRefs(v=>!v); setShowPortfolio(false); }} legalRefsActive={showLegalRefs}/>
       <div style={{ flex:1, overflowX:"hidden", display:"flex", flexDirection:"column", zoom }}>
+        {logRepairNote && (
+          <div role="status" style={{ display:"flex", alignItems:"center", gap:12, justifyContent:"space-between",
+                      padding:"8px 20px", background:T.tealBg, borderBottom:"1px solid "+T.tealBd,
+                      fontSize:12, color:T.text, fontFamily:T.sans }}>
+            <span><strong>Change log repaired</strong> — hidden bulk changes restored in {logRepairNote}.</span>
+            <button type="button" onClick={()=>setLogRepairNote(null)}
+              style={{ flexShrink:0, background:"transparent", color:T.teal, border:"1px solid "+T.tealBd,
+                       borderRadius:5, padding:"3px 12px", fontSize:12, cursor:"pointer", fontFamily:T.sans }}>
+              Dismiss
+            </button>
+          </div>
+        )}
         {showLegalRefs ? (
           <div style={{ flex:1, overflow:"auto", padding:"1.5rem 1.75rem" }}>
             <h1 style={{ margin:"0 0 3px", fontSize:18, fontWeight:700, color:"var(--text)" }}>Legal &amp; regulatory references</h1>
