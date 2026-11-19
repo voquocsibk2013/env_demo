@@ -309,6 +309,47 @@ const OPP_SCOPE3_BUTTONS = [
     desc:"Opportunity to reduce Scope 3 Cat 6 / Cat 9 emissions through remote monitoring, digital twins or automated inspection replacing physical presence." },
 ];
 
+// The three opportunity scopes as Screening lists them: header, line under it, colour (a COLOR_MAP
+// key) and buttons. The opportunity form's Category box names the scope with the same header.
+const OPP_SCOPES = [
+  { key:"Scope 1", title:"Scope 1 — Direct Emissions",      sub:"Emissions directly from project operations", color:"red",  buttons:OPP_SCOPE1_BUTTONS },
+  { key:"Scope 2", title:"Scope 2 — Indirect Emissions",    sub:"Energy consumption and purchased utilities", color:"blue", buttons:OPP_SCOPE2_BUTTONS },
+  { key:"Scope 3", title:"Scope 3 — Value Chain Emissions", sub:"Upstream and downstream indirect emissions", color:"teal", buttons:OPP_SCOPE3_BUTTONS },
+];
+// An opportunity's scope: from a scope type ("Scope 2 — …"), else from the Screening button it came
+// from; null for an older free type without either. Not from its colour: opportunities made from the
+// earlier stage guide words carry their section's colour (teal, green, amber, purple), not a scope's.
+function oppScopeOf(o) {
+  const t = (o && o.type) || "";
+  return OPP_SCOPES.find(s => t.startsWith(s.key + " "))
+      || (o && o._screeningId && OPP_SCOPES.find(s => s.buttons.some(b => b.id === o._screeningId)))
+      || null;
+}
+
+// The opportunity form's type list, as [value, label] per scope
+const OPP_TYPE_GROUPS = [
+  { label:"Scope 1 — Direct Emissions", options:[["Scope 1 — CO₂","CO₂ reduction"], ["Scope 1 — NOₓ","NOₓ reduction"],
+      ["Scope 1 — CH₄","CH₄ / methane reduction"], ["Scope 1 — GWP gases","GWP gases / refrigerants reduction"],
+      ["Scope 1 — Other","Other direct emission reduction"]] },
+  { label:"Scope 2 — Indirect Emissions", options:[["Scope 2 — System optimisation","System / component optimisation"],
+      ["Scope 2 — Design optimisation","Layout, design or location optimisation"], ["Scope 2 — Alternative resources","Alternative resources"]] },
+  { label:"Scope 3 — Value Chain", options:[["Scope 3 — Material","Material"], ["Scope 3 — Chemicals","Chemicals"],
+      ["Scope 3 — Lifecycle","Lifecycle"], ["Scope 3 — Re-use","Re-use"], ["Scope 3 — Re-cycle","Re-cycle"],
+      ["Scope 3 — Waste","Waste evaluation"], ["Scope 3 — Transport","Transport"],
+      ["Scope 3 — Remote technology","Remote technology / Automated solutions"]] },
+];
+const OPP_TYPE_OPTIONS = OPP_TYPE_GROUPS.flatMap(g => g.options);
+// The list entry a stored type shows as. Screening writes "<scope> — <button label>", which for four
+// buttons is an option's label rather than its value ("Scope 3 — Waste evaluation"); that shows as the
+// option. Any other unlisted type (an older free type such as "Low-Carbon Technology") shows as itself.
+// Only the display is matched: the stored text changes only when another type is picked.
+function oppTypeValue(type) {
+  if (!type || OPP_TYPE_OPTIONS.some(([v]) => v === type)) return type || "";
+  const m = /^(Scope [123]) — (.+)$/.exec(type);
+  const hit = m && OPP_TYPE_OPTIONS.find(([v, l]) => v.startsWith(m[1] + " ") && l === m[2]);
+  return hit ? hit[0] : type;
+}
+
 // ── Opportunity guide words, involved disciplines and phase of savings ────────
 // Transcribed from the "Sustainability opportunities" sheet of the S-TPL-022 template.
 // `buttons` lists the Screening buttons a category explains. Every guide word carries one
@@ -1001,7 +1042,8 @@ function matrixZone(c, p) {
   return "MEDIUM";
 }
 function calcSig(a) {
-  // A legal threshold or stakeholder concern makes an aspect significant on its own, scored or not
+  // A legal requirement or client/stakeholder requirement (stored as legalThreshold / stakeholderConcern)
+  // makes an aspect significant on its own, scored or not
   if (a.legalThreshold === "Y" || a.stakeholderConcern === "Y") return "SIGNIFICANT";
   const score = calcScore(a);
   if (score === null) return null;   // not scored yet
@@ -1075,13 +1117,14 @@ function inferOppType(oppText) {
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 // Scoring starts unset: 0 / "" mean "not scored yet" everywhere (calcScore → null), never "lowest".
+// Status starts unset too: the user picks Action or Info before saving (aspectMissing).
 const emptyAspect = () => ({
   phase:"", area:"", activity:"", aspect:"", condition:"Normal",
   isAbnormal:false, abnormalType:"", abnormalDesc:"",
   impact:"", receptors:"", recSensitivity:"", scale:"",
   severity:0, probability:0, duration:"",
   legalThreshold:"", stakeholderConcern:"",
-  control:"", legalRef:"", legalRefExtra:"", owner:"", status:"Action", _color:"",
+  control:"", legalRef:"", legalRefExtra:"", owner:"", status:"", _color:"",
   createdAt:"", updatedAt:""
 });
 // ── GHG saving calculation lines (based on Norwegian EPCIC calculation framework) ─
@@ -1116,9 +1159,15 @@ const emptyOpp = () => ({
   // versions stay readable; nothing writes to it any more.
   qualPhases: [],   // [{id, label, date, note}] — read-only legacy
   ghgPhases:  [],   // [{id, label, date, note, lines:[]}]
-  // lines shape: {id, custom, scope, type, unit, reduction, baseline, cf, ref, savingType}
-  // custom:false = standard GHG_LINES row; custom:true = user-added row
+  // lines shape: {id, custom, scope, type, unit, reduction, baseline, cf, ref, savingType, added?}
+  // custom:false = standard GHG_LINES row; added:true = a standard row added from the full table,
+  // shown beside the rows of the opportunity's type. custom:true = a free row from earlier versions:
+  // still shown and edited, no longer added.
 });
+
+// A standard savings row as a phase stores it
+const ghgLineRow = l => ({ id:l.id, custom:false, scope:l.scope, type:l.type, unit:l.unit,
+                           reduction:"", baseline:"", cf:l.cfDefault, ref:"", savingType:"identified" });
 
 // ── GhgPhase factory ──────────────────────────────────────────────────────────
 const emptyGhgPhase = (label, fromPhase) => ({
@@ -1128,10 +1177,7 @@ const emptyGhgPhase = (label, fromPhase) => ({
   note: "",
   lines: fromPhase
     ? JSON.parse(JSON.stringify(fromPhase.lines))
-    : GHG_LINES.map(l=>({
-        id:l.id, custom:false, scope:l.scope, type:l.type, unit:l.unit,
-        reduction:"", baseline:"", cf:l.cfDefault, ref:"", savingType:"identified"
-      }))
+    : GHG_LINES.map(ghgLineRow)
 });
 
 // ── Migration: any saved format → current format ──────────────────────────────
@@ -1228,11 +1274,22 @@ function condStyle(cd) {
            display:"inline-block", background:c.bg, color:c.c, letterSpacing:"0.05em", textTransform:"uppercase" };
 }
 
-function Fld({ label, children, wide }) {
+const FLD_LABEL = { fontFamily:T.mono, fontSize:10, color:T.muted, display:"block", marginBottom:5,
+                    letterSpacing:"0.05em", textTransform:"uppercase" };
+// Form grid columns: n columns on a wide screen, fewer (down to one) in a narrow window, none narrower
+// than min px. Cells that should span the row use gridColumn "1 / -1" (Fld's `wide`).
+const formCols = (n, min) => `repeat(auto-fit, minmax(max(${min}px, calc((100% - ${(n - 1) * 14}px) / ${n})), 1fr))`;
+// A read-only value from the screening template (category, guide words), in the same box in both forms
+const RefBox = ({ children, style }) => (
+  <div style={{ border:"1px solid "+T.border, borderRadius:6, background:T.surface2, padding:"6px 10px",
+                fontSize:12, lineHeight:1.5, boxSizing:"border-box", color:children ? T.text : T.faint, ...style }}>
+    {children || "—"}
+  </div>
+);
+function Fld({ label, children, wide, style }) {
   return (
-    <div style={wide ? {gridColumn:"span 2"} : {}}>
-      <label style={{ fontFamily:T.mono, fontSize:10, color:T.muted, display:"block", marginBottom:5,
-                      letterSpacing:"0.05em", textTransform:"uppercase" }}>{label}</label>
+    <div style={{ ...(wide ? {gridColumn:"1 / -1"} : {}), ...style }}>
+      <label style={FLD_LABEL}>{label}</label>
       {children}
     </div>
   );
@@ -1354,9 +1411,19 @@ const NotScored = () => (
                  background:T.surface2, color:T.muted, border:"1px dashed "+T.border }}>Not scored</span>
 );
 
-// A description is compulsory on both registers: nothing is saved without one.
-// The aspect text itself comes from the guide word and is not edited in the form.
-const aspectIncomplete = f => !(f.impact||"").trim();
+// A description is compulsory on both registers: nothing is saved without one. A risk also needs a
+// status: a new one starts with neither Action nor Info. An Action risk also needs its consequence,
+// probability, key control measure and owner; an Info risk nothing more. A status from before the
+// Action / Info switch (Open, Closed…) is left as it is. The aspect text itself comes from the guide
+// word and is not edited in the form.
+function aspectMissing(f) {
+  const blank = v => !String(v || "").trim();
+  const need = [["description", blank(f.impact)], ["status", blank(f.status)]];
+  if (f.status === "Action") need.push(["consequence", !f.severity], ["probability", !f.probability],
+                                       ["key control measure", blank(f.control)], ["owner", blank(f.owner)]);
+  return need.filter(([, missing]) => missing).map(([name]) => name);
+}
+const aspectIncomplete = f => aspectMissing(f).length > 0;
 const RequiredHint = ({ show, children }) => show
   ? <span style={{ fontSize:11, color:T.amber, alignSelf:"center" }}>{children}</span> : null;
 
@@ -1383,7 +1450,8 @@ function aspectForSave(f) {
 
 // Legal references of a risk. A guide-word aspect shows the same citations, names, links and
 // project notes as Screening → Legal references (legal = { notes, setNote }); anything else
-// keeps the single free-text box.
+// keeps the single free-text box. Free text about a legal or client requirement (legalRefExtra)
+// sits with the requirement flags under Significance scoring.
 function LegalRefsField({ form, set, legal }) {
   const [overrides] = useState(readLegalOverrides);
   const [openKey, setOpenKey] = useState(null);
@@ -1448,31 +1516,151 @@ function LegalRefsField({ form, set, legal }) {
           </div>
         ))}
       </div>
-      <p style={{ margin:"5px 0 8px", fontSize:TYPE.data, color:T.muted, lineHeight:1.5 }}>
-        Same references and notes as Screening → Legal references. Names and links are changed on the Legal references page.
-      </p>
-      <input value={form.legalRefExtra||""} onChange={e=>set("legalRefExtra",e.target.value)}
-        placeholder="Other reference or client requirement (optional)" style={iw}/>
     </Fld>
   );
 }
 
+// Potential environmental impacts per risk guide word (RISK_CATEGORIES item id → short prompts),
+// listed beside the description in the risk form the way the opportunity form lists its guide words.
+// Empty until the list is supplied; the box then shows the impacts for the risk's guide word.
+const RISK_IMPACTS = {};
+function RiskImpactPrompts({ id }) {
+  const items = RISK_IMPACTS[id] || [];
+  return (
+    <div style={{ minHeight:60, maxHeight:190, overflowY:"auto", boxSizing:"border-box", marginBottom:5,
+                  border:"1px solid "+T.border, borderRadius:6, background:T.surface2, padding:"8px 10px" }}>
+      {items.length > 0 && (
+        <ul style={{ margin:0, paddingLeft:16 }}>
+          {items.map((t, i) => <li key={i} style={{ fontSize:12, color:T.text, lineHeight:1.5, marginBottom:2 }}>{t}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// The guide words of the Screening row a risk was made from (the row's hint; its sub-category is the
+// activity area). Read-only, from the template. A risk without a guide word shows its own activity text.
+function RiskGuideWords({ form }) {
+  const item = riskItemById(form._screeningId);
+  return <RefBox>{item ? item.hint : form.activity}</RefBox>;
+}
+
+// The Screening category of a risk: its guide word's category, or for an older risk without one, the
+// category with its colour; null when neither is known. The register's Category column uses its name.
+function riskCategoryFor(a) {
+  const byItem = a._screeningId && RISK_CATEGORIES.find(c => c.items.some(i => i.id === a._screeningId));
+  return byItem || (a._color && RISK_CATEGORIES.find(c => c.color === a._color)) || null;
+}
+const riskCategoryOf = a => { const c = riskCategoryFor(a); return c ? c.cat : null; };
+
+// A read-only Category box in its Screening colour (a COLOR_MAP key), tinted and edged like the
+// category's header in Screening. The words take the colour's text shade, which contrasts more with
+// the tint than the heading shade does (darker in the light theme, lighter in the dark one). The plain box with "—" when there is no category. Either is a
+// tag as wide as its text (a long name wraps inside the form), not a full-width banner.
+const TAG_FIT = { width:"fit-content", maxWidth:"100%" };
+function CategoryBox({ label, color }) {
+  const col = label ? COLOR_MAP[color] : null;
+  if (!col) return <RefBox style={TAG_FIT}>{label}</RefBox>;
+  return (
+    <div style={{ border:"1px solid "+col.border, borderLeft:"3px solid "+col.head, borderRadius:6, background:col.bg,
+                  padding:"6px 10px", fontSize:12, fontWeight:600, lineHeight:1.5, boxSizing:"border-box", color:col.text, ...TAG_FIT }}>
+      {label}
+    </div>
+  );
+}
+
+// One choice as a row of pill buttons, the chosen one in its colour: options are
+// { value, label, tone:{c,bg,bd}, title? }. With showSaved, a stored value that is none of the options
+// shows as an extra chosen pill (neutral), so the form never hides what is saved; picking another
+// option replaces it.
+function PillSwitch({ label, options, value, onChange, showSaved }) {
+  const shown = showSaved && value && !options.some(o => o.value === value)
+    ? [...options, { value, label:value, tone:{ c:T.slate, bg:T.slateBg, bd:T.slateBd } }] : options;
+  return (
+    <div role="group" aria-label={label} style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+      {shown.map(o => {
+        const on = value === o.value, c = o.tone;
+        return (
+          <button key={o.value} type="button" aria-pressed={on} title={o.title} onClick={() => onChange(o.value)}
+            style={{ padding:"4px 14px", fontSize:11, borderRadius:12, cursor:"pointer", fontFamily:T.sans,
+                     fontWeight:on?600:400, border:"1px solid "+(on?c.bd:T.border),
+                     background:on?c.bg:"transparent", color:on?c.c:T.muted }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Status as an Action / Info switch, with neither chosen on a new risk. An Action risk shows its key
+// control measure, legal references and owner, and needs them (see aspectMissing); an Info risk, or
+// one with no status yet, hides them, keeping anything entered. A status from before the switch
+// (Open, Closed…) shows as a third, chosen button until Action or Info is picked.
+const STATUS_PILLS = STATUSES.map(s => ({ value:s, label:s,
+  tone: s === "Action" ? { c:T.red, bg:T.redBg, bd:T.redBd } : { c:T.slate, bg:T.slateBg, bd:T.slateBd } }));
+const StatusSwitch = ({ value, onChange }) => <PillSwitch label="Status" options={STATUS_PILLS} value={value} onChange={onChange} showSaved/>;
+
+// CSRD materiality of an opportunity, stored as the full option text (the register shows the part
+// before the bracket), in the register's colours: inside-out teal, outside-in blue, both purple
+const MATERIALITY_PILLS = [
+  { value:"Inside-out (positive impact on environment)", label:"Inside-out", title:"Positive impact on environment",
+    tone:{ c:T.teal, bg:T.tealBg, bd:T.tealBd } },
+  { value:"Outside-in (financial / business benefit)", label:"Outside-in", title:"Financial / business benefit",
+    tone:{ c:T.blue, bg:T.blueBg, bd:T.blueBd } },
+  { value:"Both", label:"Both", tone:{ c:T.purple, bg:T.purpleBg, bd:T.purpleBd } },
+];
+
+// The risk score chip and its label take the colour of the significance, as the opportunity form's
+// priority score takes its quadrant's; neutral while the risk is not scored
+const SIG_TONE = { SIGNIFICANT:[T.redBg, T.red], MEDIUM:[T.amberBg, T.amber], Low:[T.greenBg, T.green] };
+const NO_TONE  = [T.surface2, T.muted];
+// One cell of a two-box row: its label and box use the row's two tracks (subgrid), so both boxes start
+// level when one label wraps, and in a narrow window each label stays above its own box
+const PAIR_CELL = { display:"grid", gridRow:"span 2", gridTemplateRows:"subgrid" };
+
 const AspectFormFields = ({ form, set, legal }) => {
-  const score = calcScore(form);
-  const sig   = calcSig(form);
+  const score  = calcScore(form);
+  const sig    = calcSig(form);
+  const action = form.status === "Action";
+  const cat    = riskCategoryFor(form);
+  // The free-text reference belongs mainly to a Yes on either requirement. Text entered earlier stays
+  // visible, and the box stays open while it has focus, so clearing it to retype never removes it.
+  const [refFocus, setRefFocus] = useState(false);
+  const showReqRef = form.legalThreshold === "Y" || form.stakeholderConcern === "Y"
+                  || !!(form.legalRefExtra || "").trim() || refFocus;
+  // A Yes on a requirement makes a risk significant before it has a score; the chip then stays at N/A
+  const [chipBg, chipC] = score === null ? NO_TONE : SIG_TONE[sig] || NO_TONE;
+  const sigC = (SIG_TONE[sig] || NO_TONE)[1];
+  const grid2 = { display:"grid", gridTemplateColumns:formCols(2, 260), gap:"10px 14px" };
   return (
     <>
+      {/* Sections run: Activity details, Controls & management (Action only), Significance scoring, all with
+          the risk's red rail. Scoring is tinted red, as the opportunity form's priority card is tinted teal;
+          otherwise colour marks meaning only (status, the result).
+          Activity details are laid out like the opportunity form: the description beside the guide word's
+          potential impacts, and Status in the last row. Grids drop to one column in a narrow window. */}
       <Card style={{ marginBottom:"1rem" }} accent={T.red}>
         <SectionLabel>Activity details</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-          <Fld label="Phase"><PhaseChips value={form.phase} onChange={v=>set("phase",v)}/></Fld>
+        <div style={grid2}>
+          <Fld label="Category" wide><CategoryBox label={cat && cat.cat} color={cat && cat.color}/></Fld>
           <Fld label="Activity area"><input value={form.area} onChange={e=>set("area",e.target.value)} placeholder="e.g. Earthworks" style={iw}/></Fld>
-          <Fld label="Description — potential environmental impact (required)" wide>
-            <textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={3} aria-required="true"
-              placeholder="Describe the impact for this project: what could happen, where, and to what"
-              style={{ ...iw, resize:"vertical" }}/>
-          </Fld>
-          <Fld label="Abnormal condition" wide>
+          <Fld label="Guide words"><RiskGuideWords form={form}/></Fld>
+          <Fld label="Phase" wide><PhaseChips value={form.phase} onChange={v=>set("phase",v)}/></Fld>
+          <div style={{ gridColumn:"1 / -1", display:"grid", gridTemplateColumns:formCols(2, 260), columnGap:14, rowGap:5 }}>
+            <div style={PAIR_CELL}>
+              <label style={{ ...FLD_LABEL, marginBottom:0 }}>Description — potential environmental impact (required)</label>
+              <textarea value={form.impact} onChange={e=>set("impact",e.target.value)} rows={8} aria-required="true"
+                placeholder="Describe the impact for this project: what could happen, where, and to what"
+                style={{ ...iw, resize:"vertical", display:"block", marginBottom:5 }}/>
+            </div>
+            <div style={PAIR_CELL}>
+              <label style={{ ...FLD_LABEL, marginBottom:0 }}>Potential environmental impacts</label>
+              <RiskImpactPrompts id={form._screeningId}/>
+            </div>
+          </div>
+          <Fld label="Status"><StatusSwitch value={form.status} onChange={v=>set("status",v)}/></Fld>
+          <Fld label="Abnormal condition">
             <label className="hit" style={{ display:"inline-flex", alignItems:"center", gap:8, cursor:"pointer" }}>
               <input type="checkbox" checked={!!form.isAbnormal}
                 onChange={e => { set("isAbnormal", e.target.checked); if (!e.target.checked) { set("abnormalType",""); set("abnormalDesc",""); } }}
@@ -1493,17 +1681,26 @@ const AspectFormFields = ({ form, set, legal }) => {
         </div>
       </Card>
 
-      <Card style={{ marginBottom:"1rem", background:T.tealBg }} accent={T.teal}>
+      {/* Only an Action risk has controls, legal references and an owner, and needs the measure and owner */}
+      {action && (
+        <Card style={{ marginBottom:"1rem" }} accent={T.red}>
+          <SectionLabel>Controls &amp; management</SectionLabel>
+          <div style={grid2}>
+            <Fld label="Key control measure" wide><textarea value={form.control} onChange={e=>set("control",e.target.value)} rows={3} aria-required="true" style={{ ...iw, resize:"vertical" }}/></Fld>
+            <LegalRefsField form={form} set={set} legal={legal}/>
+            <Fld label="Owner"><input value={form.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" aria-required="true" style={iw}/></Fld>
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ marginBottom:"1rem", background:T.redBg }} accent={T.red}>
         <SectionLabel>Significance scoring</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px 14px", marginBottom:10 }}>
-          {/* Every scoring choice starts at "—" (not set); nothing is pre-selected on the user's behalf */}
-          <Fld label="Receptor sensitivity"><select value={form.recSensitivity||""} onChange={e=>set("recSensitivity",e.target.value)} style={iw}><option value="">—</option>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-          <Fld label="Scale"><select value={form.scale||""} onChange={e=>set("scale",e.target.value)} style={iw}><option value="">—</option>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
-          <Fld label="Duration"><select value={form.duration||""} onChange={e=>set("duration",e.target.value)} style={iw}><option value="">—</option>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px 14px" }}>
+        {/* Every scoring choice starts at "—" (not set); nothing is pre-selected on the user's behalf.
+            An Action risk needs C and P (aspectMissing). Cells align at the bottom so the dropdowns stay
+            level when a long label wraps in a narrow window. */}
+        <div style={{ display:"grid", gridTemplateColumns:formCols(4, 150), gap:"10px 14px", alignItems:"end" }}>
           <Fld label="Consequence (C1–C5)">
-            <select value={form.severity||0} onChange={e=>set("severity",+e.target.value)} style={iw}>
+            <select value={form.severity||0} onChange={e=>set("severity",+e.target.value)} aria-required={action} style={iw}>
               <option value={0}>—</option>
               {[{v:1,l:"1 — Negligible"},{v:2,l:"2 — Minor"},{v:3,l:"3 — Moderate"},{v:4,l:"4 — Major"},{v:5,l:"5 — Catastrophic"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
@@ -1511,43 +1708,48 @@ const AspectFormFields = ({ form, set, legal }) => {
             </select>
           </Fld>
           <Fld label="Probability (P1–P5)">
-            <select value={form.probability||0} onChange={e=>set("probability",+e.target.value)} style={iw}>
+            <select value={form.probability||0} onChange={e=>set("probability",+e.target.value)} aria-required={action} style={iw}>
               <option value={0}>—</option>
               {[{v:1,l:"1 — Very unlikely (0–1%)"},{v:2,l:"2 — Unlikely (1–5%)"},{v:3,l:"3 — Possible (5–25%)"},{v:4,l:"4 — Likely (25–50%)"},{v:5,l:"5 — Very likely (50–100%)"}].map(o=>(
                 <option key={o.v} value={o.v}>{o.l}</option>
               ))}
             </select>
           </Fld>
-          <Fld label="Legal threshold"><select value={form.legalThreshold||""} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option value="">—</option><option>N</option><option>Y</option></select></Fld>
-          <Fld label="Stakeholder concern"><select value={form.stakeholderConcern||""} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option value="">—</option><option>N</option><option>Y</option></select></Fld>
+          {/* Stored as legalThreshold / stakeholderConcern; a Y makes the aspect significant (calcSig) */}
+          <Fld label="Legal requirement"><select value={form.legalThreshold||""} onChange={e=>set("legalThreshold",e.target.value)} style={iw}><option value="">—</option><option>N</option><option>Y</option></select></Fld>
+          <Fld label="Client/stakeholder requirement"><select value={form.stakeholderConcern||""} onChange={e=>set("stakeholderConcern",e.target.value)} style={iw}><option value="">—</option><option>N</option><option>Y</option></select></Fld>
+          {showReqRef && (
+            <Fld label="Reference" wide>
+              <input value={form.legalRefExtra||""} onChange={e=>set("legalRefExtra",e.target.value)} aria-label="Reference"
+                onFocus={() => setRefFocus(true)} onBlur={() => setRefFocus(false)}
+                placeholder="e.g. permit condition or client specification (optional)" style={iw}/>
+            </Fld>
+          )}
         </div>
-        <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.tealBd,
+        <div style={{ display:"grid", gridTemplateColumns:formCols(3, 150), gap:"10px 14px", marginTop:10 }}>
+          <Fld label="Receptor sensitivity"><select value={form.recSensitivity||""} onChange={e=>set("recSensitivity",e.target.value)} style={iw}><option value="">—</option>{SENSITIVITIES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Scale"><select value={form.scale||""} onChange={e=>set("scale",e.target.value)} style={iw}><option value="">—</option>{SCALES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Duration"><select value={form.duration||""} onChange={e=>set("duration",e.target.value)} style={iw}><option value="">—</option>{DURATIONS.map(d=><option key={d}>{d}</option>)}</select></Fld>
+        </div>
+        {/* Laid out like the opportunity form's score line: a rule above, the score in a chip, then the result */}
+        <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid "+T.redBd,
                       display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-          <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>
-            Risk score:{" "}
-            <strong style={{ fontSize:22, color: score===null ? T.muted : sig==="SIGNIFICANT" ? T.red : sig==="MEDIUM" ? T.amber : T.green }}>
-              {score===null ? "N/A" : score}
-            </strong>
-          </span>
-          {sig
-            ? <span style={sigStyle(sig)}>{sig}</span>
-            : <span style={{ fontSize:11, color:T.muted }}>Not scored — choose a consequence and a probability</span>}
-          {form.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal threshold</span>}
-          {form.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: stakeholder concern</span>}
-        </div>
-      </Card>
-
-      <Card style={{ marginBottom:"1rem" }}>
-        <SectionLabel>Controls &amp; management</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 14px" }}>
-          <Fld label="Key control measure" wide><textarea value={form.control} onChange={e=>set("control",e.target.value)} rows={3} style={{ ...iw, resize:"vertical" }}/></Fld>
-          <LegalRefsField form={form} set={set} legal={legal}/>
-          <Fld label="Owner"><input value={form.owner} onChange={e=>set("owner",e.target.value)} placeholder="Name or role" style={iw}/></Fld>
-          <Fld label="Status"><select value={form.status} onChange={e=>set("status",e.target.value)} style={iw}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <span style={{ fontFamily:T.mono, fontSize:11, color:T.muted }}>Risk score:</span>
+          <span style={{ fontFamily:T.mono, fontSize:20, fontWeight:500, padding:"2px 12px", borderRadius:5,
+                         background:chipBg, color:chipC }}>{score===null ? "N/A" : score}</span>
+          <span style={{ fontSize:12, fontWeight:600, color:sigC }}>{sig || "Not scored"}</span>
+          {form.legalThreshold==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: legal requirement</span>}
+          {form.stakeholderConcern==="Y" && <span style={{ fontFamily:T.mono, fontSize:10, color:T.amber }}>Auto-flagged: client/stakeholder requirement</span>}
         </div>
       </Card>
     </>
   );
+};
+
+// What a risk still needs before Save, as the line beside the Save button
+const AspectRequiredHint = ({ form }) => {
+  const missing = aspectMissing(form);
+  return <RequiredHint show={missing.length > 0}>Required: {missing.join(", ")}</RequiredHint>;
 };
 
 // ── Aspect form — matches screening form UI ───────────────────────────────────
@@ -1570,8 +1772,8 @@ function AspectForm({ aspect, onSave, onCancel, legalNotes }) {
       </div>
 
       <AspectFormFields form={f} set={set} legal={legal}/>
-      <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-        <RequiredHint show={incomplete}>A description is required</RequiredHint>
+      <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+        <AspectRequiredHint form={f}/>
         <Btn onClick={onCancel}>Cancel</Btn>
         <Btn variant="primary" disabled={incomplete} onClick={()=>onSave(aspectForSave(f), noteEdits)}>{aspect.id?"Save changes":"Save to risks register"}</Btn>
       </div>
@@ -1611,8 +1813,15 @@ const useArmedConfirm = () => {
 
 function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGroups,
                         customForScope, SCOPE_COLORS, thS, tdS, fmt, snapKgFn,
-                        onSetLine, onSetCustomRow, onAddCustomRow, onDelCustomRow }) {
-  const [armedDel, armDel] = useArmedConfirm();  // custom-row id armed for delete
+                        onSetLine, onSetCustomRow, onRemoveLine, onDelCustomRow }) {
+  const [armedDel, armDel] = useArmedConfirm();  // id of the added or custom row armed for removal
+  // × arms, "Sure?" removes: the button an added row and a custom row both end with
+  const removeBtn = (id, onRemove) => (
+    <button type="button" className="hit" aria-label="Remove this row" onClick={()=>{ if(armedDel===id){ armDel(null); onRemove(); } else armDel(id); }}
+      style={{fontSize:armedDel===id?10:11,fontWeight:armedDel===id?600:400,minWidth:34,whiteSpace:"nowrap",
+        color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"4px 6px"}}>
+      {armedDel===id?"Sure?":"×"}</button>
+  );
   const t = snapKgFn(snap);  // {identified, actual}
   return (
     <div style={{overflowX:"auto",borderRadius:7,border:"1px solid "+T.border}}>
@@ -1630,7 +1839,7 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
             const sc2=SCOPE_COLORS[scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
             const slines=scopeGroups[scope]||[];
             const crows=(customForScope||[]).filter(r=>r.scope===scope);
-            const totalRows=slines.length+crows.length+1;
+            const totalRows=slines.length+crows.length;   // the scope cell spans the group's rows
             return [
               ...slines.map((l,li)=>{
                 const qty=parseFloat(l.reduction||l.qty)||0,cf=parseFloat(l.cf)||0;
@@ -1643,7 +1852,9 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                       <span style={{fontSize:TYPE.data,fontWeight:700,padding:"2px 6px",borderRadius:3,
                         background:sc2.bg,color:sc2.c,border:"1px solid "+sc2.bd,display:"inline-block",whiteSpace:"nowrap"}}>{scope}</span>
                     </td>}
-                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,color:T.text,fontWeight:500}}>{l.type}</td>
+                    <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,color:T.text,fontWeight:500}}>
+                      {l.type}{editable&&l.added&&removeBtn(l.id,()=>onRemoveLine(si,l.id))}
+                    </td>
                     <td style={{padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right",fontFamily:T.mono,fontSize:10,color:T.faint}}>{l.unit}</td>
                     <td style={{padding:"3px 6px",fontSize:12,borderBottom:"1px solid "+T.rowBd,textAlign:"right"}}>
                       {editable?<input type="number" min={0} value={l.baseline} onChange={e=>onSetLine(si,l.id,"baseline",e.target.value)}
@@ -1695,7 +1906,6 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                 const sc2c=SCOPE_COLORS[cr.scope]||{bg:T.slateBg,c:T.slate,bd:T.slateBd};
                 return(
                   <tr key={crid} style={{borderBottom:"1px solid "+T.rowBd,background:T.amberBg}}>
-                    {visibleScopes.length>1&&<td style={{padding:"5px 7px",borderBottom:"1px solid "+T.rowBd}}/>}
                     <td style={{padding:"3px 5px",borderBottom:"1px solid "+T.rowBd}}>
                       {editable?<input value={cr.type} onChange={e=>onSetCustomRow(si,cr.id||cr.uid,"type",e.target.value)}
                         placeholder="Custom type" style={{width:"100%",padding:"2px 5px",fontSize:11,
@@ -1745,24 +1955,12 @@ function GhgSnapTable({ snap, si, editable, visibleScopes, mergedLines, scopeGro
                         <input value={cr.ref||""} onChange={e=>onSetCustomRow(si,crid,"ref",e.target.value)}
                           placeholder="Source" style={{flex:1,minWidth:60,padding:"2px 5px",fontSize:10,
                             border:"1px solid "+T.border,borderRadius:3,background:"transparent",color:T.muted}}/>
-                        <button className="hit" onClick={()=>{ if(armedDel===crid){ armDel(null); onDelCustomRow(si,crid); } else armDel(crid); }}
-                          style={{fontSize:armedDel===crid?10:11,fontWeight:armedDel===crid?600:400,minWidth:34,whiteSpace:"nowrap",
-                            color:T.red,background:"transparent",border:"none",cursor:"pointer",padding:"4px 6px"}}>
-                          {armedDel===crid?"Sure?":"×"}</button>
+                        {removeBtn(crid,()=>onDelCustomRow(si,crid))}
                       </div>:<span style={{fontSize:10,color:T.faint}}>{cr.ref||"—"}</span>}
                     </td>
                   </tr>
                 );
               }),
-              <tr key={"add_"+scope+"_"+si}>
-                <td colSpan={9} style={{padding:"3px 7px",borderBottom:"1px solid "+T.rowBd}}>
-                  {editable&&<button onClick={()=>onAddCustomRow(si,scope)}  /* adds to lines with custom:true */
-                    style={{fontSize:11,color:(SCOPE_COLORS[scope]||{c:T.slate}).c,background:"transparent",
-                      border:"none",cursor:"pointer",padding:"2px 4px",fontFamily:T.sans,fontWeight:500}}>
-                    + Add custom row
-                  </button>}
-                </td>
-              </tr>
             ];
           })}
         </tbody>
@@ -1826,6 +2024,8 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
   const q = oppQuadrant(f);
   const prioLabel = q.label;
   const sc = { bg:q.bg, c:q.c };
+  const scope = oppScopeOf(f);
+  const typeValue = oppTypeValue(f.type);
 
   // Keep activeSnapIdx in bounds
   const snaps = f.ghgPhases||[];
@@ -1842,9 +2042,23 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     s[si]=updater(s[si]); return {...p,ghgPhases:s};
   });
   const setSnapField = (si,k,v) => updateSnap(si,s=>({...s,[k]:v}));
-  const setLine      = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
-  const addCustomRow = (si,scope) => updateSnap(si,s=>({...s,lines:[...(s.lines||[]),
-    {id:"c_"+Date.now(),custom:true,scope,type:"",unit:"kg",reduction:"",baseline:"",cf:"",ref:"",savingType:"identified"}]}));
+  // A phase saved by an earlier version may hold only the rows that had numbers, so a row of the full
+  // table is put into the phase before a value is typed into it or it is added
+  const withLine = (lines, id) => {
+    const g = GHG_LINES.find(x=>x.id===id);
+    return !g || lines.some(l=>l.id===id&&!l.custom) ? lines : [...lines, ghgLineRow(g)];
+  };
+  const setLine      = (si,id,k,v) => updateSnap(si,s=>({...s,lines:withLine(s.lines||[],id).map(l=>l.id===id&&!l.custom?{...l,[k]:v}:l)}));
+  // Rows added from the full table (one, or all the rest) show beside the type's own rows; taking
+  // one out clears its numbers
+  const addLines     = (si,ids) => updateSnap(si,s=>({...s,lines:ids.reduce((ls,id)=>withLine(ls,id),s.lines||[])
+                                                      .map(l=>ids.includes(l.id)&&!l.custom?{...l,added:true}:l)}));
+  const removeLine   = (si,id) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>{
+    if (l.id!==id||l.custom) return l;
+    const g = GHG_LINES.find(x=>x.id===id), row = { ...l, ...(g ? ghgLineRow(g) : {}) };
+    delete row.added; delete row.qty;   // qty: the reduction's name in older saves
+    return row;
+  })}));
   const delCustomRow = (si,id) => updateSnap(si,s=>({...s,lines:(s.lines||[]).filter(l=>l.id!==id)}));
   const setCustomRow = (si,id,k,v) => updateSnap(si,s=>({...s,lines:(s.lines||[]).map(l=>l.id===id?{...l,[k]:v}:l)}));
 
@@ -1903,7 +2117,9 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
     <div>
       {/* ── Description ── */}
       <Card style={{marginBottom:"1rem"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
+        <div style={{display:"grid",gridTemplateColumns:formCols(2, 260),gap:"10px 14px"}}>
+          {/* The opportunity's scope, named and coloured as its Screening header */}
+          <Fld label="Category" wide><CategoryBox label={scope && scope.title} color={scope && scope.color}/></Fld>
           <Fld label="Opportunity type">
             {f.prefillGhgIds&&f.prefillGhgIds.length>0 ? (
               <div style={{padding:"6px 10px",borderRadius:5,background:T.surface2,
@@ -1911,39 +2127,20 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                 {f.type||"—"}
               </div>
             ) : (
-              <select value={f.type} onChange={e=>set("type",e.target.value)} style={iw}>
+              <select value={typeValue} onChange={e=>set("type",e.target.value)} style={iw}>
                 <option value="">Select type</option>
-                <optgroup label="Scope 1 — Direct Emissions">
-                  <option value="Scope 1 — CO₂">CO₂ reduction</option>
-                  <option value="Scope 1 — NOₓ">NOₓ reduction</option>
-                  <option value="Scope 1 — CH₄">CH₄ / methane reduction</option>
-                  <option value="Scope 1 — GWP gases">GWP gases / refrigerants reduction</option>
-                  <option value="Scope 1 — Other">Other direct emission reduction</option>
-                </optgroup>
-                <optgroup label="Scope 2 — Indirect Emissions">
-                  <option value="Scope 2 — System optimisation">System / component optimisation</option>
-                  <option value="Scope 2 — Design optimisation">Layout, design or location optimisation</option>
-                  <option value="Scope 2 — Alternative resources">Alternative resources</option>
-                </optgroup>
-                <optgroup label="Scope 3 — Value Chain">
-                  <option value="Scope 3 — Material">Material</option>
-                  <option value="Scope 3 — Chemicals">Chemicals</option>
-                  <option value="Scope 3 — Lifecycle">Lifecycle</option>
-                  <option value="Scope 3 — Re-use">Re-use</option>
-                  <option value="Scope 3 — Re-cycle">Re-cycle</option>
-                  <option value="Scope 3 — Waste">Waste evaluation</option>
-                  <option value="Scope 3 — Transport">Transport</option>
-                  <option value="Scope 3 — Remote technology">Remote technology / Automated solutions</option>
-                </optgroup>
+                {typeValue && !OPP_TYPE_OPTIONS.some(([v]) => v === typeValue) && <option value={typeValue}>{typeValue}</option>}
+                {OPP_TYPE_GROUPS.map(g=>(
+                  <optgroup key={g.label} label={g.label}>
+                    {g.options.map(([v, l])=><option key={v} value={v}>{l}</option>)}
+                  </optgroup>
+                ))}
               </select>
             )}
           </Fld>
           <Fld label="Materiality (CSRD)">
-            <select value={f.materiality} onChange={e=>set("materiality",e.target.value)} style={iw}>
-              <option>Inside-out (positive impact on environment)</option>
-              <option>Outside-in (financial / business benefit)</option>
-              <option>Both</option>
-            </select>
+            <PillSwitch label="Materiality (CSRD)" options={MATERIALITY_PILLS} value={f.materiality} showSaved
+              onChange={v=>set("materiality",v)}/>
           </Fld>
           <Fld label="Phase" wide><PhaseChips value={f.phase} onChange={v=>set("phase",v)}/></Fld>
           {/* Description and the template's guide words side by side: the guide words prompt, the user writes */}
@@ -1985,7 +2182,7 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
       {/* ── Priority scoring — 3 dimensions ── */}
       <Card style={{marginBottom:"1rem",background:T.tealBg}} accent={T.teal}>
         <SectionLabel>Priority score = env value × business value × technical feasibility (max 125)</SectionLabel>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"12px 14px"}}>
+        <div style={{display:"grid",gridTemplateColumns:formCols(3, 150),gap:"12px 14px"}}>
           {[{k:"envValue",l:"Environmental value (1–5)",bk:"envBenefit",bl:"Environmental benefit"},
             {k:"bizValue",l:"Business value (1–5)",bk:"bizBenefit",bl:"Business / strategic benefit"},
             {k:"feasibility",l:"Technical feasibility (1–5)",bk:"techBenefit",bl:"Technical feasibility notes"}
@@ -2132,10 +2329,14 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
               </div>
             )}
             {activeSnap && (() => {
+              // The rows of the opportunity's type, plus any added from the full table, in the table's order
               const prefillIds=f.prefillGhgIds||[];
-              const visibleLines=relevantLines(f.type,prefillIds);
-              const visibleScopes=[...new Set(visibleLines.map(l=>l.scope))];
+              const relevant=relevantLines(f.type,prefillIds);
               const stdLines=(activeSnap.lines||[]).filter(l=>!l.custom);
+              const addedIds=new Set(stdLines.filter(l=>l.added).map(l=>l.id));
+              const visibleLines=GHG_LINES.filter(l=>relevant.includes(l)||addedIds.has(l.id));
+              const otherLines=GHG_LINES.filter(l=>!visibleLines.includes(l));
+              const visibleScopes=[...new Set(visibleLines.map(l=>l.scope))];
               const mergedLines=visibleLines.map(l=>{
                 const s=stdLines.find(x=>x.id===l.id);
                 return{...l,
@@ -2143,24 +2344,47 @@ function OppFormBody({ f, setF, onSave, onCancel, saveLabel, isScreening }) {
                   baseline:s?s.baseline||"":"",
                   cf:(s&&s.cf!=="")?s.cf:l.cfDefault,
                   ref:s?s.ref||"":"",
-                  savingType:s?s.savingType:"identified"};
+                  savingType:s?s.savingType:"identified",
+                  added:addedIds.has(l.id)&&!relevant.includes(l)};
               });
               const scopeGroups=visibleScopes.reduce((acc,sc)=>{acc[sc]=mergedLines.filter(l=>l.scope===sc);return acc;},{});
               const SCOPE_COLORS={"Scope 1":{bg:T.redBg,c:T.red,bd:T.redBd},"Scope 2":{bg:T.blueBg,c:T.blue,bd:T.blueBd},"Scope 3 Cat 1":{bg:T.tealBg,c:T.teal,bd:T.tealBd},"Scope 3 Cat 4":{bg:T.purpleBg,c:T.purple,bd:T.purpleBd}};
               const thS2={padding:"5px 8px",textAlign:"left",fontSize:TYPE.data,fontWeight:600,color:T.muted,borderBottom:"1px solid "+T.border,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"};
               const tdS2=(ex)=>({padding:"5px 7px",fontSize:12,borderBottom:"1px solid "+T.rowBd,...(ex||{})});
-              return <GhgSnapTable
-                snap={activeSnap} si={safeIdx} editable={isActive(safeIdx)}
-                visibleScopes={visibleScopes} mergedLines={mergedLines}
-                scopeGroups={scopeGroups}
-                customForScope={(activeSnap.lines||[]).filter(l=>l.custom && visibleScopes.some(sc=>l.scope===sc||!l.scope))}
-                SCOPE_COLORS={SCOPE_COLORS} thS={thS2} tdS={tdS2} fmt={fmt}
-                snapKgFn={snapKg}
-                onSetLine={setLine} onSetCustomRow={setCustomRow}
-                onAddCustomRow={addCustomRow} onDelCustomRow={delCustomRow}/>;
+              return (<>
+                <GhgSnapTable
+                  snap={activeSnap} si={safeIdx} editable={isActive(safeIdx)}
+                  visibleScopes={visibleScopes} mergedLines={mergedLines}
+                  scopeGroups={scopeGroups}
+                  customForScope={(activeSnap.lines||[]).filter(l=>l.custom && visibleScopes.some(sc=>l.scope===sc||!l.scope))}
+                  SCOPE_COLORS={SCOPE_COLORS} thS={thS2} tdS={tdS2} fmt={fmt}
+                  snapKgFn={snapKg}
+                  onSetLine={setLine} onSetCustomRow={setCustomRow}
+                  onRemoveLine={removeLine} onDelCustomRow={delCustomRow}/>
+                {/* Any other row of the full table, listed by scope, or all of them at once, can be added to
+                    the phase being edited; in a narrow window the button drops below the list */}
+                {isActive(safeIdx) && otherLines.length > 0 && (
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginTop:6}}>
+                    <select aria-label="Add a row from the full table" value="" onChange={e=>{ if (e.target.value) addLines(safeIdx, [e.target.value]); }}
+                      style={{flex:"1 1 200px",width:"auto",minWidth:0,padding:"4px 8px",fontSize:11,fontWeight:500,fontFamily:T.sans,cursor:"pointer",
+                              borderRadius:5,border:"1px solid "+T.tealBd,background:"transparent",color:T.teal}}>
+                      <option value="">+ Add row from the full table</option>
+                      {[...new Set(otherLines.map(l=>l.scope))].map(sc=>(
+                        <optgroup key={sc} label={sc}>
+                          {otherLines.filter(l=>l.scope===sc).map(l=><option key={l.id} value={l.id}>{l.type}</option>)}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <button type="button" onClick={()=>addLines(safeIdx, otherLines.map(l=>l.id))}
+                      style={{flex:"0 0 auto",padding:"4px 10px",fontSize:11,fontWeight:500,fontFamily:T.sans,cursor:"pointer",whiteSpace:"nowrap",
+                              borderRadius:5,border:"1px solid "+T.tealBd,background:"transparent",color:T.teal}}>
+                      + Add full table
+                    </button>
+                  </div>
+                )}
+              </>);
             })()}
             <p style={{fontSize:11,color:T.muted,margin:"0.5rem 0 0"}}>
-              Phase snapshots preserve all historical data. Identified savings are never deleted when actual values are added.
               Fixed CFs: CO₂=1, NOₓ=296, CH₄=28 · Energy=0.57 kg CO₂e/kWh · Steel=2, material=1.5 kg CO₂e/kg.
             </p>
           </div>
@@ -2597,7 +2821,6 @@ function GuideWordsHint({ btn, color }) {
                         maxHeight:place.maxHeight, overflowY:"auto", boxSizing:"border-box" }}>
             <p style={{ margin:"0 0 6px", fontSize:11, fontWeight:600, color:color.head }}>Guide words · {label}</p>
             <OppGuideWords cats={oppGuideFor({ _screeningId:btn.id })} plain/>
-            <p style={{ margin:"7px 0 0", fontSize:TYPE.data, color:T.muted }}>From the screening template.</p>
           </div>
         </div>
       )}
@@ -2617,15 +2840,30 @@ function entriesByGuideWord(list) {
   return m;
 }
 
-function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump = () => {} }) {
-  const [mode, setMode]               = useState("risks");
-  const [expanded, setExpanded]       = useState({});
+// `back` is Screening as the user left it to open a register entry from a checklist row (list, open
+// categories, the row), so closing that entry comes back to the same place; it is used once.
+function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump = () => {}, back = null, onBackDone = () => {} }) {
+  const [mode, setMode]               = useState(back ? back.mode : "risks");
+  const [expanded, setExpanded]       = useState(back ? back.expanded : {});
   const [view, setView]               = useState("guide");
   const [riskForm, setRiskForm]       = useState(emptyAspect());
   const [riskNotes, setRiskNotes]     = useState({});   // legal-note edits made in the open risk form
   const [oppForm, setOppForm]         = useState(emptyOpp());
   const [legalSearch, setLegalSearch] = useState("");   // Legal references is the only searchable list
-  const [oppView, setOppView]         = useState("checklist"); // Opportunities: "checklist" | "disciplines"
+  const [oppView, setOppView]         = useState(back ? back.oppView : "checklist"); // Opportunities: "checklist" | "disciplines"
+  const rootRef = React.useRef(null);
+  // Back from a register entry: bring the row it was opened from into view, with keyboard focus on
+  // its link, once
+  useEffect(() => {
+    if (!back) return;
+    const row = rootRef.current && [...rootRef.current.querySelectorAll("[data-row]")].find(e => e.getAttribute("data-row") === back.rowId);
+    if (row && row.scrollIntoView) row.scrollIntoView({ block:"center" });
+    const link = row && row.querySelector('[role="button"]');
+    if (link) link.focus({ preventScroll:true });
+    onBackDone();
+  }, []);
+  // Opening a register entry from a row leaves Screening; this says where to come back to
+  const jump = (kind, id, rowId) => onJump(kind, id, { mode, expanded, oppView, rowId });
   // Skips are workshop decisions, not view state — persisted on the project record
   const skipped    = project.screeningSkips || {};
   const toggleSkip = id => onChange({ ...project,
@@ -2639,7 +2877,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
   const oppsOf      = id => oppsById.get(id) || NO_ENTRIES;
 
   const isRisks = mode === "risks";
-  const toggleCat = k => setExpanded(p => ({ ...p, [k]:!p[k] }));
+  const toggleCat = k => setExpanded(p => ({ ...p, [k]:p[k] === false }));   // open unless false, so one click closes
   const setRF = (k, v) => setRiskForm(p => ({ ...p, [k]:v }));
   const showToast = msg => notify(msg);   // route through the shared shell toast
 
@@ -2683,7 +2921,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
     background:"transparent", color:T.muted, cursor:"pointer", flexShrink:0, fontFamily:T.sans };
 
   return (
-    <div style={{ flex:1, minHeight:0, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
+    <div ref={rootRef} style={{ flex:1, minHeight:0, margin:"-1.25rem", display:"flex", flexDirection:"column" }}>
       {/* ── Top bar ── */}
       <div style={{ padding:"0.6rem 1rem 0.5rem", background:T.surface, borderBottom:"1px solid "+T.border,
                     display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
@@ -2766,7 +3004,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                           const isAdded=entries.length>0;
                           const isSkipped=!!skipped[item.id];
                           return(
-                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                            <div key={i} data-row={item.id} style={{ display:"flex", alignItems:"center", gap:8,
                                                    padding:"6px 10px", borderRadius:5,
                                                    borderBottom:"1px solid "+T.rowBd }}>
                               {/* Status / add: check-circle button (click to add); plain dot once resolved */}
@@ -2781,7 +3019,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                                            background:T.surface, border:"1.5px solid "+col.head, cursor:"pointer" }}/>
                               )}
                               {/* Text — on a registered row it is a link to the (first) register entry */}
-                              <div {...(isAdded ? clickable(()=>onJump("risks", entries[0].id), "Open "+entries[0].ref+": "+item.sub) : {})}
+                              <div {...(isAdded ? clickable(()=>jump("risks", entries[0].id, item.id), "Open "+entries[0].ref+": "+item.sub) : {})}
                                 style={{ flex:1, minWidth:0, opacity:isAdded?0.6:1, cursor:isAdded?"pointer":undefined }}>
                                 <span style={{ fontSize:12, fontWeight:500, color:T.text,
                                                textDecoration:isSkipped?"line-through":undefined,
@@ -2790,7 +3028,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                               </div>
                               {/* One reference per entry (each jumps to the register), then "+" for another entry */}
                               {entries.map(a=>(
-                                <button key={a.id} className="hit" onClick={()=>onJump("risks", a.id)}
+                                <button key={a.id} className="hit" onClick={()=>jump("risks", a.id, item.id)}
                                   aria-label={"Open "+a.ref+" in the Risks register"} title="Open in the Risks register"
                                   style={refChip(T.tealBg, T.teal, T.tealBd)}>
                                   {a.ref}
@@ -2867,7 +3105,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                       const isAdded=entries.length>0;
                       const isSkipped=!!skipped["opp_"+btn.id];
                       return(
-                        <div key={btn.id} style={{display:"flex",alignItems:"center",gap:8,
+                        <div key={btn.id} data-row={btn.id} style={{display:"flex",alignItems:"center",gap:8,
                           padding:"6px 10px",borderRadius:5,
                           borderBottom:"1px solid "+T.rowBd}}>
                           {isAdded||isSkipped ? (
@@ -2882,7 +3120,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                           )}
                           <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:7}}>
                             {/* Text — on a registered row it is a link to the (first) register entry */}
-                            <div {...(isAdded ? clickable(()=>onJump("opportunities", entries[0].id), "Open "+entries[0].ref+": "+label) : {})}
+                            <div {...(isAdded ? clickable(()=>jump("opportunities", entries[0].id, btn.id), "Open "+entries[0].ref+": "+label) : {})}
                               style={{minWidth:0,opacity:isAdded?0.6:1,cursor:isAdded?"pointer":undefined}}>
                               <span style={{fontSize:12,fontWeight:500,color:T.text,
                                 textDecoration:isSkipped?"line-through":undefined,marginRight:8}}>
@@ -2895,7 +3133,7 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                           </div>
                           {/* One reference per entry (each jumps to the register), then "+" for another entry */}
                           {entries.map(o=>(
-                            <button key={o.id} className="hit" onClick={()=>onJump("opportunities", o.id)}
+                            <button key={o.id} className="hit" onClick={()=>jump("opportunities", o.id, btn.id)}
                               aria-label={"Open "+o.ref+" in the Opportunities register"} title="Open in the Opportunities register"
                               style={refChip(T.purpleBg, T.purple, T.purpleBd)}>
                               {o.ref}
@@ -2957,12 +3195,9 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
                   {skippedOpp>0&&<span style={{fontSize:11,color:T.muted}}>{skippedOpp} skipped</span>}
                 </div>
               </div>
-              {renderScopeChecklist("opp_scope1",COLOR_MAP.red,"Scope 1 — Direct Emissions","Emissions directly from project operations",OPP_SCOPE1_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 1 — "+btn.label,btn.ghgId?[btn.ghgId]:[],"red",btn.id))}
-              {renderScopeChecklist("opp_scope2",COLOR_MAP.blue,"Scope 2 — Indirect Emissions","Energy consumption and purchased utilities",OPP_SCOPE2_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 2 — "+btn.label,[],"blue",btn.id))}
-              {renderScopeChecklist("opp_scope3",COLOR_MAP.teal,"Scope 3 — Value Chain Emissions","Upstream and downstream indirect emissions",OPP_SCOPE3_BUTTONS,
-                btn=>()=>prefillOppScope("Scope 3 — "+btn.label.replace("\n"," "),[],"teal",btn.id))}
+              {/* One checklist per scope; a button's type is "<scope> — <label>" (only Scope 1 buttons carry a GHG line) */}
+              {OPP_SCOPES.map((s, i) => renderScopeChecklist("opp_scope"+(i+1), COLOR_MAP[s.color], s.title, s.sub, s.buttons,
+                btn=>()=>prefillOppScope(s.key+" — "+btn.label.replace("\n"," "), btn.ghgId?[btn.ghgId]:[], s.color, btn.id)))}
             </div>
           );
         })()}
@@ -2976,8 +3211,8 @@ function ScreeningTab({ project, onChange, onAddAspect, onAddOpp, notify, onJump
             <AspectFormFields form={riskForm} set={setRF}
               legal={{ notes:{ ...(project.legalRefNotes||{}), ...riskNotes },
                        setNote:(k, v) => setRiskNotes(p => ({ ...p, [k]:v })) }}/>
-            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-              <RequiredHint show={aspectIncomplete(riskForm)}>A description is required</RequiredHint>
+            <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <AspectRequiredHint form={riskForm}/>
               {/* Clear starts the same guide word again; the form is never detached from its guide word */}
               <Btn onClick={() => { const it = riskItemById(riskForm._screeningId); if (it) startRisk(it, riskForm._color); }}>Clear</Btn>
               <button onClick={saveRisk} disabled={aspectIncomplete(riskForm)}
@@ -3030,7 +3265,6 @@ function OppDisciplinesGuide() {
         <h3 style={{ margin:"0 0 2px", fontSize:14, fontWeight:700, color:T.text }}>Disciplines and phases guide</h3>
         <p style={{ margin:0, fontSize:12, color:T.muted, maxWidth:780, lineHeight:1.55 }}>
           For each opportunity guide word: which disciplines to involve, and the phase in which the saving falls.
-          An x is a mark on the Sustainability opportunities sheet of the screening template. Reference only; nothing here is saved with the project.
         </p>
       </div>
       <div style={{ overflowX:"auto", borderRadius:8, border:"1px solid "+T.border, background:T.surface }}>
@@ -4791,6 +5025,7 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
   };
   const [editAspect, setEditAspect]       = useState(null);
   const [editOpp, setEditOpp]             = useState(null);
+  const [screeningBack, setScreeningBack] = useState(null);   // Screening as left for a register entry
   const [dashFilter, setDashFilter]       = useState("all");
   const [aspFilter, setAspFilter]         = useState("All");
   const [aspSort,   setAspSort]           = useState({ col:null, dir:"asc" });
@@ -5227,7 +5462,10 @@ function ProjectView({ project, allProjects, onChange, onDelete, initialTab }) {
       if(prev.severity!==withTs.severity||prev.probability!==withTs.probability)
         f.push({k:"Risk score",from:cp(prev),to:cp(withTs)});
       d("Status",          prev.status,         withTs.status);
-      d("Legal threshold", prev.legalThreshold, withTs.legalThreshold);
+      // older records may lack these fields entirely; missing and empty are the same "not set"
+      d("Legal requirement", prev.legalThreshold||"", withTs.legalThreshold||"");
+      d("Client/stakeholder requirement", prev.stakeholderConcern||"", withTs.stakeholderConcern||"");
+      d("Reference", prev.legalRefExtra||"", withTs.legalRefExtra||"", v=>v&&v.slice(0,50));
       d("Control",  prev.control,  withTs.control,  v=>v&&v.slice(0,50));
       d("Owner",    prev.owner,    withTs.owner);
       changedNotes.forEach(([k,v]) => f.push({k:"Legal note",from:(oldNotes[k]||"").slice(0,50)||"—",to:(v||"").slice(0,50)||"—"}));
@@ -5311,10 +5549,18 @@ This cannot be undone.`)) return;
     onChange({ ...project, aspects:kept, changelog:[...(project.changelog||[]), log] });
     setSelectedAsp(new Set());
   };
+  // An Action risk needs what the form asks for (aspectMissing), so bulk "Action" leaves out the
+  // selected risks that lack any of it and names them. logChange returns the whole updated log.
   const bulkSetAspStatus = (status) => {
-    const updated = aspects.map(a => selectedAsp.has(a.id) ? { ...a, status } : a);
-    const log  = logChange("Bulk updated status", `${selectedAsp.size} aspect(s) → ${status}`,[{k:"Refs",v:aspects.filter(a=>selectedAsp.has(a.id)).map(a=>a.ref).join(", ")}]);
-    onChange({ ...project, aspects:updated, changelog:[...(project.changelog||[]), log] });
+    const chosen  = aspects.filter(a => selectedAsp.has(a.id));
+    const blocked = status === "Action" ? chosen.filter(a => aspectIncomplete({ ...a, status })) : [];
+    const changed = chosen.filter(a => !blocked.includes(a));
+    if (changed.length) {
+      const ids = new Set(changed.map(a => a.id));
+      onChange({ ...project, aspects:aspects.map(a => ids.has(a.id) ? { ...a, status } : a),
+                 changelog:logChange("Bulk updated status", `${changed.length} aspect(s) → ${status}`,[{k:"Refs",v:changed.map(a=>a.ref).join(", ")}]) });
+    }
+    if (blocked.length) notify("Not set to Action (required fields missing): " + blocked.map(a=>a.ref).join(", "));
     setSelectedAsp(new Set());
   };
   const bulkDeleteOpps = () => {
@@ -5358,7 +5604,7 @@ This cannot be undone.`)) return;
 
   const filteredAspects = (() => {
     // "Not scored" lists every aspect still missing a consequence or probability, including one that a
-    // legal threshold or stakeholder concern already makes SIGNIFICANT (it shows under both filters)
+    // legal or client/stakeholder requirement already makes SIGNIFICANT (it shows under both filters)
     let r = aspFilter==="All"        ? aspects
           : aspFilter==="Not scored" ? aspects.filter(a=>!isAspectScored(a))
           :                            aspects.filter(a=>calcSig(a)===aspFilter);
@@ -5422,17 +5668,7 @@ This cannot be undone.`)) return;
 
   // Colour helper for rows
   const rowColor = (item) => item._color ? (COLOR_MAP[item._color]||COLOR_MAP.gray) : null;
-  const getCategoryLabel = (a) => {
-    if (a._screeningId) {
-      const found = RISK_CATEGORIES.find(c => c.items.some(i => i.id === a._screeningId));
-      if (found) return found.cat;
-    }
-    if (a._color) {
-      const found = RISK_CATEGORIES.find(c => c.color === a._color);
-      if (found) return found.cat;
-    }
-    return null;
-  };
+  const getCategoryLabel = riskCategoryOf;
   const CAT_SHORT = {
     "1. Emission to Air":                            "Emission to Air",
     "2. Discharge to Water & Marine Environment":    "Water & Marine",
@@ -6004,10 +6240,12 @@ This cannot be undone.`)) return;
 
       {tab === "screening" && (
         <ScreeningTab project={project} onChange={onChange} onAddAspect={saveAspect} onAddOpp={saveOpp} notify={notify}
-          onJump={(kind, id) => {
-            // A registered guide word opens its register entry; closing the form lands on that register
-            if (kind === "risks") { const a = aspects.find(x=>x.id===id); if (a) { setTab("risks"); setEditAspect(a); } }
-            else { const o = opps.find(x=>x.id===id); if (o) { setTab("opportunities"); setEditOpp(o); } }
+          back={screeningBack} onBackDone={() => setScreeningBack(null)}
+          onJump={(kind, id, back) => {
+            // A registered guide word opens its register entry while the Screening tab stays selected,
+            // so Back, Cancel or Save return to Screening, which comes back as it was left
+            if (kind === "risks") { const a = aspects.find(x=>x.id===id); if (a) { setScreeningBack(back||null); setEditAspect(a); } }
+            else { const o = opps.find(x=>x.id===id); if (o) { setScreeningBack(back||null); setEditOpp(o); } }
           }}/>
       )}
 
@@ -6015,7 +6253,6 @@ This cannot be undone.`)) return;
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             {/* Aspects are added from the Screening tab's guide words; this register filters and edits them */}
-            <span style={{ fontSize:12, color:T.muted }}>New aspects are added from the Screening tab.</span>
             <div style={{ display:"flex", gap:3, marginLeft:"auto" }}>
               {["All","SIGNIFICANT","MEDIUM","Low","Not scored"].map(f => (
                 <button key={f} onClick={()=>setAspFilter(f)}
@@ -6269,7 +6506,6 @@ This cannot be undone.`)) return;
         <div>
           <div style={{ display:"flex", gap:8, marginBottom:"1rem", alignItems:"center", flexWrap:"wrap" }}>
             {/* Opportunities are added from the Screening tab's categories; this register edits them */}
-            <span style={{ fontSize:12, color:T.muted }}>New opportunities are added from the Screening tab.</span>
             <span style={{ marginLeft:"auto", fontSize:12, color:T.muted }}>
               {opps.length} opportunit{opps.length!==1?"ies":"y"}
             </span>
