@@ -7661,6 +7661,7 @@ COR_LOOKUP.forEach(r => { COR_MAP[r.code] = r; });
 //   1. exact normalised match
 //   2. header contains alias OR alias contains header
 //   3. shared word count >= 2
+// Optional fields (Material) are matched strictly instead — see wordColMatch.
 // If confidence is low the user is prompted to try AI mapping.
 const FIELD_SCHEMAS = {
   MTO: {
@@ -7735,11 +7736,42 @@ function bestColMatch(headers, aliases) {
   return null;
 }
 
+// For optional fields (Material), where no column beats a wrong one: the alias has
+// to be the whole header or whole words of it, tried in the aliases' order. So
+// "Material Description" and "Mat. Spec" count, but not "Estimated Weight"
+// (m-a-t inside a word), "Inspection" (s-p-e-c) or a bare "Type" (part of
+// "material type"). A long alias word may begin a longer one ("Materialkvalitet").
+function wordColMatch(headers, aliases) {
+  const hs = headers.map(h => ({ orig: h, norm: normCol(h) }));
+  const as = aliases.map(normCol);
+  for (const a of as) {
+    const hit = hs.find(h => h.norm === a);
+    if (hit) return hit.orig;
+  }
+  const fits = (norm, a) => {
+    const hw = norm.split(" "), aw = a.split(" ");
+    for (let i = 0; i + aw.length <= hw.length; i++) {
+      if (aw.every((x, j) => hw[i + j] === x || (x.length >= 5 && hw[i + j].startsWith(x)))) return true;
+    }
+    return false;
+  };
+  for (const a of as) {
+    const hit = hs.find(h => fits(h.norm, a));
+    if (hit) return hit.orig;
+  }
+  return null;
+}
+
 function autoMapHeaders(headers, schemaType) {
   const schema  = FIELD_SCHEMAS[schemaType];
   const mapping = {};
   for (const [key, def] of Object.entries(schema)) {
-    mapping[key] = bestColMatch(headers, def.aliases);
+    mapping[key] = def.req ? bestColMatch(headers, def.aliases) : null;
+  }
+  // Optional fields go last and only take a column no required field is using.
+  const taken = new Set(Object.values(mapping).filter(Boolean));
+  for (const [key, def] of Object.entries(schema)) {
+    if (!def.req) mapping[key] = wordColMatch(headers.filter(h => !taken.has(h)), def.aliases);
   }
   const reqFields   = Object.entries(schema).filter(([, d]) => d.req);
   const mappedReq   = reqFields.filter(([k]) => mapping[k]).length;
@@ -7853,6 +7885,9 @@ function calcSheets(wb, sheetMetas) {
     if (raw.length < 2) continue;
     const hIdx = sm.headerRowIdx != null ? sm.headerRowIdx : detectHeaderRow(raw);
     const { headers } = parseSheetFromRow(raw, hIdx);
+    // raw[0] is the first row of the sheet's used range, so a row's number in the
+    // workbook is that row + the header's offset + its place below the header.
+    const firstRow = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]).s.r + 1 : 1;
     raw.slice(hIdx + 1).forEach((rowArr, idx) => {
       const row = {};
       headers.forEach((h, j) => { row[h] = rowArr[j]; });
@@ -7869,7 +7904,7 @@ function calcSheets(wb, sheetMetas) {
       if (SKIP_LABELS.some(p => descL === p || descL === p + ':' || descL === p + ' :') || descL.startsWith('bottom line') || (descL.startsWith('total ') && !descL.includes('valve') && !descL.includes('assembly'))) return;
       // Only calculate NP and RP handling codes — skip all others silently
       if (mhc !== "NP" && mhc !== "RP") return;
-      const entry = { _sheet: sm.name, _row: idx + 2, _type: sm.type,
+      const entry = { _sheet: sm.name, _row: firstRow + hIdx + 1 + idx, _type: sm.type,
                       desc, material, cor, mhc, weightRaw };
       if (sm.type === "MTO") mtoRows.push(entry);
       else melRows.push(entry);
@@ -7885,20 +7920,27 @@ function calcSheets(wb, sheetMetas) {
       } else if (!COR_MAP[r.cor]) {
         rowErrs.push({ col: "COR Code", val: r.cor, msg: "COR code '" + r.cor + "' not in lookup.", notFound: true });
       }
+      const w = Number(r.weightRaw);
       if (r.weightRaw === "" || r.weightRaw === null || r.weightRaw === undefined) {
         rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight is blank." });
-      } else if (isNaN(Number(r.weightRaw))) {
+      } else if (isNaN(w)) {
         rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is not numeric." });
+      } else if (w < 0 && r.mhc !== "RP") {
+        rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is negative on an NP row." });
       }
+      // Removal (RP) weights are often entered as negative: count them as positive,
+      // and mark the row so the results can show which ones were converted.
+      const weightFlipped = w < 0 && r.mhc === "RP";
+      const weight = weightFlipped ? -w : w;
       const corEntry = COR_MAP[r.cor];
       let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
       if (!rowErrs.length && corEntry) {
         emissionFactor = corEntry.ef; category = corEntry.cat; corDesc = corEntry.desc;
-        emissionTco2e = (Number(r.weightRaw) * emissionFactor) / 1000;
+        emissionTco2e = (weight * emissionFactor) / 1000;
       }
       const row = { source: r._type, sheet: r._sheet, rowNum: r._row,
                     desc: r.desc, material: r.material, cor: r.cor, mhc: r.mhc,
-                    weight: rowErrs.find(e => e.col === "Weight") ? null : Number(r.weightRaw),
+                    weight: rowErrs.find(e => e.col === "Weight") ? null : weight, weightFlipped,
                     category, corDesc, emissionFactor, emissionTco2e,
                     status: rowErrs.length ? "ERROR" : "VALID", errors: rowErrs };
       if (rowErrs.length) errs.push({ sheet: r._sheet, row: r._row, desc: r.desc, cor: r.cor, errs: rowErrs });
@@ -7920,12 +7962,13 @@ function calcSheets(wb, sheetMetas) {
     mtoTotal, melTotal, combined: mtoTotal + melTotal,
     mtoRows: mto.rows, melRows: mel.rows, allRows,
     errors: allErrors, unknownCors,
+    flippedWeights: allRows.filter(r => r.weightFlipped).length,
     sheets: sheetMetas.filter(s => s.include),
   };
 }
 
 // ── Local COR suggestion (no API — pure keyword scoring) ──────────────────────
-function localSuggestCOR(descTexts) {
+function localSuggestCOR(descTexts, n = 3) {
   const text  = descTexts.filter(Boolean).join(" ").toLowerCase();
   const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 2);
   // Domain keyword → likely COR codes (high-confidence boosts)
@@ -7970,7 +8013,48 @@ function localSuggestCOR(descTexts) {
              reason: score > 0 ? "Keyword match against description and COR library" : "No strong match" };
   });
 
-  return scores.sort((a, b) => b.score - a.score).slice(0, 3);
+  return scores.sort((a, b) => b.score - a.score).slice(0, n);
+}
+
+// ── Suggested replacements for a COR code that isn't in the lookup ────────────
+// The code itself is the strongest clue: the same code written another way
+// ("bnab", "BMA Struktur"), a known code with something added ("BLB-01", "EZR2"),
+// the start of a family ("BNA"), or one slip away ("BAL"). The row descriptions
+// rank the codes within those, and are all there is to go on when the code says
+// nothing. A code that matches on neither is not offered.
+const corKey = s => String(s == null ? "" : s).toUpperCase()
+  .replace(/Ø/g, "O").replace(/Å/g, "A").replace(/Æ/g, "AE").replace(/[^A-Z0-9]/g, "");
+// a and b differ by one inserted, deleted or changed character, or two swapped neighbours
+function oneEditApart(a, b) {
+  if (a === b || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) {
+    return a.slice(i + 1) === b.slice(i + 1)
+      || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  }
+  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+function suggestCOR(code, descTexts) {
+  const key = corKey(code);
+  // "BLB-01", "BLB 2", "EZR2": the known code, then a separator or a digit — not "ALARM" for AL
+  let head = "";
+  const heads = String(code == null ? "" : code).toUpperCase().split(/[^A-Z0-9ØÅÆ]+/).map(corKey).filter(Boolean)
+    .map(p => (head += p));
+  const startsWithCode = ck => key.length > ck.length && key.startsWith(ck)
+    && (/\d/.test(key[ck.length]) || heads.includes(ck));
+  const byDesc = {};
+  localSuggestCOR(descTexts, COR_LOOKUP.length).forEach(s => { byDesc[s.code] = s.score; });
+  return COR_LOOKUP.map(c => {
+    const ck = corKey(c.code);
+    const byCode = !key ? 0
+      : ck === key ? 1000
+      : startsWithCode(ck) ? 500 + ck.length
+      : key.length >= 2 && ck.startsWith(key) ? 300
+      : key.length >= 3 && ck.length >= 3 && oneEditApart(key, ck) ? 200
+      : 0;
+    return { code: c.code, category: c.cat, description: c.desc, ef: c.ef, score: byCode + (byDesc[c.code] || 0) };
+  }).filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
 }
 
 // ── applyOverrides — pure function, applies user COR overrides to a result ────
@@ -9376,6 +9460,7 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
   const errCount  = errList.length;
   const isOk      = displayResult.status === "success";
   const overrideCount = Object.keys(corOverrides).length;
+  const flippedCount  = fpN(displayResult.flippedWeights);
 
   const byCat = {};
   validRows.forEach(r => { const k = r.category || "Unknown"; byCat[k] = (byCat[k] || 0) + (r.emissionTco2e || 0); });
@@ -9389,6 +9474,7 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
   else if (dFilter === "MEL") dRows = allRows.filter(r => r.source === "MEL");
   else if (dFilter === "VALID")  dRows = allRows.filter(r => r.status === "VALID");
   else if (dFilter === "ERROR")  dRows = allRows.filter(r => r.status === "ERROR");
+  else if (dFilter === "NEGATIVE") dRows = allRows.filter(r => r.weightFlipped);
   if (dSearch) { const q = dSearch.toLowerCase(); dRows = dRows.filter(r => (r.desc || "").toLowerCase().includes(q) || (r.cor || "").toLowerCase().includes(q)); }
 
   // What "Add to dashboard" would append — one itemised entry per source present in
@@ -9572,6 +9658,13 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
             {overrideCount} COR override{overrideCount !== 1 ? "s" : ""} applied
           </span>
         )}
+        {flippedCount > 0 && (() => {
+          const label = flippedCount + " negative RP weight" + (flippedCount !== 1 ? "s" : "") + " converted to positive";
+          const chip = { fontSize: 11, padding: "2px 10px", borderRadius: 10, background: T.blueBg, color: T.blue, border: "1px solid " + T.blueBd, fontFamily: T.sans };
+          return hasRows
+            ? <button type="button" className="hit" onClick={() => { setView("detail"); setDFilter("NEGATIVE"); setDSearch(""); }} style={{ ...chip, cursor: "pointer" }}>{label}</button>
+            : <span style={chip}>{label}</span>;
+        })()}
         <span style={{ fontFamily: T.mono, fontSize: 10, color: T.faint, marginLeft: "auto" }}>
           {(displayResult.sheets || []).map(s => s.name + " (" + s.type + ")").join(" · ")}
         </span>
@@ -9668,8 +9761,8 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
             <input value={dSearch} onChange={e => setDSearch(e.target.value)} placeholder="Search description or COR…"
               style={{ padding: "6px 12px", fontSize: 12, border: "1px solid " + T.border, borderRadius: 6,
                 background: T.surface, color: T.text, width: 220, height: 32, boxSizing: "border-box" }} />
-            <div style={{ display: "flex", gap: 3 }}>
-              {["ALL", "MTO", "MEL", "VALID", "ERROR"].map(f => (
+            <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+              {["ALL", "MTO", "MEL", "VALID", "ERROR", ...(flippedCount > 0 || dFilter === "NEGATIVE" ? ["NEGATIVE"] : [])].map(f => (
                 <button key={f} onClick={() => setDFilter(f)} style={{ ...btnSm(dFilter === f, T.teal, T.tealBg, T.tealBd), minHeight: 32, minWidth: 50 }}>{f}</button>
               ))}
             </div>
@@ -9706,7 +9799,14 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: r.status === "ERROR" ? T.red : T.text }}>{r.cor || "—"}</td>
                       <td style={{ padding: "6px 10px" }}>{r.category ? <span style={{ fontSize:TYPE.data, padding: "2px 6px", borderRadius: 3, background: c.bg, color: c.c, border: "1px solid " + c.bd }}>{r.category}</span> : <span style={{ color: T.faint }}>—</span>}</td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, color: T.muted }}>{r.mhc || "—"}</td>
-                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>{r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "—"}</td>
+                      <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right" }}>
+                        {r.weight != null ? Number(r.weight).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : "—"}
+                        {r.weightFlipped && r.weight != null && (
+                          <div style={{ fontSize: TYPE.data, color: T.blue, whiteSpace: "nowrap" }}>
+                            from {(-Number(r.weight)).toLocaleString("nb-NO", { maximumFractionDigits: 1 })}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 10, textAlign: "right", color: T.muted }}>{r.emissionFactor != null ? r.emissionFactor : "—"}</td>
                       <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, fontWeight: r.emissionTco2e ? 600 : 400, color: r.emissionTco2e ? T.teal : T.faint, textAlign: "right" }}>
                         {r.emissionTco2e != null ? Number(r.emissionTco2e).toFixed(4) : "—"}
@@ -9818,7 +9918,7 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
                         const allDone    = pending.length === 0 && done.length > 0;
                         const grouped    = COR_LOOKUP.reduce((acc, c) => { (acc[c.cat] = acc[c.cat] || []).push(c); return acc; }, {});
                         const allSamples = [...new Set(baseRows.map(r => r.desc).filter(Boolean))].slice(0, 6);
-                        const localSugs  = localSuggestCOR(allSamples);
+                        const localSugs  = suggestCOR(code, allSamples);
                         return (
                           <tr key={code} style={{ borderBottom: "1px solid " + T.rowBd, background: allDone ? T.greenBg : undefined, verticalAlign: "top" }}>
                             <td style={{ padding: "12px 14px" }}>
@@ -9837,6 +9937,7 @@ function FootprintTab({ project, onChange, onOpenDashboard, active = true }) {
                               </div>
                             </td>
                             <td style={{ padding: "12px 14px", minWidth: 260 }}>
+                              {localSugs.length === 0 && <span style={{ color: T.faint }}>—</span>}
                               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                                 {localSugs.map((s, si) => {
                                   const sc = catC(s.category);
