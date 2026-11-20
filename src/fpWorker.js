@@ -68,6 +68,7 @@ COR_LOOKUP.forEach(r => { COR_MAP[r.code] = r; });
 //   1. exact normalised match
 //   2. header contains alias OR alias contains header
 //   3. shared word count >= 2
+// Optional fields (Material) are matched strictly instead — see wordColMatch.
 // If confidence is low the user is prompted to try AI mapping.
 const FIELD_SCHEMAS = {
   MTO: {
@@ -142,11 +143,42 @@ function bestColMatch(headers, aliases) {
   return null;
 }
 
+// For optional fields (Material), where no column beats a wrong one: the alias has
+// to be the whole header or whole words of it, tried in the aliases' order. So
+// "Material Description" and "Mat. Spec" count, but not "Estimated Weight"
+// (m-a-t inside a word), "Inspection" (s-p-e-c) or a bare "Type" (part of
+// "material type"). A long alias word may begin a longer one ("Materialkvalitet").
+function wordColMatch(headers, aliases) {
+  const hs = headers.map(h => ({ orig: h, norm: normCol(h) }));
+  const as = aliases.map(normCol);
+  for (const a of as) {
+    const hit = hs.find(h => h.norm === a);
+    if (hit) return hit.orig;
+  }
+  const fits = (norm, a) => {
+    const hw = norm.split(" "), aw = a.split(" ");
+    for (let i = 0; i + aw.length <= hw.length; i++) {
+      if (aw.every((x, j) => hw[i + j] === x || (x.length >= 5 && hw[i + j].startsWith(x)))) return true;
+    }
+    return false;
+  };
+  for (const a of as) {
+    const hit = hs.find(h => fits(h.norm, a));
+    if (hit) return hit.orig;
+  }
+  return null;
+}
+
 function autoMapHeaders(headers, schemaType) {
   const schema  = FIELD_SCHEMAS[schemaType];
   const mapping = {};
   for (const [key, def] of Object.entries(schema)) {
-    mapping[key] = bestColMatch(headers, def.aliases);
+    mapping[key] = def.req ? bestColMatch(headers, def.aliases) : null;
+  }
+  // Optional fields go last and only take a column no required field is using.
+  const taken = new Set(Object.values(mapping).filter(Boolean));
+  for (const [key, def] of Object.entries(schema)) {
+    if (!def.req) mapping[key] = wordColMatch(headers.filter(h => !taken.has(h)), def.aliases);
   }
   const reqFields   = Object.entries(schema).filter(([, d]) => d.req);
   const mappedReq   = reqFields.filter(([k]) => mapping[k]).length;
@@ -286,6 +318,9 @@ function calcSheets(wb, sheetMetas) {
     if (raw.length < 2) continue;
     const hIdx = sm.headerRowIdx != null ? sm.headerRowIdx : detectHeaderRow(raw);
     const { headers } = parseSheetFromRow(raw, hIdx);
+    // raw[0] is the first row of the sheet's used range, so a row's number in the
+    // workbook is that row + the header's offset + its place below the header.
+    const firstRow = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]).s.r + 1 : 1;
     raw.slice(hIdx + 1).forEach((rowArr, idx) => {
       const row = {};
       headers.forEach((h, j) => { row[h] = rowArr[j]; });
@@ -302,7 +337,7 @@ function calcSheets(wb, sheetMetas) {
       if (SKIP_LABELS.some(p => descL === p || descL === p + ':' || descL === p + ' :') || descL.startsWith('bottom line') || (descL.startsWith('total ') && !descL.includes('valve') && !descL.includes('assembly'))) return;
       // Only calculate NP and RP handling codes — skip all others silently
       if (mhc !== "NP" && mhc !== "RP") return;
-      const entry = { _sheet: sm.name, _row: idx + 2, _type: sm.type,
+      const entry = { _sheet: sm.name, _row: firstRow + hIdx + 1 + idx, _type: sm.type,
                       desc, material, cor, mhc, weightRaw };
       if (sm.type === "MTO") mtoRows.push(entry);
       else melRows.push(entry);
@@ -318,20 +353,27 @@ function calcSheets(wb, sheetMetas) {
       } else if (!COR_MAP[r.cor]) {
         rowErrs.push({ col: "COR Code", val: r.cor, msg: "COR code '" + r.cor + "' not in lookup.", notFound: true });
       }
+      const w = Number(r.weightRaw);
       if (r.weightRaw === "" || r.weightRaw === null || r.weightRaw === undefined) {
         rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight is blank." });
-      } else if (isNaN(Number(r.weightRaw))) {
+      } else if (isNaN(w)) {
         rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is not numeric." });
+      } else if (w < 0 && r.mhc !== "RP") {
+        rowErrs.push({ col: "Weight", val: r.weightRaw, msg: "Weight '" + r.weightRaw + "' is negative on an NP row." });
       }
+      // Removal (RP) weights are often entered as negative: count them as positive,
+      // and mark the row so the results can show which ones were converted.
+      const weightFlipped = w < 0 && r.mhc === "RP";
+      const weight = weightFlipped ? -w : w;
       const corEntry = COR_MAP[r.cor];
       let emissionTco2e = null, emissionFactor = null, category = null, corDesc = null;
       if (!rowErrs.length && corEntry) {
         emissionFactor = corEntry.ef; category = corEntry.cat; corDesc = corEntry.desc;
-        emissionTco2e = (Number(r.weightRaw) * emissionFactor) / 1000;
+        emissionTco2e = (weight * emissionFactor) / 1000;
       }
       const row = { source: r._type, sheet: r._sheet, rowNum: r._row,
                     desc: r.desc, material: r.material, cor: r.cor, mhc: r.mhc,
-                    weight: rowErrs.find(e => e.col === "Weight") ? null : Number(r.weightRaw),
+                    weight: rowErrs.find(e => e.col === "Weight") ? null : weight, weightFlipped,
                     category, corDesc, emissionFactor, emissionTco2e,
                     status: rowErrs.length ? "ERROR" : "VALID", errors: rowErrs };
       if (rowErrs.length) errs.push({ sheet: r._sheet, row: r._row, desc: r.desc, cor: r.cor, errs: rowErrs });
@@ -353,12 +395,13 @@ function calcSheets(wb, sheetMetas) {
     mtoTotal, melTotal, combined: mtoTotal + melTotal,
     mtoRows: mto.rows, melRows: mel.rows, allRows,
     errors: allErrors, unknownCors,
+    flippedWeights: allRows.filter(r => r.weightFlipped).length,
     sheets: sheetMetas.filter(s => s.include),
   };
 }
 
 // ── Local COR suggestion (no API — pure keyword scoring) ──────────────────────
-function localSuggestCOR(descTexts) {
+function localSuggestCOR(descTexts, n = 3) {
   const text  = descTexts.filter(Boolean).join(" ").toLowerCase();
   const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 2);
   // Domain keyword → likely COR codes (high-confidence boosts)
@@ -403,7 +446,7 @@ function localSuggestCOR(descTexts) {
              reason: score > 0 ? "Keyword match against description and COR library" : "No strong match" };
   });
 
-  return scores.sort((a, b) => b.score - a.score).slice(0, 3);
+  return scores.sort((a, b) => b.score - a.score).slice(0, n);
 }
 
 // ────── message handler ───────────────────────────────────────────────────────
